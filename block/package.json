@@ -24,14 +24,14 @@
       "ui": "@platforma-open/milabs.hello-world.ui/dist"
     },
     "meta": {
-      "title": "Block Title",
+      "title": "3D-Structure-Based-Liabilities",
       "logo": "file:../logos/block-logo.png",
       "url": "https://github.com/platforma-open/milabs.hello-world",
       "support": "mailto:support@milaboratories.com",
-      "description": "Simple Hello World block that can be used as a boilerplate for newly created blocks.",
+      "description": "Identifying potential liabilities in therapeutic antibody candidates using 3D structure analysis. Takes a protein structure in PDB format through preprocessing and liability detection to flag developability risks.",
       "longDescription": "file:../docs/description.md",
       "changelog": "file:../CHANGELOG.md",
-      "tags": ["tutorial"],
+      "tags": ["dev"],
       "organization": {
         "name": "MiLaboratories Inc",
         "url": "https://milaboratories.com/",
