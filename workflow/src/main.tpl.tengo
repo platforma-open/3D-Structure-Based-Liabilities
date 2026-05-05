@@ -1,0 +1,14 @@
+// vim: filetype=go
+wf := import("@platforma-sdk/workflow-tengo:workflow")
+file := import("@platforma-sdk/workflow-tengo:file")
+
+wf.body(func(args) {
+	pdbBlob := file.importFile(args.pdb)
+
+	return {
+		outputs: {
+			pdbFile: file.exportFile(pdbBlob.file)
+		},
+		exports: {}
+	}
+})
