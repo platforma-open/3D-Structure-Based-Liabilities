@@ -75,13 +75,13 @@ importers:
 
   block:
     dependencies:
-      '@platforma-open/milabs.hello-world.model':
+      '@platforma-open/milabs.3d-structure-based-liabilities.model':
         specifier: workspace:*
         version: link:../model
-      '@platforma-open/milabs.hello-world.ui':
+      '@platforma-open/milabs.3d-structure-based-liabilities.ui':
         specifier: workspace:*
         version: link:../ui
-      '@platforma-open/milabs.hello-world.workflow':
+      '@platforma-open/milabs.3d-structure-based-liabilities.workflow':
         specifier: workspace:*
         version: link:../workflow
       '@platforma-sdk/model':
@@ -126,7 +126,7 @@ importers:
   test:
     dependencies:
       this-block:
-        specifier: workspace:@platforma-open/milabs.hello-world@*
+        specifier: workspace:@platforma-open/milabs.3d-structure-based-liabilities@*
         version: link:../block
       typescript:
         specifier: '*'
@@ -141,7 +141,7 @@ importers:
 
   ui:
     dependencies:
-      '@platforma-open/milabs.hello-world.model':
+      '@platforma-open/milabs.3d-structure-based-liabilities.model':
         specifier: workspace:*
         version: link:../model
       '@platforma-sdk/ui-vue':
@@ -169,7 +169,7 @@ importers:
 
   workflow:
     dependencies:
-      '@platforma-open/milabs.hello-world.software':
+      '@platforma-open/milabs.3d-structure-based-liabilities.software':
         specifier: workspace:*
         version: link:../software
       '@platforma-sdk/workflow-tengo':
