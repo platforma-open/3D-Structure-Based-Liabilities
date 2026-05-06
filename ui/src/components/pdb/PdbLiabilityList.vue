@@ -31,7 +31,7 @@ const hasContext = computed(() => props.hits.some((h) => h.context));
 
 <template>
   <h3>{{ title }} ({{ hits.length }})</h3>
-  <p v-if="description" :style="{ fontSize: '12px', color: '#6b7280', marginTop: '-0.5rem' }">
+  <p v-if="description" :style="{ fontSize: '12px', color: '#6b7280' }">
     {{ description }}
   </p>
   <table>

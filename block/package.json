@@ -31,7 +31,7 @@
       "description": "Identifying potential liabilities in therapeutic antibody candidates using 3D structure analysis. Takes a protein structure in PDB format through preprocessing and liability detection to flag developability risks.",
       "longDescription": "file:../docs/description.md",
       "changelog": "file:../CHANGELOG.md",
-      "tags": ["dev"],
+      "tags": ["antibody", "developability", "structure-analysis", "liabilities"],
       "organization": {
         "name": "MiLaboratories Inc",
         "url": "https://milaboratories.com/",
