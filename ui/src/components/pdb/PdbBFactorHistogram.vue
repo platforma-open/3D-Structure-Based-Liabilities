@@ -13,15 +13,19 @@ defineProps<{ values: number[] }>();
 </script>
 
 <template>
-  <h3>B-factor distribution</h3>
-  <PlChartHistogram
-    v-if="values.length"
-    :settings="{
-      type: 'basic',
-      numbers: values,
-      nBins: 40,
-      xAxisLabel: 'B-factor',
-      yAxisLabel: 'Atoms',
-    }"
-  />
+  <details>
+    <summary>
+      <h3 :style="{ display: 'inline-block', margin: 0 }">B-factor distribution</h3>
+    </summary>
+    <PlChartHistogram
+      v-if="values.length"
+      :settings="{
+        type: 'basic',
+        numbers: values,
+        nBins: 40,
+        xAxisLabel: 'B-factor',
+        yAxisLabel: 'Atoms',
+      }"
+    />
+  </details>
 </template>

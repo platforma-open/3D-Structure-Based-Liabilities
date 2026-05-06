@@ -16,23 +16,27 @@ defineProps<{ bonds: Ssbond[] }>();
 </script>
 
 <template>
-  <h3>Disulfide bonds ({{ bonds.length }})</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Chain A</th>
-        <th>Residue A</th>
-        <th>Chain B</th>
-        <th>Residue B</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="(b, i) in bonds" :key="i">
-        <td>{{ b.chain1 }}</td>
-        <td>{{ b.res1 }}</td>
-        <td>{{ b.chain2 }}</td>
-        <td>{{ b.res2 }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <details>
+    <summary>
+      <h3 :style="{ display: 'inline-block', margin: 0 }">Disulfide bonds ({{ bonds.length }})</h3>
+    </summary>
+    <table>
+      <thead>
+        <tr>
+          <th>Chain A</th>
+          <th>Residue A</th>
+          <th>Chain B</th>
+          <th>Residue B</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(b, i) in bonds" :key="i">
+          <td>{{ b.chain1 }}</td>
+          <td>{{ b.res1 }}</td>
+          <td>{{ b.chain2 }}</td>
+          <td>{{ b.res2 }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </details>
 </template>

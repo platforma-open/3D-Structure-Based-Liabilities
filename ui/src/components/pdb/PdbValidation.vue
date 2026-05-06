@@ -17,23 +17,27 @@ defineProps<{ rows: ValidationRow[] }>();
 </script>
 
 <template>
-  <h3>Validation</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Chain</th>
-        <th>Missing backbone</th>
-        <th>Sequence gaps</th>
-        <th>Alt-locs</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="v in rows" :key="v.id">
-        <td>{{ v.id }}</td>
-        <td>{{ v.missing }}</td>
-        <td>{{ v.gaps }}</td>
-        <td>{{ v.altLocs }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <details>
+    <summary>
+      <h3 :style="{ display: 'inline-block', margin: 0 }">Validation</h3>
+    </summary>
+    <table>
+      <thead>
+        <tr>
+          <th>Chain</th>
+          <th>Missing backbone</th>
+          <th>Sequence gaps</th>
+          <th>Alt-locs</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="v in rows" :key="v.id">
+          <td>{{ v.id }}</td>
+          <td>{{ v.missing }}</td>
+          <td>{{ v.gaps }}</td>
+          <td>{{ v.altLocs }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </details>
 </template>

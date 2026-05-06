@@ -27,22 +27,26 @@ const max = computed(() => Math.max(1, ...props.rows.map((r) => r.count)));
 </script>
 
 <template>
-  <h3>{{ title }}</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>{{ keyHeader }}</th>
-        <th>Atoms</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="r in visible" :key="r.key">
-        <td>{{ r.key }}</td>
-        <td :style="barCellStyle">
-          <div :style="bar(pct(r.count, max), color)" />
-          <span :style="barTextStyle">{{ r.count }}</span>
-        </td>
-      </tr>
-    </tbody>
-  </table>
+  <details>
+    <summary>
+      <h3 :style="{ display: 'inline-block', margin: 0 }">{{ title }}</h3>
+    </summary>
+    <table>
+      <thead>
+        <tr>
+          <th>{{ keyHeader }}</th>
+          <th>Atoms</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="r in visible" :key="r.key">
+          <td>{{ r.key }}</td>
+          <td :style="barCellStyle">
+            <div :style="bar(pct(r.count, max), color)" />
+            <span :style="barTextStyle">{{ r.count }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </details>
 </template>

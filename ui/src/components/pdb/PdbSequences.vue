@@ -19,35 +19,39 @@ defineProps<{ sequences: SequenceChain[] }>();
 </script>
 
 <template>
-  <h3>Sequences</h3>
-  <div v-for="s in sequences" :key="s.id">
-    <div :style="{ fontSize: '12px', color: '#6b7280' }">
-      Chain {{ s.id }} ({{ s.letters.length }} aa)
-    </div>
-    <div
-      :style="{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '1px',
-        fontFamily: 'ui-monospace, SFMono-Regular, monospace',
-        fontSize: '11px',
-      }"
-    >
-      <span
-        v-for="(r, i) in s.letters"
-        :key="i"
+  <details>
+    <summary>
+      <h3 :style="{ display: 'inline-block', margin: 0 }">Sequences</h3>
+    </summary>
+    <div v-for="s in sequences" :key="s.id">
+      <div :style="{ fontSize: '12px', color: '#6b7280' }">
+        Chain {{ s.id }} ({{ s.letters.length }} aa)
+      </div>
+      <div
         :style="{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: '14px',
-          height: '16px',
-          background: AA_COLOR[r.cls],
-          borderBottom: `2px solid ${SS_COLOR[r.ss]}`,
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '1px',
+          fontFamily: 'ui-monospace, SFMono-Regular, monospace',
+          fontSize: '11px',
         }"
-        :title="`${r.resName} ${r.resSeq} (${r.ss})`"
-        >{{ r.letter }}</span
       >
+        <span
+          v-for="(r, i) in s.letters"
+          :key="i"
+          :style="{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '14px',
+            height: '16px',
+            background: AA_COLOR[r.cls],
+            borderBottom: `2px solid ${SS_COLOR[r.ss]}`,
+          }"
+          :title="`${r.resName} ${r.resSeq} (${r.ss})`"
+          >{{ r.letter }}</span
+        >
+      </div>
     </div>
-  </div>
+  </details>
 </template>

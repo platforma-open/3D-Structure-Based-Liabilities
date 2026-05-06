@@ -28,12 +28,19 @@ import {
   ssCounts,
   validation,
 } from "../pdb/derivations";
+import {
+  deamidationHotspots,
+  glycosylationSequons,
+  oxidationHotspots,
+  unpairedCysteines,
+} from "../pdb/liabilities";
 
 import PdbBFactorHistogram from "../components/pdb/PdbBFactorHistogram.vue";
 import PdbChains from "../components/pdb/PdbChains.vue";
 import PdbContactMap from "../components/pdb/PdbContactMap.vue";
 import PdbCountsTable from "../components/pdb/PdbCountsTable.vue";
 import PdbDisulfides from "../components/pdb/PdbDisulfides.vue";
+import PdbLiabilityList from "../components/pdb/PdbLiabilityList.vue";
 import PdbModifiedResidues from "../components/pdb/PdbModifiedResidues.vue";
 import PdbSecondaryStructure from "../components/pdb/PdbSecondaryStructure.vue";
 import PdbSequences from "../components/pdb/PdbSequences.vue";
@@ -59,6 +66,11 @@ const elems = computed(() => (parsed.value ? elements(parsed.value) : []));
 const bFactors = computed(() => (parsed.value ? allBFactors(parsed.value) : []));
 const xyzBounds = computed(() => (parsed.value ? bounds(parsed.value) : null));
 const contacts = computed(() => (parsed.value ? contactMap(parsed.value) : null));
+
+const unpairedCys = computed(() => (parsed.value ? unpairedCysteines(parsed.value) : []));
+const deamidations = computed(() => (parsed.value ? deamidationHotspots(parsed.value) : []));
+const glycosylations = computed(() => (parsed.value ? glycosylationSequons(parsed.value) : []));
+const oxidations = computed(() => (parsed.value ? oxidationHotspots(parsed.value) : []));
 </script>
 
 <template>
@@ -95,6 +107,32 @@ const contacts = computed(() => (parsed.value ? contactMap(parsed.value) : null)
       <PdbContactMap v-if="contacts" :data="contacts" />
       <PdbDisulfides v-if="parsed.ssbonds.length" :bonds="parsed.ssbonds" />
       <PdbModifiedResidues v-if="parsed.modres.length" :modres="parsed.modres" />
+
+      <h2>Sequence-based liabilities</h2>
+      <PdbLiabilityList
+        v-if="unpairedCys.length"
+        title="Unpaired cysteines"
+        description="Cys residues not participating in any disulfide bond. Free Cys can drive aggregation, mispair during expression, or be oxidized."
+        :hits="unpairedCys"
+      />
+      <PdbLiabilityList
+        v-if="deamidations.length"
+        title="Deamidation hotspots"
+        description="N-G and N-S dipeptides — asparagine residues most prone to non-enzymatic deamidation to aspartate / iso-aspartate over time."
+        :hits="deamidations"
+      />
+      <PdbLiabilityList
+        v-if="glycosylations.length"
+        title="N-glycosylation sequons"
+        description="Consensus N-X-[S/T] motifs (X ≠ P). Surface-exposed sequons in CDRs are a major manufacturability risk."
+        :hits="glycosylations"
+      />
+      <PdbLiabilityList
+        v-if="oxidations.length"
+        title="Oxidation-prone residues"
+        description="Methionine and tryptophan positions. Real risk depends on solvent exposure needs SASA filtering (next pass)."
+        :hits="oxidations"
+      />
     </div>
   </PlBlockPage>
 </template>

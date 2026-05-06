@@ -48,10 +48,14 @@ watchEffect(() => {
 </script>
 
 <template>
-  <h3>
-    Contact map — chain {{ data.chainId }} ({{ data.n }} residues<span v-if="data.stride > 1"
-      >, every {{ data.stride }}th</span
-    >)
-  </h3>
-  <canvas ref="canvas" />
+  <details>
+    <summary>
+      <h3 :style="{ display: 'inline-block', margin: 0 }">
+        Contact map — chain {{ data.chainId }} ({{ data.n }} residues<span v-if="data.stride > 1"
+          >, every {{ data.stride }}th</span
+        >)
+      </h3>
+    </summary>
+    <canvas ref="canvas" />
+  </details>
 </template>

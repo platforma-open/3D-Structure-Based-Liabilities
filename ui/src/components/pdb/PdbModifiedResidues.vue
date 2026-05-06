@@ -16,25 +16,31 @@ defineProps<{ modres: Modres[] }>();
 </script>
 
 <template>
-  <h3>Modified residues ({{ modres.length }})</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Residue</th>
-        <th>Std</th>
-        <th>Chain</th>
-        <th>Seq</th>
-        <th>Comment</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr v-for="(m, i) in modres" :key="i">
-        <td>{{ m.resName }}</td>
-        <td>{{ m.stdName }}</td>
-        <td>{{ m.chainId }}</td>
-        <td>{{ m.resSeq }}</td>
-        <td>{{ m.comment }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <details>
+    <summary>
+      <h3 :style="{ display: 'inline-block', margin: 0 }">
+        Modified residues ({{ modres.length }})
+      </h3>
+    </summary>
+    <table>
+      <thead>
+        <tr>
+          <th>Residue</th>
+          <th>Std</th>
+          <th>Chain</th>
+          <th>Seq</th>
+          <th>Comment</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr v-for="(m, i) in modres" :key="i">
+          <td>{{ m.resName }}</td>
+          <td>{{ m.stdName }}</td>
+          <td>{{ m.chainId }}</td>
+          <td>{{ m.resSeq }}</td>
+          <td>{{ m.comment }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </details>
 </template>
