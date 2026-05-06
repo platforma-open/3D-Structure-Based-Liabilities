@@ -30,32 +30,28 @@ const hasContext = computed(() => props.hits.some((h) => h.context));
 </script>
 
 <template>
-  <details>
-    <summary>
-      <h3 :style="{ display: 'inline-block', margin: 0 }">{{ title }} ({{ hits.length }})</h3>
-    </summary>
-    <p v-if="description" :style="{ fontSize: '12px', color: '#6b7280', marginTop: '-0.5rem' }">
-      {{ description }}
-    </p>
-    <table>
-      <thead>
-        <tr>
-          <th>Chain</th>
-          <th>Residue</th>
-          <th>Position</th>
-          <th v-if="hasMotif">Motif</th>
-          <th v-if="hasContext">Context</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="(h, i) in hits" :key="i">
-          <td>{{ h.chainId }}</td>
-          <td>{{ h.resName }}</td>
-          <td>{{ h.resSeq }}</td>
-          <td v-if="hasMotif">{{ h.motif ?? "—" }}</td>
-          <td v-if="hasContext">{{ h.context ?? "—" }}</td>
-        </tr>
-      </tbody>
-    </table>
-  </details>
+  <h3>{{ title }} ({{ hits.length }})</h3>
+  <p v-if="description" :style="{ fontSize: '12px', color: '#6b7280', marginTop: '-0.5rem' }">
+    {{ description }}
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Chain</th>
+        <th>Residue</th>
+        <th>Position</th>
+        <th v-if="hasMotif">Motif</th>
+        <th v-if="hasContext">Context</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr v-for="(h, i) in hits" :key="i">
+        <td>{{ h.chainId }}</td>
+        <td>{{ h.resName }}</td>
+        <td>{{ h.resSeq }}</td>
+        <td v-if="hasMotif">{{ h.motif ?? "—" }}</td>
+        <td v-if="hasContext">{{ h.context ?? "—" }}</td>
+      </tr>
+    </tbody>
+  </table>
 </template>
