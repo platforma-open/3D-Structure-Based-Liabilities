@@ -3,7 +3,6 @@ packages:
   - model
   - ui
   - test
-  - software
   - block
 
 catalog:
