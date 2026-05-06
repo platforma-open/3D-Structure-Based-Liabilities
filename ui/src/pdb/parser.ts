@@ -14,11 +14,18 @@
  * branch from git history.
  */
 
-/** A residue identified by sequence number and 3-letter code. */
-export type Residue = { resSeq: number; resName: string };
+/** A residue identified by sequence number, insertion code, and 3-letter code. */
+export type Residue = { resSeq: number; iCode: string; resName: string };
 
-/** A disulfide bond from an SSBOND record. */
-export type Ssbond = { chain1: string; res1: number; chain2: string; res2: number };
+/** A disulfide bond from an SSBOND record. Both endpoints carry insertion codes. */
+export type Ssbond = {
+  chain1: string;
+  res1: number;
+  iCode1: string;
+  chain2: string;
+  res2: number;
+  iCode2: string;
+};
 
 /** Top-level parse result — the only shape downstream code depends on. */
 export type Parsed = {
@@ -47,10 +54,12 @@ export function parsePdb(text: string): Parsed {
     } else if (tag === "SSBOND") {
       const chain1 = line.slice(15, 16);
       const res1 = parseInt(line.slice(17, 21).trim(), 10);
+      const iCode1 = line.slice(21, 22).trim();
       const chain2 = line.slice(29, 30);
       const res2 = parseInt(line.slice(31, 35).trim(), 10);
+      const iCode2 = line.slice(35, 36).trim();
       if (Number.isFinite(res1) && Number.isFinite(res2))
-        out.ssbonds.push({ chain1, res1, chain2, res2 });
+        out.ssbonds.push({ chain1, res1, iCode1, chain2, res2, iCode2 });
     } else if (tag === "ATOM" || tag === "HETATM") {
       if (!inFirstModel) continue;
       const resName = line.slice(17, 20).trim();
@@ -65,7 +74,7 @@ export function parsePdb(text: string): Parsed {
         out.residuesByChain.set(chainId, []);
         out.chainOrder.push(chainId);
       }
-      out.residuesByChain.get(chainId)!.push({ resSeq, resName });
+      out.residuesByChain.get(chainId)!.push({ resSeq, iCode, resName });
     }
   }
   return out;

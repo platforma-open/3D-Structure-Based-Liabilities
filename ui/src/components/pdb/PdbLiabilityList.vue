@@ -48,7 +48,7 @@ const hasContext = computed(() => props.hits.some((h) => h.context));
       <tr v-for="(h, i) in hits" :key="i">
         <td>{{ h.chainId }}</td>
         <td>{{ h.resName }}</td>
-        <td>{{ h.resSeq }}</td>
+        <td>{{ h.resSeq }}{{ h.iCode }}</td>
         <td v-if="hasMotif">{{ h.motif ?? "—" }}</td>
         <td v-if="hasContext">{{ h.context ?? "—" }}</td>
       </tr>

@@ -19,6 +19,8 @@ import type { Parsed } from "./parser";
 export type LiabilityHit = {
   chainId: string;
   resSeq: number;
+  /** PDB insertion code (e.g. "A" in "100A"); empty string when none. */
+  iCode: string;
   /** 3-letter residue code at the hit position. */
   resName: string;
   /** Sequence motif when applicable (e.g. "NG", "N-X-T"). */
@@ -27,9 +29,12 @@ export type LiabilityHit = {
   context?: string;
 };
 
-/** Stable ordering: chain alphabetically, then residue position. */
+/** Stable ordering: chain, then residue position, then insertion code. */
 const sortHits = (hits: LiabilityHit[]): LiabilityHit[] =>
-  hits.sort((a, b) => a.chainId.localeCompare(b.chainId) || a.resSeq - b.resSeq);
+  hits.sort(
+    (a, b) =>
+      a.chainId.localeCompare(b.chainId) || a.resSeq - b.resSeq || a.iCode.localeCompare(b.iCode),
+  );
 
 /**
  * Cysteines NOT participating in any SSBOND record. Free Cys are a
@@ -43,14 +48,14 @@ const sortHits = (hits: LiabilityHit[]): LiabilityHit[] =>
 export function unpairedCysteines(parsed: Parsed): LiabilityHit[] {
   const bonded = new Set<string>();
   for (const b of parsed.ssbonds) {
-    bonded.add(`${b.chain1}|${b.res1}`);
-    bonded.add(`${b.chain2}|${b.res2}`);
+    bonded.add(`${b.chain1}|${b.res1}|${b.iCode1}`);
+    bonded.add(`${b.chain2}|${b.res2}|${b.iCode2}`);
   }
   const out: LiabilityHit[] = [];
   for (const id of parsed.chainOrder) {
     for (const r of parsed.residuesByChain.get(id)!) {
-      if (r.resName === "CYS" && !bonded.has(`${id}|${r.resSeq}`)) {
-        out.push({ chainId: id, resSeq: r.resSeq, resName: "CYS" });
+      if (r.resName === "CYS" && !bonded.has(`${id}|${r.resSeq}|${r.iCode}`)) {
+        out.push({ chainId: id, resSeq: r.resSeq, iCode: r.iCode, resName: "CYS" });
       }
     }
   }
@@ -74,13 +79,16 @@ export function deamidationHotspots(parsed: Parsed): LiabilityHit[] {
     for (let i = 0; i < residues.length - 1; i++) {
       const a = residues[i];
       const b = residues[i + 1];
-      if (b.resSeq - a.resSeq !== 1) continue;
+      // Adjacent in protein sequence: same resSeq with different iCode (e.g.
+      // 100 → 100A) or consecutive resSeq.
+      if (b.resSeq !== a.resSeq && b.resSeq !== a.resSeq + 1) continue;
       if (a.resName !== "ASN") continue;
       if (b.resName !== "GLY" && b.resName !== "SER") continue;
       const motif = (ONE_LETTER[a.resName] ?? "?") + (ONE_LETTER[b.resName] ?? "?");
       out.push({
         chainId: id,
         resSeq: a.resSeq,
+        iCode: a.iCode,
         resName: "ASN",
         motif,
         context: `${a.resName}-${b.resName}`,
@@ -108,8 +116,9 @@ export function glycosylationSequons(parsed: Parsed): LiabilityHit[] {
       const a = residues[i];
       const b = residues[i + 1];
       const c = residues[i + 2];
-      if (b.resSeq - a.resSeq !== 1) continue;
-      if (c.resSeq - b.resSeq !== 1) continue;
+      // Adjacency tolerant of insertion codes (e.g. 100 → 100A → 100B).
+      if (b.resSeq !== a.resSeq && b.resSeq !== a.resSeq + 1) continue;
+      if (c.resSeq !== b.resSeq && c.resSeq !== b.resSeq + 1) continue;
       if (a.resName !== "ASN") continue;
       if (b.resName === "PRO") continue;
       if (c.resName !== "SER" && c.resName !== "THR") continue;
@@ -118,6 +127,7 @@ export function glycosylationSequons(parsed: Parsed): LiabilityHit[] {
       out.push({
         chainId: id,
         resSeq: a.resSeq,
+        iCode: a.iCode,
         resName: "ASN",
         motif: `N-${X}-${T}`,
         context: `${a.resName}-${b.resName}-${c.resName}`,
@@ -143,7 +153,7 @@ export function oxidationHotspots(parsed: Parsed): LiabilityHit[] {
   for (const id of parsed.chainOrder) {
     for (const r of parsed.residuesByChain.get(id)!) {
       if (r.resName === "MET" || r.resName === "TRP") {
-        out.push({ chainId: id, resSeq: r.resSeq, resName: r.resName });
+        out.push({ chainId: id, resSeq: r.resSeq, iCode: r.iCode, resName: r.resName });
       }
     }
   }
