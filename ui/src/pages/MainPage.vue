@@ -18,6 +18,7 @@ import {
 } from "../pdb/liabilities";
 
 import PdbLiabilityList from "../components/pdb/PdbLiabilityList.vue";
+import PdbLiabilityMap from "../components/pdb/PdbLiabilityMap.vue";
 
 const app = useApp();
 const pdbContent = computedResult(() => app.model.outputs.pdbContent);
@@ -45,6 +46,13 @@ const oxidations = computed(() => (parsed.value ? oxidationHotspots(parsed.value
     />
 
     <div v-if="parsed">
+      <PdbLiabilityMap
+        :parsed="parsed"
+        :unpaired-cys="unpairedCys"
+        :deamidations="deamidations"
+        :glycosylations="glycosylations"
+        :oxidations="oxidations"
+      />
       <PdbLiabilityList
         v-if="unpairedCys.length"
         title="Unpaired cysteines"
