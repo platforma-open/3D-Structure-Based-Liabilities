@@ -27,6 +27,10 @@ export type LiabilityHit = {
   context?: string;
 };
 
+/** Stable ordering: chain alphabetically, then residue position. */
+const sortHits = (hits: LiabilityHit[]): LiabilityHit[] =>
+  hits.sort((a, b) => a.chainId.localeCompare(b.chainId) || a.resSeq - b.resSeq);
+
 /**
  * Cysteines NOT participating in any SSBOND record. Free Cys are a
  * developability liability: they can form intermolecular disulfides during
@@ -50,7 +54,7 @@ export function unpairedCysteines(parsed: Parsed): LiabilityHit[] {
       }
     }
   }
-  return out;
+  return sortHits(out);
 }
 
 /**
@@ -83,7 +87,7 @@ export function deamidationHotspots(parsed: Parsed): LiabilityHit[] {
       });
     }
   }
-  return out;
+  return sortHits(out);
 }
 
 /**
@@ -120,7 +124,7 @@ export function glycosylationSequons(parsed: Parsed): LiabilityHit[] {
       });
     }
   }
-  return out;
+  return sortHits(out);
 }
 
 /**
@@ -143,5 +147,5 @@ export function oxidationHotspots(parsed: Parsed): LiabilityHit[] {
       }
     }
   }
-  return out;
+  return sortHits(out);
 }
