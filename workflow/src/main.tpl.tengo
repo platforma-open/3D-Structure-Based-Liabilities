@@ -1,13 +1,325 @@
 // vim: filetype=go
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 file := import("@platforma-sdk/workflow-tengo:file")
+exec := import("@platforma-sdk/workflow-tengo:exec")
+assets := import("@platforma-sdk/workflow-tengo:assets")
+pframes := import("@platforma-sdk/workflow-tengo:pframes")
+ptUtil := import("@platforma-sdk/workflow-tengo:pt.util")
+
+liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-based-liabilities.software:liabilities")
+ptImportDirTpl := assets.importTemplate("@platforma-sdk/workflow-tengo:pt.import-dir")
+
+motifsFrameName := "motifs_pf"
+cysFrameName := "cysteines_pf"
+
+motifAxesSpec := [
+	{
+		name: "pl7.app/structure/chainId",
+		type: "String",
+		annotations: { "pl7.app/label": "Chain" }
+	},
+	{
+		name: "pl7.app/structure/resSeq",
+		type: "Long",
+		annotations: { "pl7.app/label": "Position" }
+	},
+	{
+		name: "pl7.app/structure/iCode",
+		type: "String",
+		annotations: { "pl7.app/label": "Insertion code" }
+	},
+	{
+		name: "pl7.app/liabilities/motifType",
+		type: "String",
+		annotations: { "pl7.app/label": "Motif" }
+	}
+]
+
+motifColumnSpecs := {
+	resName: {
+		valueType: "String",
+		name: "pl7.app/structure/resName",
+		annotations: {
+			"pl7.app/label": "Residue",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1000"
+		}
+	},
+	region: {
+		valueType: "String",
+		name: "pl7.app/structure/region",
+		annotations: {
+			"pl7.app/label": "Region",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "975"
+		}
+	},
+	rsasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/rsasa",
+		annotations: {
+			"pl7.app/label": "rSASA",
+			"pl7.app/format": ".3f",
+			"pl7.app/min": "0",
+			"pl7.app/max": "1",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "950"
+		}
+	},
+	exposureFactor: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/exposureFactor",
+		annotations: {
+			"pl7.app/label": "Exposure factor",
+			"pl7.app/format": ".3f",
+			"pl7.app/min": "0",
+			"pl7.app/max": "1",
+			"pl7.app/table/visibility": "optional"
+		}
+	},
+	confidence: {
+		valueType: "Double",
+		name: "pl7.app/structure/confidence",
+		annotations: {
+			"pl7.app/label": "Confidence (Å)",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "925"
+		}
+	},
+	confidenceGated: {
+		valueType: "String",
+		name: "pl7.app/liabilities/confidenceGated",
+		annotations: {
+			"pl7.app/label": "Gated",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "920"
+		}
+	},
+	weightedScore: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/motifWeightedScore",
+		annotations: {
+			"pl7.app/label": "Score",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "900"
+		}
+	},
+	sequenceRiskClass: {
+		valueType: "String",
+		name: "pl7.app/liabilities/sequenceRiskClass",
+		annotations: {
+			"pl7.app/label": "Risk",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "850"
+		}
+	},
+	fixability: {
+		valueType: "String",
+		name: "pl7.app/liabilities/fixability",
+		annotations: {
+			"pl7.app/label": "Fixability",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "800"
+		}
+	}
+}
+
+motifColumnIds := ["resName", "region", "rsasa", "exposureFactor", "confidence", "confidenceGated", "weightedScore", "sequenceRiskClass", "fixability"]
+
+cysAxesSpec := [
+	{
+		name: "pl7.app/structure/chainId",
+		type: "String",
+		annotations: { "pl7.app/label": "Chain" }
+	},
+	{
+		name: "pl7.app/structure/resSeq",
+		type: "Long",
+		annotations: { "pl7.app/label": "Position" }
+	},
+	{
+		name: "pl7.app/structure/iCode",
+		type: "String",
+		annotations: { "pl7.app/label": "Insertion code" }
+	}
+]
+
+cysColumnSpecs := {
+	cysClass: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cysClass",
+		annotations: {
+			"pl7.app/label": "Class",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1050"
+		}
+	},
+	chainRole: {
+		valueType: "String",
+		name: "pl7.app/structure/chainRole",
+		annotations: {
+			"pl7.app/label": "Role",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1025"
+		}
+	},
+	bondingState: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cysBondingState",
+		annotations: {
+			"pl7.app/label": "Bonding",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1000"
+		}
+	},
+	rsasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/rsasa",
+		annotations: {
+			"pl7.app/label": "rSASA",
+			"pl7.app/format": ".3f",
+			"pl7.app/min": "0",
+			"pl7.app/max": "1",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "950"
+		}
+	},
+	sidechainRsasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/sideChainRsasa",
+		annotations: {
+			"pl7.app/label": "Side chain rSASA",
+			"pl7.app/format": ".3f",
+			"pl7.app/min": "0",
+			"pl7.app/max": "1",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "900"
+		}
+	},
+	sasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/sasa",
+		annotations: {
+			"pl7.app/label": "SASA (Å²)",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional"
+		}
+	},
+	sidechainSasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/sideChainSasa",
+		annotations: {
+			"pl7.app/label": "Side chain SASA (Å²)",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional"
+		}
+	},
+	partnerChainId: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cysPartnerChainId",
+		annotations: {
+			"pl7.app/label": "Partner chain",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "850"
+		}
+	},
+	partnerResSeq: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/cysPartnerResSeq",
+		annotations: {
+			"pl7.app/label": "Partner position",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "800"
+		}
+	},
+	partnerIcode: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cysPartnerIcode",
+		annotations: {
+			"pl7.app/label": "Partner iCode",
+			"pl7.app/table/visibility": "optional"
+		}
+	}
+}
+
+cysColumnIds := ["cysClass", "chainRole", "bondingState", "rsasa", "sidechainRsasa", "sasa", "sidechainSasa", "partnerChainId", "partnerResSeq", "partnerIcode"]
 
 wf.body(func(args) {
-	pdbBlob := file.importFile(args.pdb)
+	pdbImport := file.importFile(args.pdb)
+
+	cmd := exec.builder().
+		software(liabilitiesSw).
+		mem("2GiB").
+		cpu(1).
+		printErrStreamToStdout().
+		addFile("input.pdb", pdbImport.file).
+		arg("--pdb").arg("input.pdb").
+		arg("--output").arg("liabilities.json").
+		arg("--motifs-pframe-dir").arg(motifsFrameName).
+		arg("--cysteines-pframe-dir").arg(cysFrameName)
+
+	if !is_undefined(args.numberingScheme) && args.numberingScheme != "" {
+		cmd = cmd.arg("--numbering-scheme").arg(args.numberingScheme)
+	}
+	if !is_undefined(args.heavyChainId) && args.heavyChainId != "" {
+		cmd = cmd.arg("--chain-h").arg(args.heavyChainId)
+	}
+	if !is_undefined(args.lightChainId) && args.lightChainId != "" {
+		cmd = cmd.arg("--chain-l").arg(args.lightChainId)
+	}
+
+	result := cmd.
+		saveFile("liabilities.json").
+		processWorkdir("motifsResult", ptImportDirTpl, func() {
+			m := {}
+			m[motifsFrameName] = motifColumnIds
+			return m
+		}()).
+		processWorkdir("cysResult", ptImportDirTpl, func() {
+			m := {}
+			m[cysFrameName] = cysColumnIds
+			return m
+		}()).
+		run()
+
+	motifData := result.getProcessorResult("motifsResult")
+	cysData := result.getProcessorResult("cysResult")
+
+	motifsPfBuilder := pframes.pFrameBuilder()
+	for colId in motifColumnIds {
+		spec := {
+			kind: "PColumn",
+			valueType: motifColumnSpecs[colId].valueType,
+			name: motifColumnSpecs[colId].name,
+			annotations: motifColumnSpecs[colId].annotations,
+			axesSpec: motifAxesSpec
+		}
+		columnRef := ptUtil.makeFrameColumnRef(motifsFrameName, colId)
+		motifsPfBuilder.add(colId, spec, motifData.getFutureInputField(columnRef))
+	}
+	motifsPf := motifsPfBuilder.build()
+
+	cysPfBuilder := pframes.pFrameBuilder()
+	for colId in cysColumnIds {
+		spec := {
+			kind: "PColumn",
+			valueType: cysColumnSpecs[colId].valueType,
+			name: cysColumnSpecs[colId].name,
+			annotations: cysColumnSpecs[colId].annotations,
+			axesSpec: cysAxesSpec
+		}
+		columnRef := ptUtil.makeFrameColumnRef(cysFrameName, colId)
+		cysPfBuilder.add(colId, spec, cysData.getFutureInputField(columnRef))
+	}
+	cysPf := cysPfBuilder.build()
 
 	return {
 		outputs: {
-			pdbFile: file.exportFile(pdbBlob.file)
+			liabilitiesJson: file.exportFile(result.getFile("liabilities.json")),
+			motifsData: pframes.exportFrame(motifsPf),
+			cysData: pframes.exportFrame(cysPf)
 		},
 		exports: {}
 	}

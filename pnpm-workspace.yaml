@@ -4,6 +4,7 @@ packages:
   - ui
   - test
   - block
+  - software
 
 catalog:
   "@milaboratories/ts-builder": 1.3.1

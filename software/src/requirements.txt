@@ -1,0 +1,2 @@
+freesasa==2.2.1
+polars-lts-cpu==1.33.1
