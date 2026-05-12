@@ -319,7 +319,8 @@ wf.body(func(args) {
 		outputs: {
 			liabilitiesJson: file.exportFile(result.getFile("liabilities.json")),
 			motifsData: pframes.exportFrame(motifsPf),
-			cysData: pframes.exportFrame(cysPf)
+			cysData: pframes.exportFrame(cysPf),
+			pdbImportHandle: pdbImport.handle
 		},
 		exports: {}
 	}

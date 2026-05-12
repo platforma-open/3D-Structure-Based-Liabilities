@@ -160,6 +160,11 @@ export const platforma = BlockModelV3.create(dataModel)
     if (pCols === undefined) return undefined;
     return createPlDataTableV2(ctx, pCols, ctx.data.cysTableState);
   })
+  .output(
+    "pdbImportProgress",
+    (ctx) => ctx.outputs?.resolve("pdbImportHandle")?.getImportProgress(),
+    { isActive: true },
+  )
   .sections(() => [{ type: "link", href: "/", label: "Main" }])
   .title(() => "3D Structure-Based Liabilities")
   .done();
