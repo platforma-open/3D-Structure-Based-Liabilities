@@ -7,6 +7,7 @@ from pathlib import Path
 import freesasa
 
 from cysteines import detect_cysteines
+from diagnostics import check_hallmark_tetrad, cross_check_ssbonds
 from metrics import compute_metrics
 from motifs import detect_motifs
 from parser import parse_pdb
@@ -268,6 +269,15 @@ def main() -> None:
     # error on 3+ chains here (the spec says reject), only mark "complex"
     # so dev structures like 1N8Z (Fab + antigen) still produce outputs.
     mode = {0: "empty", 1: "TNP", 2: "TAP"}.get(len(parsed.chain_order), "complex")
+
+    # Defensive checks (spec R21 SSBOND cross-check + R33 hallmark tetrad).
+    diagnostics = {
+        "ssbondCrossCheck": cross_check_ssbonds(parsed.ssbonds, cys_hits),
+        "hallmarkTetrad": check_hallmark_tetrad(
+            parsed, args.numbering_scheme, args.chain_h
+        ),
+    }
+
     report = {
         "numberingScheme": args.numbering_scheme,
         "mode": mode,
@@ -287,6 +297,7 @@ def main() -> None:
         "surfaceMetrics": surface_metrics,
         "thresholdFlags": developability["flags"],
         "developabilityComponents": developability["components"],
+        "diagnostics": diagnostics,
     }
     args.output.write_text(json.dumps(report, indent=2))
     chown_to_host(args.output)
