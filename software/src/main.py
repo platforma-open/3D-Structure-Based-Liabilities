@@ -242,13 +242,22 @@ def main() -> None:
             )
         chains.append({"id": chain_id, "residues": residues})
 
+    # Spec R9 — REMARK 99 chain identity is authoritative. When the PDB
+    # carries `REMARK 99 PLATFORMA CDR<role><idx> <chain><start>-<chain><end>`
+    # records, the chain letter prefix tells us which physical PDB chain
+    # is heavy / light, regardless of what the caller passed on the CLI.
+    # Falls back to --chain-h / --chain-l (i.e. the user's UI dropdowns)
+    # when REMARKs are absent.
+    heavy_chain_id = parsed.chain_role_to_pdb_chain.get("H", args.chain_h)
+    light_chain_id = parsed.chain_role_to_pdb_chain.get("L", args.chain_l)
+
     motif_hits = detect_motifs(
         parsed,
         sasa_lookup,
         args.rsasa_buried_cutoff,
         numbering_scheme=args.numbering_scheme,
-        heavy_chain_id=args.chain_h,
-        light_chain_id=args.chain_l,
+        heavy_chain_id=heavy_chain_id,
+        light_chain_id=light_chain_id,
         fr_confidence_threshold=args.fr_conf_thresh,
         cdr_confidence_threshold=args.cdr_conf_thresh,
     )
@@ -256,8 +265,8 @@ def main() -> None:
         parsed,
         sasa_lookup,
         numbering_scheme=args.numbering_scheme,
-        heavy_chain_id=args.chain_h,
-        light_chain_id=args.chain_l,
+        heavy_chain_id=heavy_chain_id,
+        light_chain_id=light_chain_id,
     )
 
     # Spec R20: motifStructuralRiskScore — sum of non-gated motif weighted
@@ -273,8 +282,8 @@ def main() -> None:
         parsed,
         sasa_lookup,
         numbering_scheme=args.numbering_scheme,
-        heavy_chain_id=args.chain_h,
-        light_chain_id=args.chain_l,
+        heavy_chain_id=heavy_chain_id,
+        light_chain_id=light_chain_id,
         rsasa_buried_cutoff=args.rsasa_buried_cutoff,
         fr_conf_thresh=args.fr_conf_thresh,
         cdr_conf_thresh=args.cdr_conf_thresh,
@@ -295,7 +304,7 @@ def main() -> None:
     diagnostics = {
         "ssbondCrossCheck": cross_check_ssbonds(parsed.ssbonds, cys_hits),
         "hallmarkTetrad": check_hallmark_tetrad(
-            parsed, args.numbering_scheme, args.chain_h
+            parsed, args.numbering_scheme, heavy_chain_id
         ),
     }
 

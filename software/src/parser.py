@@ -50,14 +50,19 @@ class Parsed:
     # "CDR2": (...), "CDR3": (...)}, "L": {...}}. Empty when not present;
     # downstream code falls back to scheme-aware fixed ranges.
     platforma_cdrs: Dict[str, Dict[str, Tuple[int, int]]] = field(default_factory=dict)
+    # Spec R9 — REMARK 99 chain identity is authoritative. Maps role ("H"/"L")
+    # to the physical PDB chain letter the records reference. e.g. given
+    # `REMARK 99 PLATFORMA CDRH1 B27-B38`, this becomes {"H": "B"}. Caller
+    # uses this to override the user's heavy/light chain dropdowns when
+    # records are present.
+    chain_role_to_pdb_chain: Dict[str, str] = field(default_factory=dict)
 
 
-# `REMARK 99 PLATFORMA CDRH1 H27-H38` per spec R10 / upstream R26. The CDR
-# label encodes both role (H/L) and CDR index (1/2/3). The range is
-# `<chain><start>-<chain><end>`; we only keep the integer endpoints since
-# both ends always reference the same chain role.
+# `REMARK 99 PLATFORMA CDRH1 H27-H38` per spec R10 / upstream R26. Capture
+# both the role letter (group 1) and the chain letter at each end of the
+# range (groups 3, 5) so we can also extract spec R9's chain identity.
 _PLATFORMA_CDR_RE = re.compile(
-    r"^REMARK\s+99\s+PLATFORMA\s+CDR([HL])([123])\s+[A-Za-z](\d+)-[A-Za-z](\d+)\s*$"
+    r"^REMARK\s+99\s+PLATFORMA\s+CDR([HL])([123])\s+([A-Za-z])(\d+)-([A-Za-z])(\d+)\s*$"
 )
 
 
@@ -79,7 +84,13 @@ def parse_pdb(text: str) -> Parsed:
         elif tag == "REMARK":
             m = _PLATFORMA_CDR_RE.match(raw.rstrip())
             if m:
-                role, cdr_idx, start_s, end_s = m.group(1), m.group(2), m.group(3), m.group(4)
+                role = m.group(1)
+                cdr_idx = m.group(2)
+                chain_start, start_s = m.group(3), m.group(4)
+                chain_end, end_s = m.group(5), m.group(6)
+                # Both ends of the range must reference the same chain.
+                if chain_start.upper() != chain_end.upper():
+                    continue
                 try:
                     start, end = int(start_s), int(end_s)
                 except ValueError:
@@ -87,6 +98,14 @@ def parse_pdb(text: str) -> Parsed:
                 if end < start:
                     continue
                 out.platforma_cdrs.setdefault(role, {})[f"CDR{cdr_idx}"] = (start, end)
+                # Spec R9 — record the physical PDB chain letter for this role.
+                # Later records for the same role must agree; conflicts are
+                # silently dropped (downstream falls back to the user's mapping).
+                existing = out.chain_role_to_pdb_chain.get(role)
+                if existing is None:
+                    out.chain_role_to_pdb_chain[role] = chain_start
+                elif existing.upper() != chain_start.upper():
+                    out.chain_role_to_pdb_chain.pop(role, None)
         elif tag == "SSBOND":
             try:
                 chain1 = line[15:16]
