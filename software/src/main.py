@@ -15,12 +15,23 @@ from pframe_writer import AxisSchema, ColumnSchema, chown_paths_to_host, write_p
 from scoring import compute_developability
 
 
+# Spec R11 — heavy-atom Ala-X-Ala reference SASAs, re-derived per
+# Yang & Blundell 1996 / Shrake-Rupley 1973 (see
+# `software/scripts/derive_ala_x_ala_refs.py`). Loaded once at import.
+_REFS_PATH = Path(__file__).parent / "ala_x_ala_refs.json"
+_AXA_REFS: dict[str, dict[str, float]] = json.loads(_REFS_PATH.read_text())["references"]
+
+
 def compute_sasa(pdb_path: Path) -> dict[tuple[str, str], dict[str, float]]:
     """Run FreeSASA on the PDB; return dict keyed by (chain_id, residue_number_str)
     mapping to per-residue SASA values. The residue_number_str is FreeSASA's
     residueNumber attribute, which encodes resSeq+insertion code (e.g. "100A").
-    rSASA values use FreeSASA's heavy-atom Ala-X-Ala reference (NaN for residues
-    where no reference exists, e.g. ligands)."""
+
+    rSASA is computed against the block's own heavy-atom Ala-X-Ala references
+    (spec R11) rather than FreeSASA's Naccess defaults — `_AXA_REFS` is the
+    auditable source of truth. Residues without a reference (HETATMs, ligands,
+    non-standard amino acids) get `rsasa = None`.
+    """
     structure = freesasa.Structure(str(pdb_path))
     result = freesasa.calc(structure)
     residue_areas = result.residueAreas()
@@ -28,11 +39,21 @@ def compute_sasa(pdb_path: Path) -> dict[tuple[str, str], dict[str, float]]:
     sasa_lookup: dict[tuple[str, str], dict[str, float]] = {}
     for chain_id, by_res in residue_areas.items():
         for res_number, area in by_res.items():
+            ref = _AXA_REFS.get(area.residueType)
+            total = _safe_float(area.total)
+            side_chain = _safe_float(area.sideChain)
+            rsasa = None
+            side_rsasa = None
+            if ref is not None:
+                if total is not None and ref["total"]:
+                    rsasa = total / ref["total"]
+                if side_chain is not None and ref["sidechain"]:
+                    side_rsasa = side_chain / ref["sidechain"]
             sasa_lookup[(chain_id, str(res_number))] = {
-                "sasa": _safe_float(area.total),
-                "sideChainSasa": _safe_float(area.sideChain),
-                "rsasa": _safe_float(area.relativeTotal),
-                "sideChainRsasa": _safe_float(area.relativeSideChain),
+                "sasa": total,
+                "sideChainSasa": side_chain,
+                "rsasa": rsasa,
+                "sideChainRsasa": side_rsasa,
             }
     return sasa_lookup
 
