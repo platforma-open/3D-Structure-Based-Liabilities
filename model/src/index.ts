@@ -106,14 +106,23 @@ type BlockDataV2 = BlockDataV1 & {
   cysTableState: PlDataTableStateV2;
 };
 
-/** Current shape (v3) — adds numbering scheme + heavy/light chain mapping so
- * motif scoring can apply R19 region weights and cysteines can be classified
- * against canonical positions (R21). All three are optional ("" / undefined
- * means "unknown" and motif scoring falls back to neutral weights). */
-export type BlockData = BlockDataV2 & {
+/** v3: adds numbering scheme + heavy/light chain mapping so motif scoring
+ * can apply R19 region weights and cysteines can be classified against
+ * canonical positions (R21). All three are optional ("" / undefined means
+ * "unknown" and motif scoring falls back to neutral weights). */
+type BlockDataV3 = BlockDataV2 & {
   numberingScheme: NumberingScheme | "";
   heavyChainId: string;
   lightChainId: string;
+};
+
+/** Current shape (v4) — adds R49 advanced thresholds (FR/CDR confidence
+ * gating + R12 buried/exposed rSASA cutoff). Defaults match the spec's
+ * calibrated values for ImmuneBuilder. */
+export type BlockData = BlockDataV3 & {
+  rsasaBuriedCutoff: number;
+  frConfThresh: number;
+  cdrConfThresh: number;
 };
 
 const dataModel = new DataModelBuilder()
@@ -122,11 +131,17 @@ const dataModel = new DataModelBuilder()
     ...v1,
     cysTableState: createPlDataTableStateV2(),
   }))
-  .migrate<BlockData>("v3", (v2) => ({
+  .migrate<BlockDataV3>("v3", (v2) => ({
     ...v2,
     numberingScheme: "",
     heavyChainId: "",
     lightChainId: "",
+  }))
+  .migrate<BlockData>("v4", (v3) => ({
+    ...v3,
+    rsasaBuriedCutoff: 0.075,
+    frConfThresh: 4.0,
+    cdrConfThresh: 6.0,
   }))
   .init(() => ({
     pdb: undefined,
@@ -135,6 +150,9 @@ const dataModel = new DataModelBuilder()
     numberingScheme: "",
     heavyChainId: "",
     lightChainId: "",
+    rsasaBuriedCutoff: 0.075,
+    frConfThresh: 4.0,
+    cdrConfThresh: 6.0,
   }));
 
 export const platforma = BlockModelV3.create(dataModel)
@@ -145,6 +163,9 @@ export const platforma = BlockModelV3.create(dataModel)
       numberingScheme: data.numberingScheme,
       heavyChainId: data.heavyChainId,
       lightChainId: data.lightChainId,
+      rsasaBuriedCutoff: data.rsasaBuriedCutoff,
+      frConfThresh: data.frConfThresh,
+      cdrConfThresh: data.cdrConfThresh,
     };
   })
   .output("liabilitiesJson", (ctx) =>
@@ -167,6 +188,17 @@ export const platforma = BlockModelV3.create(dataModel)
   )
   .sections(() => [{ type: "link", href: "/", label: "Main" }])
   .title(() => "3D Structure-Based Liabilities")
+  // Spec R55 — active-parameter summary visible at the block header.
+  .subtitle((ctx) => {
+    if (!ctx.args) return "";
+    const a = ctx.args;
+    const scheme = a.numberingScheme || "scheme unset";
+    const chains: string[] = [];
+    if (a.heavyChainId) chains.push(`H=${a.heavyChainId}`);
+    if (a.lightChainId) chains.push(`L=${a.lightChainId}`);
+    const chainPart = chains.length ? chains.join("/") : "chains unset";
+    return `${scheme}, ${chainPart}, rSASA<${a.rsasaBuriedCutoff}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å`;
+  })
   .done();
 
 export type BlockOutputs = InferOutputsType<typeof platforma>;

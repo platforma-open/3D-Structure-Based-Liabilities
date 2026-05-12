@@ -2,10 +2,12 @@
 import type { LiabilitiesReport } from "@platforma-open/milabs.3d-structure-based-liabilities.model";
 import {
   computedResult,
+  PlAccordionSection,
   PlAgDataTableV2,
   PlBlockPage,
   PlDropdown,
   PlFileInput,
+  PlNumberField,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
 import { computed } from "vue";
@@ -132,6 +134,44 @@ const chainOptions = computed(() => {
       heavy/light is set. Antigen chains (and any chain not mapped to H or L) get
       <code>region = "-"</code> and the neutral weight.
     </p>
+
+    <PlAccordionSection label="Advanced thresholds">
+      <div
+        :style="{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gap: '12px',
+          marginBottom: '8px',
+        }"
+      >
+        <PlNumberField
+          v-model="app.model.data.rsasaBuriedCutoff"
+          label="rSASA buried cutoff (R12)"
+          :minValue="0"
+          :maxValue="1"
+          :step="0.005"
+        />
+        <PlNumberField
+          v-model="app.model.data.frConfThresh"
+          label="FR confidence threshold (Å, R34)"
+          :minValue="1"
+          :maxValue="10"
+          :step="0.5"
+        />
+        <PlNumberField
+          v-model="app.model.data.cdrConfThresh"
+          label="CDR confidence threshold (Å, R34)"
+          :minValue="1"
+          :maxValue="12"
+          :step="0.5"
+        />
+      </div>
+      <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }">
+        Defaults (0.075 / 4.0 / 6.0) are calibrated for ImmuneBuilder-predicted PDBs (R34). Raise
+        the confidence thresholds when running on experimental crystal structures whose B-factors
+        are Å² temperature factors rather than predicted error.
+      </p>
+    </PlAccordionSection>
 
     <div v-if="report">
       <table

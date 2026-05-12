@@ -461,6 +461,16 @@ wf.body(func(args) {
 	if !is_undefined(args.lightChainId) && args.lightChainId != "" {
 		cmd = cmd.arg("--chain-l").arg(args.lightChainId)
 	}
+	// Spec R49 / R12 — advanced thresholds plumbed from BlockData.
+	if !is_undefined(args.rsasaBuriedCutoff) {
+		cmd = cmd.arg("--rsasa-buried-cutoff").arg(string(args.rsasaBuriedCutoff))
+	}
+	if !is_undefined(args.frConfThresh) {
+		cmd = cmd.arg("--fr-conf-thresh").arg(string(args.frConfThresh))
+	}
+	if !is_undefined(args.cdrConfThresh) {
+		cmd = cmd.arg("--cdr-conf-thresh").arg(string(args.cdrConfThresh))
+	}
 
 	result := cmd.
 		saveFile("liabilities.json").
