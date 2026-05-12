@@ -11,6 +11,7 @@ ptImportDirTpl := assets.importTemplate("@platforma-sdk/workflow-tengo:pt.import
 
 motifsFrameName := "motifs_pf"
 cysFrameName := "cysteines_pf"
+scoresFrameName := "scores_pf"
 
 motifAxesSpec := [
 	{
@@ -246,7 +247,197 @@ cysColumnSpecs := {
 
 cysColumnIds := ["cysClass", "chainRole", "bondingState", "rsasa", "sidechainRsasa", "sasa", "sidechainSasa", "partnerChainId", "partnerResSeq", "partnerIcode"]
 
+// Spec R38 scalar-per-structure PFrame. `structureId` is a placeholder
+// axis until upstream provides clonotype keys via PrimaryRef (R1-R6).
+// R23 summary counts + R38 motif scalars + R24-R30 surface metrics +
+// R36 low-conf fractions + R39 threshold flags all ride here.
+// R40: only the *Flag columns carry `pl7.app/isScore: "true"`.
+scoresAxesSpec := [
+	{
+		name: "pl7.app/structure/id",
+		type: "String",
+		annotations: { "pl7.app/label": "Structure" }
+	}
+]
+
+scoresColumnSpecs := {
+	mode: {
+		valueType: "String",
+		name: "pl7.app/liabilities/mode",
+		annotations: { "pl7.app/label": "Mode (R7)" }
+	},
+	extraCysCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/extraCysCount",
+		annotations: { "pl7.app/label": "Extra cysteines" }
+	},
+	exposedExtraCysCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/exposedExtraCysCount",
+		annotations: { "pl7.app/label": "Exposed extra cysteines" }
+	},
+	brokenCanonicalDisulfideCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/brokenCanonicalDisulfideCount",
+		annotations: { "pl7.app/label": "Broken canonical disulfides" }
+	},
+	missingCanonicalCysCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/missingCanonicalCysCount",
+		annotations: { "pl7.app/label": "Missing canonical cysteines" }
+	},
+	surfacedMotifCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/surfacedMotifCount",
+		annotations: { "pl7.app/label": "Surfaced motifs" }
+	},
+	confidenceGatedMotifCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/confidenceGatedMotifCount",
+		annotations: { "pl7.app/label": "Confidence-gated motifs" }
+	},
+	motifStructuralRiskScore: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/motifStructuralRiskScore",
+		annotations: { "pl7.app/label": "motifStructuralRiskScore", "pl7.app/format": ".2f" }
+	},
+	structuralDevelopabilityScore: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/structuralDevelopabilityScore",
+		annotations: { "pl7.app/label": "structuralDevelopabilityScore", "pl7.app/format": ".2f" }
+	},
+	structuralDevelopabilityRisk: {
+		valueType: "String",
+		name: "pl7.app/liabilities/structuralDevelopabilityRisk",
+		annotations: { "pl7.app/label": "structuralDevelopabilityRisk" }
+	},
+	structuralIntegrityRisk: {
+		valueType: "String",
+		name: "pl7.app/liabilities/structuralIntegrityRisk",
+		annotations: { "pl7.app/label": "structuralIntegrityRisk" }
+	},
+	totalCdrLength: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/totalCdrLength",
+		annotations: { "pl7.app/label": "Total CDR length" }
+	},
+	psh: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/psh",
+		annotations: { "pl7.app/label": "PSH", "pl7.app/format": ".2f" }
+	},
+	pshPatchCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/pshPatchCount",
+		annotations: { "pl7.app/label": "PSH patch count" }
+	},
+	ppc: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/ppc",
+		annotations: { "pl7.app/label": "PPC", "pl7.app/format": ".2f" }
+	},
+	pnc: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/pnc",
+		annotations: { "pl7.app/label": "PNC", "pl7.app/format": ".2f" }
+	},
+	sfvcsp: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/sfvcsp",
+		annotations: { "pl7.app/label": "SFvCSP", "pl7.app/format": ".2f" }
+	},
+	cdrh3Compactness: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/cdrh3Compactness",
+		annotations: { "pl7.app/label": "CDRH3 compactness", "pl7.app/format": ".3f" }
+	},
+	totalCdrLengthLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/totalCdrLengthLowConfidenceResidueFraction",
+		annotations: { "pl7.app/label": "Total CDR length low-conf fraction", "pl7.app/format": ".2f" }
+	},
+	pshLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/pshLowConfidenceResidueFraction",
+		annotations: { "pl7.app/label": "PSH low-conf fraction", "pl7.app/format": ".2f" }
+	},
+	ppcLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/ppcLowConfidenceResidueFraction",
+		annotations: { "pl7.app/label": "PPC low-conf fraction", "pl7.app/format": ".2f" }
+	},
+	pncLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/pncLowConfidenceResidueFraction",
+		annotations: { "pl7.app/label": "PNC low-conf fraction", "pl7.app/format": ".2f" }
+	},
+	sfvcspLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/sfvcspLowConfidenceResidueFraction",
+		annotations: { "pl7.app/label": "SFvCSP low-conf fraction", "pl7.app/format": ".2f" }
+	},
+	cdrh3CompactnessLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/cdrh3CompactnessLowConfidenceResidueFraction",
+		annotations: { "pl7.app/label": "CDRH3 compactness low-conf fraction", "pl7.app/format": ".2f" }
+	},
+	totalCdrLengthFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/totalCdrLengthFlag",
+		annotations: { "pl7.app/label": "Total CDR length flag", "pl7.app/isScore": "true" }
+	},
+	pshFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/pshFlag",
+		annotations: { "pl7.app/label": "PSH flag", "pl7.app/isScore": "true" }
+	},
+	ppcFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/ppcFlag",
+		annotations: { "pl7.app/label": "PPC flag", "pl7.app/isScore": "true" }
+	},
+	pncFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/pncFlag",
+		annotations: { "pl7.app/label": "PNC flag", "pl7.app/isScore": "true" }
+	},
+	sfvcspFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/sfvcspFlag",
+		annotations: { "pl7.app/label": "SFvCSP flag", "pl7.app/isScore": "true" }
+	},
+	cdrh3CompactnessFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cdrh3CompactnessFlag",
+		annotations: { "pl7.app/label": "CDRH3 compactness flag", "pl7.app/isScore": "true" }
+	}
+}
+
+scoresColumnIds := [
+	"mode",
+	"extraCysCount", "exposedExtraCysCount",
+	"brokenCanonicalDisulfideCount", "missingCanonicalCysCount",
+	"surfacedMotifCount", "confidenceGatedMotifCount",
+	"motifStructuralRiskScore", "structuralDevelopabilityScore",
+	"structuralDevelopabilityRisk", "structuralIntegrityRisk",
+	"totalCdrLength", "psh", "pshPatchCount", "ppc", "pnc",
+	"sfvcsp", "cdrh3Compactness",
+	"totalCdrLengthLowConfidenceResidueFraction",
+	"pshLowConfidenceResidueFraction",
+	"ppcLowConfidenceResidueFraction",
+	"pncLowConfidenceResidueFraction",
+	"sfvcspLowConfidenceResidueFraction",
+	"cdrh3CompactnessLowConfidenceResidueFraction",
+	"totalCdrLengthFlag", "pshFlag", "ppcFlag", "pncFlag",
+	"sfvcspFlag", "cdrh3CompactnessFlag"
+]
+
 wf.body(func(args) {
+	// Spec R43 — every emitted PColumn carries `domain.pl7.app/blockId`
+	// scoped to this block instance so downstream blocks can disambiguate
+	// outputs from multiple instances of the same block kind.
+	blockId := wf.blockId().getDataAsJson()
+
 	pdbImport := file.importFile(args.pdb)
 
 	cmd := exec.builder().
@@ -258,7 +449,8 @@ wf.body(func(args) {
 		arg("--pdb").arg("input.pdb").
 		arg("--output").arg("liabilities.json").
 		arg("--motifs-pframe-dir").arg(motifsFrameName).
-		arg("--cysteines-pframe-dir").arg(cysFrameName)
+		arg("--cysteines-pframe-dir").arg(cysFrameName).
+		arg("--scores-pframe-dir").arg(scoresFrameName)
 
 	if !is_undefined(args.numberingScheme) && args.numberingScheme != "" {
 		cmd = cmd.arg("--numbering-scheme").arg(args.numberingScheme)
@@ -282,10 +474,16 @@ wf.body(func(args) {
 			m[cysFrameName] = cysColumnIds
 			return m
 		}()).
+		processWorkdir("scoresResult", ptImportDirTpl, func() {
+			m := {}
+			m[scoresFrameName] = scoresColumnIds
+			return m
+		}()).
 		run()
 
 	motifData := result.getProcessorResult("motifsResult")
 	cysData := result.getProcessorResult("cysResult")
+	scoresData := result.getProcessorResult("scoresResult")
 
 	motifsPfBuilder := pframes.pFrameBuilder()
 	for colId in motifColumnIds {
@@ -293,6 +491,7 @@ wf.body(func(args) {
 			kind: "PColumn",
 			valueType: motifColumnSpecs[colId].valueType,
 			name: motifColumnSpecs[colId].name,
+			domain: { "pl7.app/blockId": blockId },
 			annotations: motifColumnSpecs[colId].annotations,
 			axesSpec: motifAxesSpec
 		}
@@ -307,6 +506,7 @@ wf.body(func(args) {
 			kind: "PColumn",
 			valueType: cysColumnSpecs[colId].valueType,
 			name: cysColumnSpecs[colId].name,
+			domain: { "pl7.app/blockId": blockId },
 			annotations: cysColumnSpecs[colId].annotations,
 			axesSpec: cysAxesSpec
 		}
@@ -315,11 +515,27 @@ wf.body(func(args) {
 	}
 	cysPf := cysPfBuilder.build()
 
+	scoresPfBuilder := pframes.pFrameBuilder()
+	for colId in scoresColumnIds {
+		spec := {
+			kind: "PColumn",
+			valueType: scoresColumnSpecs[colId].valueType,
+			name: scoresColumnSpecs[colId].name,
+			domain: { "pl7.app/blockId": blockId },
+			annotations: scoresColumnSpecs[colId].annotations,
+			axesSpec: scoresAxesSpec
+		}
+		columnRef := ptUtil.makeFrameColumnRef(scoresFrameName, colId)
+		scoresPfBuilder.add(colId, spec, scoresData.getFutureInputField(columnRef))
+	}
+	scoresPf := scoresPfBuilder.build()
+
 	return {
 		outputs: {
 			liabilitiesJson: file.exportFile(result.getFile("liabilities.json")),
 			motifsData: pframes.exportFrame(motifsPf),
 			cysData: pframes.exportFrame(cysPf),
+			scoresData: pframes.exportFrame(scoresPf),
 			pdbImportHandle: pdbImport.handle
 		},
 		exports: {}

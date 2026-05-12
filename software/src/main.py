@@ -112,6 +112,61 @@ _CYS_COLUMNS = [
     ColumnSchema(id="partnerIcode", type="String"),
 ]
 
+# Per-structure scalar PFrame (spec R38). One row per structure. The
+# `structureId` axis is a placeholder until upstream provides a clonotype
+# key via PrimaryRef (R1-R6). R23 summary counts, R38 motif/score scalars,
+# R24-R30 surface metrics, R36 low-conf fractions, R39 threshold flags
+# all live here. Workflow side annotates `*Flag` columns with
+# `pl7.app/isScore: "true"` (R40); raw metrics ship as plain features.
+_SCORES_AXES = [
+    AxisSchema(id="structureId", type="String"),
+]
+_SCORES_COLUMNS = [
+    # Spec R7 mode
+    ColumnSchema(id="mode", type="String"),
+    # Spec R23 cysteine summary counts
+    ColumnSchema(id="extraCysCount", type="Long"),
+    ColumnSchema(id="exposedExtraCysCount", type="Long"),
+    ColumnSchema(id="brokenCanonicalDisulfideCount", type="Long"),
+    ColumnSchema(id="missingCanonicalCysCount", type="Long"),
+    # Spec R38 motif counts + composite score + risks
+    ColumnSchema(id="surfacedMotifCount", type="Long"),
+    ColumnSchema(id="confidenceGatedMotifCount", type="Long"),
+    ColumnSchema(id="motifStructuralRiskScore", type="Double"),
+    ColumnSchema(id="structuralDevelopabilityScore", type="Double"),
+    ColumnSchema(id="structuralDevelopabilityRisk", type="String"),
+    ColumnSchema(id="structuralIntegrityRisk", type="String"),
+    # Spec R24-R30 surface metrics (sfvcsp / cdrh3Compactness are mode-specific)
+    ColumnSchema(id="totalCdrLength", type="Long"),
+    ColumnSchema(id="psh", type="Double"),
+    ColumnSchema(id="pshPatchCount", type="Long"),
+    ColumnSchema(id="ppc", type="Double"),
+    ColumnSchema(id="pnc", type="Double"),
+    ColumnSchema(id="sfvcsp", type="Double"),
+    ColumnSchema(id="cdrh3Compactness", type="Double"),
+    # Spec R36 low-confidence-residue fractions
+    ColumnSchema(id="totalCdrLengthLowConfidenceResidueFraction", type="Double"),
+    ColumnSchema(id="pshLowConfidenceResidueFraction", type="Double"),
+    ColumnSchema(id="ppcLowConfidenceResidueFraction", type="Double"),
+    ColumnSchema(id="pncLowConfidenceResidueFraction", type="Double"),
+    ColumnSchema(id="sfvcspLowConfidenceResidueFraction", type="Double"),
+    ColumnSchema(id="cdrh3CompactnessLowConfidenceResidueFraction", type="Double"),
+    # Spec R39 threshold flags. Value is "green" / "amber" / "red" / "-"
+    # (sentinel when the flag isn't computed in the current mode).
+    ColumnSchema(id="totalCdrLengthFlag", type="String"),
+    ColumnSchema(id="pshFlag", type="String"),
+    ColumnSchema(id="ppcFlag", type="String"),
+    ColumnSchema(id="pncFlag", type="String"),
+    ColumnSchema(id="sfvcspFlag", type="String"),
+    ColumnSchema(id="cdrh3CompactnessFlag", type="String"),
+]
+
+# Placeholder axis value for the scores PColumn — replaced by the upstream
+# clonotype key once a PrimaryRef-emitting structure-prediction block lands.
+_PLACEHOLDER_STRUCTURE_ID = "static"
+# Spec R39 — sentinel used when a flag isn't applicable to the current mode.
+_FLAG_SENTINEL = "-"
+
 
 def main() -> None:
     ap = argparse.ArgumentParser()
@@ -123,6 +178,9 @@ def main() -> None:
     ap.add_argument("--cysteines-pframe-dir", required=True, type=Path,
                     help="Directory to populate with parquet + .datainfo files "
                          "for the cysteines PFrame (consumed by pt.import-dir).")
+    ap.add_argument("--scores-pframe-dir", required=True, type=Path,
+                    help="Directory to populate with parquet + .datainfo files "
+                         "for the per-structure scores PFrame (spec R38/R39).")
     # R12: Raybould 2019 canonical cutoff
     ap.add_argument("--rsasa-buried-cutoff", type=float, default=0.075)
     # R10/R14 numbering: scheme + chain role mapping. Optional — when missing,
@@ -277,6 +335,60 @@ def main() -> None:
     ]
     cys_written = write_pframe(args.cysteines_pframe_dir, cys_rows, _CYS_AXES, _CYS_COLUMNS)
     chown_paths_to_host(cys_written)
+
+    # Spec R23 / R38 / R39 per-structure scalar PFrame. R23 summary counts
+    # are derived here from cys_hits; the rest of the row is the same data
+    # that's already in the JSON `scores` / `surfaceMetrics` / `thresholdFlags`.
+    flags = developability["flags"]
+    sm = surface_metrics if isinstance(surface_metrics, dict) and "mode" in surface_metrics else {}
+    extra_cys = sum(1 for h in cys_hits if h.cysClass == "cys_extra")
+    exposed_extra_cys = sum(
+        1 for h in cys_hits
+        if h.cysClass == "cys_extra"
+        and h.sidechainRsasa is not None
+        and h.sidechainRsasa >= args.rsasa_buried_cutoff
+    )
+    broken_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_broken")
+    missing_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_missing")
+    scores_row = {
+        "structureId": _PLACEHOLDER_STRUCTURE_ID,
+        "mode": mode,
+        "extraCysCount": extra_cys,
+        "exposedExtraCysCount": exposed_extra_cys,
+        "brokenCanonicalDisulfideCount": broken_canonical,
+        "missingCanonicalCysCount": missing_canonical,
+        "surfacedMotifCount": len(motif_hits),
+        "confidenceGatedMotifCount": sum(
+            1 for h in motif_hits if h.confidenceGated == "yes"
+        ),
+        "motifStructuralRiskScore": motif_structural_risk_score,
+        "structuralDevelopabilityScore": developability["structuralDevelopabilityScore"],
+        "structuralDevelopabilityRisk": developability["structuralDevelopabilityRisk"],
+        "structuralIntegrityRisk": developability["structuralIntegrityRisk"],
+        "totalCdrLength": sm.get("totalCdrLength"),
+        "psh": sm.get("psh"),
+        "pshPatchCount": sm.get("pshPatchCount"),
+        "ppc": sm.get("ppc"),
+        "pnc": sm.get("pnc"),
+        "sfvcsp": sm.get("sfvcsp"),
+        "cdrh3Compactness": sm.get("cdrh3Compactness"),
+        "totalCdrLengthLowConfidenceResidueFraction": sm.get("totalCdrLengthLowConfidenceResidueFraction"),
+        "pshLowConfidenceResidueFraction": sm.get("pshLowConfidenceResidueFraction"),
+        "ppcLowConfidenceResidueFraction": sm.get("ppcLowConfidenceResidueFraction"),
+        "pncLowConfidenceResidueFraction": sm.get("pncLowConfidenceResidueFraction"),
+        "sfvcspLowConfidenceResidueFraction": sm.get("sfvcspLowConfidenceResidueFraction"),
+        "cdrh3CompactnessLowConfidenceResidueFraction": sm.get("cdrh3CompactnessLowConfidenceResidueFraction"),
+        "totalCdrLengthFlag": flags.get("totalCdrLengthFlag", _FLAG_SENTINEL),
+        "pshFlag": flags.get("pshFlag", _FLAG_SENTINEL),
+        "ppcFlag": flags.get("ppcFlag", _FLAG_SENTINEL),
+        "pncFlag": flags.get("pncFlag", _FLAG_SENTINEL),
+        "sfvcspFlag": flags.get("sfvcspFlag", _FLAG_SENTINEL),
+        "cdrh3CompactnessFlag": flags.get("cdrh3CompactnessFlag", _FLAG_SENTINEL),
+    }
+    scores_written = write_pframe(
+        args.scores_pframe_dir, [scores_row], _SCORES_AXES, _SCORES_COLUMNS
+    )
+    chown_paths_to_host(scores_written)
 
 
 if __name__ == "__main__":
