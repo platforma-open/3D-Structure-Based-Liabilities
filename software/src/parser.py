@@ -1,5 +1,6 @@
+import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -44,6 +45,20 @@ class Parsed:
     chain_order: List[str] = field(default_factory=list)
     residues_by_chain: Dict[str, List[Residue]] = field(default_factory=dict)
     ssbonds: List[Ssbond] = field(default_factory=list)
+    # Spec R10 — CDR ranges from `REMARK 99 PLATFORMA CDR*` records emitted
+    # by the Structure Prediction block. Shape: {"H": {"CDR1": (start, end),
+    # "CDR2": (...), "CDR3": (...)}, "L": {...}}. Empty when not present;
+    # downstream code falls back to scheme-aware fixed ranges.
+    platforma_cdrs: Dict[str, Dict[str, Tuple[int, int]]] = field(default_factory=dict)
+
+
+# `REMARK 99 PLATFORMA CDRH1 H27-H38` per spec R10 / upstream R26. The CDR
+# label encodes both role (H/L) and CDR index (1/2/3). The range is
+# `<chain><start>-<chain><end>`; we only keep the integer endpoints since
+# both ends always reference the same chain role.
+_PLATFORMA_CDR_RE = re.compile(
+    r"^REMARK\s+99\s+PLATFORMA\s+CDR([HL])([123])\s+[A-Za-z](\d+)-[A-Za-z](\d+)\s*$"
+)
 
 
 def parse_pdb(text: str) -> Parsed:
@@ -61,6 +76,17 @@ def parse_pdb(text: str) -> Parsed:
             model_count += 1
             if model_count > 1:
                 in_first_model = False
+        elif tag == "REMARK":
+            m = _PLATFORMA_CDR_RE.match(raw.rstrip())
+            if m:
+                role, cdr_idx, start_s, end_s = m.group(1), m.group(2), m.group(3), m.group(4)
+                try:
+                    start, end = int(start_s), int(end_s)
+                except ValueError:
+                    continue
+                if end < start:
+                    continue
+                out.platforma_cdrs.setdefault(role, {})[f"CDR{cdr_idx}"] = (start, end)
         elif tag == "SSBOND":
             try:
                 chain1 = line[15:16]

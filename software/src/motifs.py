@@ -182,7 +182,7 @@ def detect_motifs(
                 if rsasa is None or rsasa < rsasa_buried_cutoff:
                     continue
                 ef = _exposure_factor(rsasa)
-                region = region_for(chain_role, r.res_seq, numbering_scheme)
+                region = region_for(chain_role, r.res_seq, numbering_scheme, parsed.platforma_cdrs)
                 region_weight = REGION_WEIGHTS.get(region, REGION_WEIGHT_DEFAULT)
                 confidence = _mean_b_factor(r)
                 threshold = _confidence_threshold(region, fr_confidence_threshold, cdr_confidence_threshold)

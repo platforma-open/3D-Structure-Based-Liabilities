@@ -80,6 +80,7 @@ def region_for(
     chain_role: Optional[str],
     res_seq: int,
     scheme: Optional[str],
+    platforma_cdrs: Optional[dict] = None,
 ) -> Optional[str]:
     """Return "FR1" / "CDR1" / "FR2" / "CDR2" / "FR3" / "CDR3" / "FR4" /
     None. Returns None when chain_role is unknown (e.g. antigen chains in a
@@ -88,12 +89,24 @@ def region_for(
 
     chain_role: "H" or "L". Pass "H" for VHH (single-chain camelid) too;
     its numbering follows heavy-chain convention.
+
+    platforma_cdrs (spec R10 preferred path): when provided and contains
+    `chain_role`, the dict {"CDR1": (start, end), "CDR2": ..., "CDR3": ...}
+    overrides the scheme-fixed CDR ranges. The Structure Prediction block
+    writes these as `REMARK 99 PLATFORMA CDR*` records; downstream we treat
+    them as authoritative (per R9 / spec line 60).
     """
     s = _normalize_scheme(scheme)
     if s is None or chain_role not in ("H", "L"):
         return None
 
-    cdrs = SCHEME_CDR_RANGES[s].get(chain_role)
+    cdrs = None
+    if platforma_cdrs and chain_role in platforma_cdrs:
+        from_remark = platforma_cdrs[chain_role]
+        if all(k in from_remark for k in ("CDR1", "CDR2", "CDR3")):
+            cdrs = from_remark
+    if cdrs is None:
+        cdrs = SCHEME_CDR_RANGES[s].get(chain_role)
     if cdrs is None:
         return None
 

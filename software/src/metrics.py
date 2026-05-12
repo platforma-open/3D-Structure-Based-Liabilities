@@ -339,7 +339,7 @@ def compute_metrics(
         residues, aa_letters, rsasa_lookup, in_bridge = _build_chain_context(
             parsed, chain_id, sasa_lookup, salt_bridges
         )
-        regions = [region_for(role, r.res_seq, numbering_scheme) for r in residues]
+        regions = [region_for(role, r.res_seq, numbering_scheme, parsed.platforma_cdrs) for r in residues]
         cdr_vic = _cdr_vicinity_residues(residues, regions, rsasa_lookup, rsasa_buried_cutoff)
 
         def h_weight(i, aa):
