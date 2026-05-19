@@ -73,6 +73,11 @@ self.body(func(inputs) {
 	if !is_undefined(inputs.cdrConfThresh) {
 		cmd = cmd.arg("--cdr-conf-thresh").arg(string(inputs.cdrConfThresh))
 	}
+	// R48 — pass-through. is_undefined guard keeps legacy callers (still
+	// emitting bodyExtra without this key) on the python default ("kd").
+	if !is_undefined(inputs.hydrophobicityScale) && inputs.hydrophobicityScale != "" {
+		cmd = cmd.arg("--hydrophobicity-scale").arg(inputs.hydrophobicityScale)
+	}
 
 	result := cmd.
 		saveFile("liabilities.json").

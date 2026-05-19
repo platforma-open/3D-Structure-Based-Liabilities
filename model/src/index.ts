@@ -104,6 +104,12 @@ export type LiabilitiesReport = {
 /** Spec R14 / R10 — numbering schemes supported for region tagging. */
 export type NumberingScheme = "imgt" | "chothia" | "kabat";
 
+/** Spec R48 — hydrophobicity scale used by PSH. KD = Kyte-Doolittle (the
+ * Raybould 2019 default), WW = Wimley-White interface, Hessa = Hessa
+ * biological hydrophobicity, EM = Eisenberg-McLachlan consensus, BM =
+ * Black-Mould normalized scale. */
+export type HydrophobicityScale = "kd" | "ww" | "hessa" | "em" | "bm";
+
 /** Original shape; preserved so existing block instances migrate. */
 type BlockDataV1 = {
   pdb: ImportFileHandle | undefined;
@@ -153,19 +159,23 @@ type BlockDataV6 = BlockDataV5 & {
   scoresTableState: PlDataTableStateV2;
 };
 
-/** Current shape (v7) — adds GraphMaker state for the five Spec R54
- * distribution histograms: PSH, PPC, PNC, the mode-specific metric
- * (SFvCSP for Fv / CDRH3 compactness for VHH), and the composite
- * developability score. Each histogram has its own state field so its
- * GraphMaker configuration (bin count, axis scale, layer colors, etc.)
- * persists independently. */
-export type BlockData = BlockDataV6 & {
+/** v7 — adds GraphMaker state for the six Spec R54 distribution histograms:
+ * PSH, PPC, PNC, SFvCSP (Fv), CDRH3 compactness (VHH), and the composite
+ * developability score. */
+type BlockDataV7 = BlockDataV6 & {
   graphStatePshV2: GraphMakerState;
   graphStatePpcV2: GraphMakerState;
   graphStatePncV2: GraphMakerState;
   graphStateSfvcspV2: GraphMakerState;
   graphStateCdrh3CompactnessV2: GraphMakerState;
   graphStateDevScoreV2: GraphMakerState;
+};
+
+/** Current shape (v8) — adds R48 hydrophobicity scale selector. Default
+ * "kd" matches the Raybould 2019 PSH definition and keeps existing
+ * instances numerically identical post-migration. */
+export type BlockData = BlockDataV7 & {
+  hydrophobicityScale: HydrophobicityScale;
 };
 
 const initialGraphState = (title: string, fillColor: string): GraphMakerState => ({
@@ -205,7 +215,7 @@ const dataModel = new DataModelBuilder()
     ...v5,
     scoresTableState: createPlDataTableStateV2(),
   }))
-  .migrate<BlockData>("v7", (v6) => ({
+  .migrate<BlockDataV7>("v7", (v6) => ({
     ...v6,
     graphStatePshV2: initialGraphState("PSH distribution", "#7da3d1"),
     graphStatePpcV2: initialGraphState("PPC distribution", "#e5a06f"),
@@ -216,6 +226,10 @@ const dataModel = new DataModelBuilder()
       "#d6b06b",
     ),
     graphStateDevScoreV2: initialGraphState("Developability score distribution", "#cf6e83"),
+  }))
+  .migrate<BlockData>("v8", (v7) => ({
+    ...v7,
+    hydrophobicityScale: "kd",
   }))
   .init(() => ({
     pdb: undefined,
@@ -229,6 +243,7 @@ const dataModel = new DataModelBuilder()
     rsasaBuriedCutoff: 0.075,
     frConfThresh: 4.0,
     cdrConfThresh: 6.0,
+    hydrophobicityScale: "kd",
     graphStatePshV2: initialGraphState("PSH distribution", "#7da3d1"),
     graphStatePpcV2: initialGraphState("PPC distribution", "#e5a06f"),
     graphStatePncV2: initialGraphState("PNC distribution", "#82c79c"),
@@ -259,6 +274,7 @@ export const platforma = BlockModelV3.create(dataModel)
       rsasaBuriedCutoff: data.rsasaBuriedCutoff,
       frConfThresh: data.frConfThresh,
       cdrConfThresh: data.cdrConfThresh,
+      hydrophobicityScale: data.hydrophobicityScale,
     };
   })
   // Spec R1-R6 — surface `pl7.app/structure/pdb` PColumns from the result
@@ -445,7 +461,11 @@ export const platforma = BlockModelV3.create(dataModel)
     if (a.heavyChainId) chains.push(`H=${a.heavyChainId}`);
     if (a.lightChainId) chains.push(`L=${a.lightChainId}`);
     const chainPart = chains.length ? chains.join("/") : "chains unset";
-    return `${inputMode} · ${scheme}, ${chainPart}, rSASA<${a.rsasaBuriedCutoff}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å`;
+    const scaleSuffix =
+      a.hydrophobicityScale && a.hydrophobicityScale !== "kd"
+        ? `, hScale=${a.hydrophobicityScale}`
+        : "";
+    return `${inputMode} · ${scheme}, ${chainPart}, rSASA<${a.rsasaBuriedCutoff}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å${scaleSuffix}`;
   })
   .done();
 

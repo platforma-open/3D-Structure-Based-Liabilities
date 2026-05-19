@@ -59,7 +59,8 @@ wf.body(func(args) {
 			lightChainId: smart.createJsonResource(is_undefined(args.lightChainId) ? "" : args.lightChainId),
 			rsasaBuriedCutoff: smart.createJsonResource(args.rsasaBuriedCutoff),
 			frConfThresh: smart.createJsonResource(args.frConfThresh),
-			cdrConfThresh: smart.createJsonResource(args.cdrConfThresh)
+			cdrConfThresh: smart.createJsonResource(args.cdrConfThresh),
+			hydrophobicityScale: smart.createJsonResource(is_undefined(args.hydrophobicityScale) ? "" : args.hydrophobicityScale)
 		}
 
 		processResult := pframes.processColumn(
@@ -197,6 +198,9 @@ wf.body(func(args) {
 	}
 	if !is_undefined(args.cdrConfThresh) {
 		cmd = cmd.arg("--cdr-conf-thresh").arg(string(args.cdrConfThresh))
+	}
+	if !is_undefined(args.hydrophobicityScale) && args.hydrophobicityScale != "" {
+		cmd = cmd.arg("--hydrophobicity-scale").arg(args.hydrophobicityScale)
 	}
 
 	result := cmd.

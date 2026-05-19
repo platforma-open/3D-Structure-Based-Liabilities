@@ -29,9 +29,9 @@ from dataclasses import dataclass
 from typing import Optional
 
 from biochem import (
-    GLYCINE_HYDROPHOBICITY,
     charge_of,
     detect_salt_bridges,
+    get_hydrophobicity_scale,
     hydrophobicity_of,
 )
 from numbering import (
@@ -309,6 +309,7 @@ def compute_metrics(
     rsasa_buried_cutoff: float,
     fr_conf_thresh: float = 4.0,
     cdr_conf_thresh: float = 6.0,
+    hydrophobicity_scale: str = "kd",
 ):
     """Returns a dict suitable for JSON emission. Includes Fv metrics when
     both heavy + light are mapped; VHH metrics when only heavy is mapped
@@ -316,12 +317,16 @@ def compute_metrics(
 
     Type-restricted patches: R31 (VHH mode) only counts same-type pairs.
     Fv mode (R25/R26) counts all pairs with non-zero weights.
+
+    `hydrophobicity_scale` (R48): selects the per-residue lookup used by PSH.
+    Defaults to "kd" (Kyte-Doolittle, the Raybould 2019 setting).
     """
     if not numbering_scheme:
         return {}
 
     salt_bridges = detect_salt_bridges(parsed)
     chain_id_to_residues = dict(parsed.residues_by_chain)
+    h_scale, h_glycine = get_hydrophobicity_scale(hydrophobicity_scale)
 
     h_present = heavy_chain_id and heavy_chain_id in chain_id_to_residues
     l_present = light_chain_id and light_chain_id in chain_id_to_residues
@@ -343,7 +348,7 @@ def compute_metrics(
         cdr_vic = _cdr_vicinity_residues(residues, regions, rsasa_lookup, rsasa_buried_cutoff)
 
         def h_weight(i, aa):
-            v = hydrophobicity_of(aa, in_bridge.get(i, False))
+            v = hydrophobicity_of(aa, in_bridge.get(i, False), h_scale, h_glycine)
             return v if v is not None else 0.0
 
         def pos_charge_abs(i, aa):
@@ -403,7 +408,7 @@ def compute_metrics(
         cdr_vic = _cdr_vicinity_residues(residues, regions, rsasa_lookup, rsasa_buried_cutoff)
 
         def h_weight(i, aa):
-            v = hydrophobicity_of(aa, in_bridge.get(i, False))
+            v = hydrophobicity_of(aa, in_bridge.get(i, False), h_scale, h_glycine)
             return v if v is not None else 0.0
 
         def pos_charge_abs(i, aa):

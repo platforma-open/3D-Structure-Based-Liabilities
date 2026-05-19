@@ -26,7 +26,10 @@ thresholdsFor := func(colName, values) {
 			value: v
 		})
 	}
-	return json.encode(entries)
+	// PColumn annotations are strings. `json.encode` in Tengo returns bytes;
+	// the validator rejects bytes for a `string`-typed annotation slot. Wrap
+	// in `string(...)` so the spec round-trips as plain JSON text.
+	return string(json.encode(entries))
 }
 
 // ──────────────── Motifs PFrame ────────────────

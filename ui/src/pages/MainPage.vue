@@ -208,6 +208,19 @@ const numberingSchemeOptions = [
   { value: "kabat", label: "Kabat" },
 ];
 
+// R48 — hydrophobicity scales selectable for PSH. KD is the Raybould 2019
+// default; the others are the spec's calibration set (Raybould refs 31–35
+// plus Black-Mould for the Gordon TNP comparison). Labels match the
+// citation rather than the internal key so the dropdown reads like the
+// literature.
+const hydrophobicityScaleOptions = [
+  { value: "kd", label: "Kyte-Doolittle (default)" },
+  { value: "ww", label: "Wimley-White (interface)" },
+  { value: "hessa", label: "Hessa (biological)" },
+  { value: "em", label: "Eisenberg-McLachlan (consensus)" },
+  { value: "bm", label: "Black-Mould (normalized)" },
+];
+
 // Heavy / light chain dropdowns offer the chain IDs from the loaded PDB plus
 // a "none" option (so antigen chains can be left untagged).
 // When the user picks an upstream PDBs dataset, drop the legacy file upload
@@ -322,6 +335,20 @@ const chainOptions = computed(() => {
         Defaults (0.075 / 4.0 / 6.0) are calibrated for ImmuneBuilder-predicted PDBs (R34). Raise
         the confidence thresholds when running on experimental crystal structures whose B-factors
         are Å² temperature factors rather than predicted error.
+      </p>
+      <div :style="{ marginBottom: '8px' }">
+        <PlDropdown
+          v-model="app.model.data.hydrophobicityScale"
+          :options="hydrophobicityScaleOptions"
+          label="Hydrophobicity scale (R48)"
+        />
+      </div>
+      <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }">
+        PSH weights each residue by its hydrophobicity (R25). Kyte-Doolittle is Raybould 2019's
+        choice; switching scales lets you cross-check PSH and reproduce the spec's R48 sensitivity
+        analysis. All scales are min-max normalized to [1.0, 2.0] so PSH magnitudes stay in the same
+        ballpark, but relative ordering between residues changes — expect different red/amber/green
+        calls near the threshold.
       </p>
     </PlAccordionSection>
 
