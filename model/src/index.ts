@@ -308,10 +308,22 @@ export const platforma = BlockModelV3.create(dataModel)
   // ctx.data.scoresTableState) so AG-Grid state writes don't trigger model
   // re-runs. If this lets the table render rows, the bug is the
   // model→UI→model feedback loop via v-model on table state.
+  //
+  // Spec R5 — upstream `pl7.app/structure/cdrh3Length` is enriched in as
+  // an additional column so the user can sanity-check our REMARK 99 / scheme
+  // fallback against the prediction block's CDRH3 length. Auto-joined on
+  // the shared `pl7.app/vdj/scClonotypeKey` axis by the PFrame driver.
   .outputWithStatus("scoresTable", (ctx) => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
     if (pCols === undefined) return undefined;
-    return createPlDataTableV2(ctx, pCols, undefined);
+    const upstreamCdrh3 = ctx.resultPool.findDataWithCompatibleSpec({
+      kind: "PColumn",
+      name: "pl7.app/structure/cdrh3Length",
+      valueType: "Long",
+      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
+    });
+    const allCols = [...pCols, ...(upstreamCdrh3 as typeof pCols)];
+    return createPlDataTableV2(ctx, allCols, undefined);
   })
   .output(
     "pdbImportProgress",
@@ -427,12 +439,13 @@ export const platforma = BlockModelV3.create(dataModel)
   .subtitle((ctx) => {
     if (!ctx.args) return "";
     const a = ctx.args;
+    const inputMode = a.pdbRef ? "predicted-structures" : a.pdb ? "single-PDB" : "no input";
     const scheme = a.numberingScheme || "scheme unset";
     const chains: string[] = [];
     if (a.heavyChainId) chains.push(`H=${a.heavyChainId}`);
     if (a.lightChainId) chains.push(`L=${a.lightChainId}`);
     const chainPart = chains.length ? chains.join("/") : "chains unset";
-    return `${scheme}, ${chainPart}, rSASA<${a.rsasaBuriedCutoff}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å`;
+    return `${inputMode} · ${scheme}, ${chainPart}, rSASA<${a.rsasaBuriedCutoff}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å`;
   })
   .done();
 

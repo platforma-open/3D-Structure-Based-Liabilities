@@ -10,6 +10,24 @@
 // `structureId` axis on the scores frame.
 
 ll := import("@platforma-sdk/workflow-tengo:ll")
+json := import("json")
+
+// Spec R39 / R54 — Raybould 2019 + Gordon 2025 amber/red threshold values.
+// Encoded as `pl7.app/graph/thresholds` annotations on the metric columns so
+// GraphMaker can draw them as dashed lines on histograms / scatter plots.
+// Today the histogram code path in `@milaboratories/graph-maker` doesn't yet
+// honor this annotation (only the scatter path does); the annotation is still
+// emitted so the lines render automatically when histogram support lands.
+thresholdsFor := func(colName, values) {
+	entries := []
+	for v in values {
+		entries = append(entries, {
+			columnId: { valueType: "Double", name: colName },
+			value: v
+		})
+	}
+	return json.encode(entries)
+}
 
 // ──────────────── Motifs PFrame ────────────────
 
@@ -388,7 +406,8 @@ scoresColumnSpecs := {
 		annotations: {
 			"pl7.app/label": "Total CDR length",
 			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "870"
+			"pl7.app/table/orderPriority": "870",
+			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/totalCdrLength", [54, 60])
 		}
 	},
 	psh: {
@@ -398,7 +417,8 @@ scoresColumnSpecs := {
 			"pl7.app/label": "PSH",
 			"pl7.app/format": ".2f",
 			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "860"
+			"pl7.app/table/orderPriority": "860",
+			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/psh", [83.84, 100.71, 156.20, 173.85])
 		}
 	},
 	pshPatchCount: {
@@ -417,7 +437,8 @@ scoresColumnSpecs := {
 			"pl7.app/label": "PPC",
 			"pl7.app/format": ".2f",
 			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "840"
+			"pl7.app/table/orderPriority": "840",
+			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/ppc", [1.25, 3.16])
 		}
 	},
 	pnc: {
@@ -427,7 +448,8 @@ scoresColumnSpecs := {
 			"pl7.app/label": "PNC",
 			"pl7.app/format": ".2f",
 			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "830"
+			"pl7.app/table/orderPriority": "830",
+			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/pnc", [1.84, 3.50])
 		}
 	},
 	sfvcsp: {
@@ -437,7 +459,8 @@ scoresColumnSpecs := {
 			"pl7.app/label": "SFvCSP",
 			"pl7.app/format": ".2f",
 			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "820"
+			"pl7.app/table/orderPriority": "820",
+			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/sfvcsp", [-20.40, -6.30])
 		}
 	},
 	cdrh3Compactness: {
@@ -447,7 +470,8 @@ scoresColumnSpecs := {
 			"pl7.app/label": "CDRH3 compactness",
 			"pl7.app/format": ".3f",
 			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "810"
+			"pl7.app/table/orderPriority": "810",
+			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/cdrh3Compactness", [0.56, 0.82, 1.57, 1.61])
 		}
 	},
 	totalCdrLengthLowConfidenceResidueFraction: {
