@@ -27,6 +27,10 @@ const props = defineProps<{
   pframe: PFrameOutput | undefined;
   spec: PColumnIdAndSpec | undefined;
   state: GraphMakerState;
+  /** Optional upstream label PFrame (`pl7.app/label` anchored on
+   * scClonotypeKey). When present, the strip plot resolves each dot's
+   * label so dots show clone names rather than opaque axis keys. */
+  labelsPf?: PFrameOutput | undefined;
   /** Section heading. e.g. "PSH — Patches of Surface Hydrophobicity". */
   title: string;
   /** One-paragraph plain-English explanation of what the metric measures
@@ -61,6 +65,7 @@ type Point = { key: string; value: number };
 
 const points = ref<Point[] | null>(null);
 const rowCount = ref<number | null>(null);
+const labelMap = ref<Record<string, string>>({});
 
 // Raybould 2019 threshold sets are amber/red bands on either side of the
 // optimum (one-sided metrics like PSH/PPC/PNC just have an amber + red
@@ -170,6 +175,72 @@ watchEffect(async () => {
   points.value = out;
 });
 
+// Fetch upstream clonotype labels (separate PFrame). Labels are anchored on
+// scClonotypeKey and resolved lazily — strip plot dots fall back to the
+// raw axis key when no label exists.
+watchEffect(async () => {
+  const pf = props.labelsPf as { ok?: boolean; value?: { fullTableHandle?: unknown } } | undefined;
+  if (!pf?.ok || !pf.value?.fullTableHandle) {
+    labelMap.value = {};
+    return;
+  }
+  const handle = pf.value.fullTableHandle;
+  const driver = getRawPlatformaInstance().pFrameDriver;
+  const shape = await driver.getShape(handle as never);
+  if (shape.rows === 0) {
+    labelMap.value = {};
+    return;
+  }
+  const spec = await driver.getSpec(handle as never);
+  let valueIdx = -1;
+  let keyAxisIdx = -1;
+  for (let i = 0; i < spec.length; i++) {
+    const entry = spec[i];
+    if (entry?.type === "axis" && entry.spec?.name === "pl7.app/vdj/scClonotypeKey") {
+      keyAxisIdx = i;
+    } else if (entry?.type === "column" && entry.spec?.name === "pl7.app/label") {
+      valueIdx = i;
+    }
+  }
+  if (valueIdx === -1 || keyAxisIdx === -1) {
+    labelMap.value = {};
+    return;
+  }
+  const data = await driver.getData(handle as never, [keyAxisIdx, valueIdx], {
+    offset: 0,
+    length: shape.rows,
+  });
+  function readCell(col: { data?: unknown } | undefined, i: number): string | null {
+    const d = col?.data as unknown;
+    if (Array.isArray(d)) {
+      const v = (d as unknown[])[i];
+      return v === null || v === undefined ? null : String(v);
+    }
+    if (d && typeof d === "object") {
+      const v = (d as Record<string, unknown>)[String(i)];
+      return v === null || v === undefined ? null : String(v);
+    }
+    return null;
+  }
+  const map: Record<string, string> = {};
+  for (let row = 0; row < shape.rows; row++) {
+    const k = readCell(data[0], row);
+    const v = readCell(data[1], row);
+    if (k && v) map[k] = v;
+  }
+  labelMap.value = map;
+});
+
+// Apply the label map on top of the raw points so the strip plot shows
+// clone names; falls through to the axis key when the label is missing.
+const pointsWithLabels = computed<Point[] | null>(() => {
+  if (!points.value) return null;
+  return points.value.map((p) => ({
+    key: labelMap.value[p.key] ?? p.key,
+    value: p.value,
+  }));
+});
+
 const useStripPlot = computed(
   () =>
     points.value !== null && points.value.length > 0 && points.value.length < STRIP_PLOT_THRESHOLD,
@@ -200,8 +271,8 @@ const stripPlotAxisLabel = computed(() => {
     </p>
 
     <StripPlot
-      v-if="useStripPlot && points"
-      :points="points"
+      v-if="useStripPlot && pointsWithLabels"
+      :points="pointsWithLabels"
       :thresholds="thresholdEntries"
       :axis-label="stripPlotAxisLabel"
     />

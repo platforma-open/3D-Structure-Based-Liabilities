@@ -338,7 +338,21 @@ export const platforma = BlockModelV3.create(dataModel)
       valueType: "Long",
       axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
     });
-    const allCols = [...pCols, ...(upstreamCdrh3 as typeof pCols)];
+    // Upstream emits a single-axis String `pl7.app/label` column anchored
+    // on `scClonotypeKey`. PlAgDataTable's isLabelColumn picks it up and
+    // substitutes the label into the row-axis cell display, so opaque
+    // clonotype keys become readable clone names.
+    const upstreamLabel = ctx.resultPool.findDataWithCompatibleSpec({
+      kind: "PColumn",
+      name: "pl7.app/label",
+      valueType: "String",
+      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
+    });
+    const allCols = [
+      ...pCols,
+      ...(upstreamCdrh3 as typeof pCols),
+      ...(upstreamLabel as typeof pCols),
+    ];
     return createPlDataTableV2(ctx, allCols, undefined);
   })
   .output(
@@ -438,6 +452,23 @@ export const platforma = BlockModelV3.create(dataModel)
       (c) => c.spec.name === "pl7.app/liabilities/structuralDevelopabilityScore",
     );
     return col ? { columnId: col.id, spec: col.spec } : undefined;
+  })
+  // Upstream `pl7.app/label` column anchored on scClonotypeKey. Exposed as
+  // a standalone PFrame so the strip plot can resolve readable clone names
+  // for each dot; the scoresTable already auto-substitutes labels in its
+  // row-axis cell display via PlAgDataTable's isLabelColumn detection.
+  .output("clonotypeLabelsPf", (ctx): PFrameHandle | undefined => {
+    const labelCols = ctx.resultPool.findDataWithCompatibleSpec({
+      kind: "PColumn",
+      name: "pl7.app/label",
+      valueType: "String",
+      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
+    });
+    if (!labelCols || labelCols.length === 0) return undefined;
+    // `findDataWithCompatibleSpec` returns the deprecated PObject shape;
+    // `createPFrameForGraphs` is duck-typed to read `.spec` / `.data` so
+    // the cast is safe at runtime.
+    return createPFrameForGraphs(ctx, labelCols as never);
   })
   .sections(() => [
     { type: "link", href: "/", label: "Main" },
