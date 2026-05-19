@@ -5,9 +5,11 @@ positions, CDR ranges, VHH hallmark tetrad, CDRH3 compactness anchors)
 committed as Python literals. ANARCI is cited as the source of the schemes
 themselves but is not a runtime dependency.
 
-REMARK 99 PLATFORMA CDR parsing (the spec's preferred path) is deferred until
-we have an ImmuneBuilder-emitted PDB to test against; until then region
-tagging uses these fixed ranges keyed by scheme + chain role.
+R10 PLATFORMA CDR records (the spec's preferred path) are now consumed —
+parser.py extracts them from `REMARK 99 PLATFORMA CDR*` lines and stuffs
+them into `Parsed.platforma_cdrs`; `region_for` below uses those over the
+fixed scheme ranges when present. The scheme ranges below remain as fallback
+when records are missing (legacy crystal PDBs, hand-uploaded structures).
 """
 
 from typing import Optional

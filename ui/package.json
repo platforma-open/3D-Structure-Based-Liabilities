@@ -10,7 +10,9 @@
     "check": "ts-builder check --target browser"
   },
   "dependencies": {
+    "@milaboratories/graph-maker": "catalog:",
     "@platforma-open/milabs.3d-structure-based-liabilities.model": "workspace:*",
+    "@platforma-sdk/model": "catalog:",
     "@platforma-sdk/ui-vue": "catalog:"
   },
   "devDependencies": {

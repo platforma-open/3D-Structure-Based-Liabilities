@@ -1,16 +1,23 @@
 <script setup lang="ts">
 import type { LiabilitiesReport } from "@platforma-open/milabs.3d-structure-based-liabilities.model";
 import {
+  createPlDataTableStateV2,
+  getRawPlatformaInstance,
+  type PlRef,
+} from "@platforma-sdk/model";
+import {
   computedResult,
   PlAccordionSection,
   PlAgDataTableV2,
+  PlAlert,
   PlBlockPage,
   PlDropdown,
+  PlDropdownRef,
   PlFileInput,
   PlNumberField,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
-import { computed } from "vue";
+import { computed, ref, watchEffect } from "vue";
 import { useApp } from "../app";
 
 import PdbLiabilityMap from "../components/pdb/PdbLiabilityMap.vue";
@@ -19,28 +26,148 @@ import PdbLiabilityMap from "../components/pdb/PdbLiabilityMap.vue";
 const BURIED_CUTOFF = 0.075;
 
 const app = useApp();
+// `liabilitiesJson` is only emitted on the legacy single-PDB upload path.
+// On the PrimaryRef path the workflow produces a per-clonotype File
+// ResourceMap instead, so this output is absent — `computedResult` returns
+// an unsettled / error result and `report` stays null (which hides the
+// single-structure stats panel + residue map below).
 const liabilitiesJson = computedResult(() => app.model.outputs.liabilitiesJson);
 
 const report = computed<LiabilitiesReport | null>(() => {
-  const text = liabilitiesJson.value.value;
-  return text ? (JSON.parse(text) as LiabilitiesReport) : null;
+  try {
+    const text = liabilitiesJson.value?.value;
+    return text ? (JSON.parse(text) as LiabilitiesReport) : null;
+  } catch {
+    return null;
+  }
 });
 
-// sourceId discriminator scopes the AG-Grid stateCache to each table's shape.
-// Bump the version suffix whenever the PColumn axes/columns shape changes so
-// AG-Grid can't reuse a column-order/hidden-cols cache built against the old
-// shape (we lost ~a day to a residueData→motifsData migration where the
-// persisted cache pointed at columns that no longer existed).
-const motifsTableSettings = usePlDataTableSettingsV2({
-  model: () => app.model.outputs.motifsTable,
-  // bumped v1 → v2 when confidence + confidenceGated columns were added (R34-R36).
-  sourceId: () => "motifs-v2",
+// Spec R51 — per-clonotype scalar metrics table.
+// `scoresData` PFrame is only emitted on the PrimaryRef path; on the
+// legacy single-PDB path `app.model.outputs.scoresTable` resolves to
+// undefined and `usePlDataTableSettingsV2` keeps the grid in its
+// `not-ready` overlay state. No special-casing required here.
+const scoresTableSettings = usePlDataTableSettingsV2({
+  model: () => app.model.outputs.scoresTable,
+  sourceId: () => "scores-v1",
 });
-const cysTableSettings = usePlDataTableSettingsV2({
-  model: () => app.model.outputs.cysTable,
-  // bumped v1 → v2 when cysClass + chainRole columns were added (R21-R23).
-  sourceId: () => "cysteines-v2",
+// Scores table's v-model writes are kept UI-local (not echoed back to
+// `app.model.data.scoresTableState`) so the model output handler doesn't
+// re-fire on every grid state event. Motifs and cysteines live on their
+// own routes — see app.ts. Putting all three tables on one page caused
+// AG-Grid to stick in placeholder state (header rendered, body collapsed).
+const scoresLocalState = ref(createPlDataTableStateV2());
+
+// Spec R44 / R45 run-summary alerts.
+// Reads the *Flag columns + confidenceGatedMotifCount from the scores PTable
+// (3 rows on the live dataset, so this is a cheap fetch) and surfaces a
+// banner when:
+//   R44: > 10 % of clonotypes have at least one red metric flag
+//   R45: > 25 % of clonotypes have ≥ 1 confidence-gated motif
+const RED = "red";
+const FLAG_COL_NAMES = new Set([
+  "pl7.app/liabilities/totalCdrLengthFlag",
+  "pl7.app/liabilities/pshFlag",
+  "pl7.app/liabilities/ppcFlag",
+  "pl7.app/liabilities/pncFlag",
+  "pl7.app/liabilities/sfvcspFlag",
+  "pl7.app/liabilities/cdrh3CompactnessFlag",
+]);
+const GATED_COL_NAME = "pl7.app/liabilities/confidenceGatedMotifCount";
+
+type RunSummary = {
+  total: number;
+  redClonotypes: number;
+  gatedClonotypes: number;
+  redFraction: number;
+  gatedFraction: number;
+};
+const runSummary = ref<RunSummary | null>(null);
+
+// Pull *Flag + confidenceGated values from the scoresTable PTable and compute
+// the alert fractions. watchEffect captures the reactive deps on the
+// `tableOutput.value.fullTableHandle` access — anything before the first
+// `await` re-runs the effect when the model output changes.
+watchEffect(async () => {
+  const tableOutput = app.model.outputs.scoresTable;
+  if (!tableOutput?.ok || !tableOutput.value?.fullTableHandle) {
+    runSummary.value = null;
+    return;
+  }
+  const handle = tableOutput.value.fullTableHandle;
+  const pf = getRawPlatformaInstance().pFrameDriver;
+
+  const shape = await pf.getShape(handle);
+  if (shape.rows === 0) {
+    runSummary.value = null;
+    return;
+  }
+  const spec = await pf.getSpec(handle);
+  const flagIndices: number[] = [];
+  let gatedIndex = -1;
+  for (let i = 0; i < spec.length; i++) {
+    const name = spec[i]?.spec?.name;
+    if (!name) continue;
+    if (FLAG_COL_NAMES.has(name)) flagIndices.push(i);
+    if (name === GATED_COL_NAME) gatedIndex = i;
+  }
+  if (flagIndices.length === 0 && gatedIndex === -1) {
+    runSummary.value = null;
+    return;
+  }
+
+  const requestIndices = [...flagIndices, gatedIndex].filter((i) => i >= 0);
+  const data = await pf.getData(handle, requestIndices, { offset: 0, length: shape.rows });
+  const rowCount = shape.rows;
+
+  let redClonotypes = 0;
+  for (let row = 0; row < rowCount; row++) {
+    for (let k = 0; k < flagIndices.length; k++) {
+      const col = data[k];
+      const value = Array.isArray(col?.data) ? col.data[row] : undefined;
+      if (value === RED) {
+        redClonotypes++;
+        break;
+      }
+    }
+  }
+
+  let gatedClonotypes = 0;
+  if (gatedIndex !== -1) {
+    // Long columns come back from pfDriver as a numeric-key wrapped object
+    // carrying BigInts (e.g. `{ 0: 12n, 1: 35n }`). Cast through `unknown`
+    // because PVectorData* is a union of TypedArrays / arrays / wrapped maps.
+    const col = data[flagIndices.length];
+    const get = (i: number): number => {
+      const d = col?.data as unknown;
+      if (Array.isArray(d)) return Number((d as unknown[])[i] ?? 0);
+      if (d && typeof d === "object") {
+        const v = (d as Record<string, unknown>)[String(i)];
+        return v === undefined ? 0 : Number(v);
+      }
+      return 0;
+    };
+    for (let row = 0; row < rowCount; row++) {
+      if (get(row) > 0) gatedClonotypes++;
+    }
+  }
+
+  runSummary.value = {
+    total: rowCount,
+    redClonotypes,
+    gatedClonotypes,
+    redFraction: redClonotypes / rowCount,
+    gatedFraction: gatedClonotypes / rowCount,
+  };
 });
+
+const RED_FLAG_THRESHOLD = 0.1;
+const GATED_THRESHOLD = 0.25;
+const showRedAlert = computed(() => (runSummary.value?.redFraction ?? 0) > RED_FLAG_THRESHOLD);
+const showGatedAlert = computed(() => (runSummary.value?.gatedFraction ?? 0) > GATED_THRESHOLD);
+function pct(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
 
 const mode = computed(() => report.value?.mode ?? "empty");
 const surfacedMotifCount = computed(() => report.value?.scores?.surfacedMotifCount ?? 0);
@@ -83,6 +210,18 @@ const numberingSchemeOptions = [
 
 // Heavy / light chain dropdowns offer the chain IDs from the loaded PDB plus
 // a "none" option (so antigen chains can be left untagged).
+// When the user picks an upstream PDBs dataset, drop the legacy file upload
+// (the two inputs are mutually exclusive) and force numberingScheme to IMGT —
+// that's the domain the upstream column carries.
+function onPdbRefUpdate(ref: PlRef | undefined) {
+  if (ref) {
+    app.model.data.pdb = undefined;
+    if (!app.model.data.numberingScheme) {
+      app.model.data.numberingScheme = "imgt";
+    }
+  }
+}
+
 const chainOptions = computed(() => {
   const opts: { value: string; label: string }[] = [{ value: "", label: "— none —" }];
   if (!report.value) return opts;
@@ -94,13 +233,26 @@ const chainOptions = computed(() => {
 </script>
 
 <template>
-  <PlBlockPage>
+  <PlBlockPage title="3D Structure-Based Liabilities">
+    <PlDropdownRef
+      v-model="app.model.data.pdbRef"
+      :options="app.model.outputs.pdbOptions ?? []"
+      label="Predicted structures (from 3D Structure Prediction)"
+      clearable
+      @update:model-value="onPdbRefUpdate"
+    />
+    <p
+      v-if="!app.model.data.pdbRef"
+      :style="{ fontSize: '12px', color: '#6b7280', margin: '6px 0 12px' }"
+    >
+      Or upload a single PDB file (dev / single-structure workflow):
+    </p>
     <PlFileInput
+      v-if="!app.model.data.pdbRef"
       v-model="app.model.data.pdb"
       label="PDB file"
       :extensions="['.pdb']"
       placeholder="Drop a .pdb file"
-      required
       clearable
     />
 
@@ -174,6 +326,15 @@ const chainOptions = computed(() => {
     </PlAccordionSection>
 
     <div v-if="report">
+      <p
+        v-if="app.model.data.pdbRef"
+        :style="{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }"
+      >
+        Note: stats panel + residue map below are populated from a single liabilities.json. On the
+        predicted-structures path each clonotype has its own report — multi-clonotype stats /
+        per-row drill-down is the next UI slice. The motif and cysteine tables already show all
+        clonotypes.
+      </p>
       <table
         :style="{
           fontSize: '15px',
@@ -324,39 +485,71 @@ const chainOptions = computed(() => {
         </tbody>
       </table>
 
-      <h3 :style="{ margin: '12px 0 6px' }">Surface-exposed liability motifs</h3>
-      <p :style="{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }">
-        One row per surfaced motif hit. Rows are filterable / sortable; axis order is Chain,
-        Position, Insertion code, Motif. Buried matches (rSASA &lt;
-        {{ BURIED_CUTOFF }}) are dropped upstream and never appear here.
-      </p>
-      <div :style="{ height: '360px', marginBottom: '16px' }">
-        <PlAgDataTableV2
-          v-model="app.model.data.tableState"
-          :settings="motifsTableSettings"
-          not-ready-text="Run on a PDB to see surfaced motifs"
-          no-rows-text="No surface-exposed motifs detected"
-        />
-      </div>
-
-      <h3 :style="{ margin: '12px 0 6px' }">Cysteine state</h3>
-      <p :style="{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }">
-        Every Cys residue with its disulfide-bond partner (SG–SG ≤ 3.0 Å and Cα–Cα ≤ 7.0 Å). When a
-        numbering scheme + chain role are set, each Cys is classified per spec R21–R23:
-        <code>disulfide</code>, <code>disulfide_broken</code>,
-        <code>disulfide_missing</code> (phantom row at the expected position), or
-        <code>cys_extra</code>.
-      </p>
-      <div :style="{ height: '280px', marginBottom: '16px' }">
-        <PlAgDataTableV2
-          v-model="app.model.data.cysTableState"
-          :settings="cysTableSettings"
-          not-ready-text="Run on a PDB to see cysteine state"
-          no-rows-text="No cysteines found"
-        />
-      </div>
-
       <PdbLiabilityMap :chains="report.chains" :motifs="report.motifs" />
     </div>
+
+    <!-- Spec R44 — run-summary alert: >10% of clonotypes have any red flag. -->
+    <PlAlert
+      v-if="showRedAlert && runSummary"
+      type="warn"
+      label="Red-flag clonotypes exceed 10% (spec R44)"
+      icon
+      :style="{ marginTop: '12px' }"
+    >
+      {{ runSummary.redClonotypes }} of {{ runSummary.total }} clonotypes ({{
+        pct(runSummary.redFraction)
+      }}) carry at least one red Raybould threshold flag. Inspect the table below for which metrics
+      are driving this.
+    </PlAlert>
+    <!-- Spec R45 — run-summary alert: >25% confidence-gated motifs. -->
+    <PlAlert
+      v-if="showGatedAlert && runSummary"
+      type="warn"
+      label="Confidence-gated motifs exceed 25% (spec R45)"
+      icon
+      :style="{ marginTop: '12px' }"
+    >
+      {{ runSummary.gatedClonotypes }} of {{ runSummary.total }} clonotypes ({{
+        pct(runSummary.gatedFraction)
+      }}) have at least one motif gated by the per-residue confidence cutoff. Either ImmuneBuilder
+      is uncertain about these regions or the gating thresholds (FR
+      {{ app.model.data.frConfThresh }} Å / CDR {{ app.model.data.cdrConfThresh }} Å) are too tight
+      for this dataset.
+    </PlAlert>
+
+    <!-- Spec R51 — per-clonotype scalar metrics table.
+         One row per clonotype. Only populated on the PrimaryRef path (the
+         workflow emits scoresData as a per-clonotype PFrame keyed on
+         scClonotypeKey); on the legacy single-PDB path the table stays in
+         its "not ready" state. -->
+    <h3 :style="{ margin: '12px 0 6px' }">Per-clonotype developability</h3>
+    <p :style="{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }">
+      One row per clonotype. Default view shows mode, both risk classes, the composite
+      developability score, surfaced motif / exposed extra cys / broken canonical disulfide counts,
+      and the Raybould threshold flags (R39, R41a). Raw metric values, motif risk score,
+      low-confidence fractions, and totalCdrLength are hidden behind "Columns".
+    </p>
+    <div :style="{ height: '280px', flexShrink: 0, marginBottom: '16px' }">
+      <PlAgDataTableV2
+        v-model="scoresLocalState"
+        :settings="scoresTableSettings"
+        not-ready-text="Run on a predicted-structures dataset to see per-clonotype scores"
+        no-rows-text="No scored clonotypes"
+      />
+    </div>
+
+    <!-- Motifs + cysteines tables. Their PColumn outputs are populated on
+         both the legacy single-PDB path and the PrimaryRef per-clonotype
+         path (the row axis prepends scClonotypeKey in PrimaryRef mode), so
+         they render whenever the workflow has produced data — not gated on
+         the single-file `report`. -->
+    <!-- Spec R51 drill-downs (motif hits, cysteine state) live on their own
+         routes — see the sidebar links. Putting all three tables on one
+         page kept AG-Grid stuck in placeholder state (multi-table mount
+         race). One PlAgDataTableV2 per page is the working configuration. -->
+    <p :style="{ fontSize: '12px', color: '#6b7280', marginTop: '12px' }">
+      Per-clonotype detail: see <strong>Motifs</strong> and <strong>Cysteine state</strong>
+      pages in the left sidebar for drill-down tables.
+    </p>
   </PlBlockPage>
 </template>

@@ -1,0 +1,711 @@
+// vim: filetype=go
+// Shared PColumn spec setup for both the legacy single-PDB body path and
+// the per-clonotype PrimaryRef path. Declares axes + column specs for the
+// motifs, cysteines, and scores PFrames the Python software produces.
+//
+// `axesSpec` / `columnSpecs` / `columnIds` mirror the parquet column layout
+// `software/src/pframe_writer.py` writes. The per-clonotype path adds a
+// leading `pl7.app/vdj/scClonotypeKey` axis via `pframes.processColumn`'s
+// input-axis prepending; the legacy single-PDB path uses an explicit
+// `structureId` axis on the scores frame.
+
+ll := import("@platforma-sdk/workflow-tengo:ll")
+
+// ──────────────── Motifs PFrame ────────────────
+
+motifAxesSpec := [
+	{
+		name: "pl7.app/structure/chainId",
+		type: "String",
+		annotations: { "pl7.app/label": "Chain" }
+	},
+	{
+		name: "pl7.app/structure/resSeq",
+		type: "Long",
+		annotations: { "pl7.app/label": "Position" }
+	},
+	{
+		name: "pl7.app/structure/iCode",
+		type: "String",
+		annotations: { "pl7.app/label": "Insertion code" }
+	},
+	{
+		name: "pl7.app/liabilities/motifType",
+		type: "String",
+		annotations: { "pl7.app/label": "Motif" }
+	}
+]
+
+motifColumnSpecs := {
+	resName: {
+		valueType: "String",
+		name: "pl7.app/structure/resName",
+		annotations: {
+			"pl7.app/label": "Residue",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1000"
+		}
+	},
+	region: {
+		valueType: "String",
+		name: "pl7.app/structure/region",
+		annotations: {
+			"pl7.app/label": "Region",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "975"
+		}
+	},
+	rsasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/rsasa",
+		annotations: {
+			"pl7.app/label": "rSASA",
+			"pl7.app/format": ".3f",
+			"pl7.app/min": "0",
+			"pl7.app/max": "1",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "950"
+		}
+	},
+	exposureFactor: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/exposureFactor",
+		annotations: {
+			"pl7.app/label": "Exposure factor",
+			"pl7.app/format": ".3f",
+			"pl7.app/min": "0",
+			"pl7.app/max": "1",
+			"pl7.app/table/visibility": "optional"
+		}
+	},
+	confidence: {
+		valueType: "Double",
+		name: "pl7.app/structure/confidence",
+		annotations: {
+			"pl7.app/label": "Confidence (Å)",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "925"
+		}
+	},
+	confidenceGated: {
+		valueType: "String",
+		name: "pl7.app/liabilities/confidenceGated",
+		annotations: {
+			"pl7.app/label": "Gated",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "920"
+		}
+	},
+	weightedScore: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/motifWeightedScore",
+		annotations: {
+			"pl7.app/label": "Score",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "900"
+		}
+	},
+	sequenceRiskClass: {
+		valueType: "String",
+		name: "pl7.app/liabilities/sequenceRiskClass",
+		annotations: {
+			"pl7.app/label": "Risk",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "850"
+		}
+	},
+	fixability: {
+		valueType: "String",
+		name: "pl7.app/liabilities/fixability",
+		annotations: {
+			"pl7.app/label": "Fixability",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "800"
+		}
+	}
+}
+
+motifColumnIds := ["resName", "region", "rsasa", "exposureFactor", "confidence", "confidenceGated", "weightedScore", "sequenceRiskClass", "fixability"]
+
+// ──────────────── Cysteines PFrame ────────────────
+
+cysAxesSpec := [
+	{
+		name: "pl7.app/structure/chainId",
+		type: "String",
+		annotations: { "pl7.app/label": "Chain" }
+	},
+	{
+		name: "pl7.app/structure/resSeq",
+		type: "Long",
+		annotations: { "pl7.app/label": "Position" }
+	},
+	{
+		name: "pl7.app/structure/iCode",
+		type: "String",
+		annotations: { "pl7.app/label": "Insertion code" }
+	}
+]
+
+cysColumnSpecs := {
+	cysClass: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cysClass",
+		annotations: {
+			"pl7.app/label": "Class",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1050"
+		}
+	},
+	chainRole: {
+		valueType: "String",
+		name: "pl7.app/structure/chainRole",
+		annotations: {
+			"pl7.app/label": "Role",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1025"
+		}
+	},
+	bondingState: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cysBondingState",
+		annotations: {
+			"pl7.app/label": "Bonding",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1000"
+		}
+	},
+	rsasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/rsasa",
+		annotations: {
+			"pl7.app/label": "rSASA",
+			"pl7.app/format": ".3f",
+			"pl7.app/min": "0",
+			"pl7.app/max": "1",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "950"
+		}
+	},
+	sidechainRsasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/sideChainRsasa",
+		annotations: {
+			"pl7.app/label": "Side chain rSASA",
+			"pl7.app/format": ".3f",
+			"pl7.app/min": "0",
+			"pl7.app/max": "1",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "900"
+		}
+	},
+	sasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/sasa",
+		annotations: {
+			"pl7.app/label": "SASA (Å²)",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional"
+		}
+	},
+	sidechainSasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/sideChainSasa",
+		annotations: {
+			"pl7.app/label": "Side chain SASA (Å²)",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional"
+		}
+	},
+	partnerChainId: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cysPartnerChainId",
+		annotations: {
+			"pl7.app/label": "Partner chain",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "850"
+		}
+	},
+	partnerResSeq: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/cysPartnerResSeq",
+		annotations: {
+			"pl7.app/label": "Partner position",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "800"
+		}
+	},
+	partnerIcode: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cysPartnerIcode",
+		annotations: {
+			"pl7.app/label": "Partner iCode",
+			"pl7.app/table/visibility": "optional"
+		}
+	}
+}
+
+cysColumnIds := ["cysClass", "chainRole", "bondingState", "rsasa", "sidechainRsasa", "sasa", "sidechainSasa", "partnerChainId", "partnerResSeq", "partnerIcode"]
+
+// ──────────────── Scores PFrame ────────────────
+// Legacy path uses scoresAxesSpecLegacy (explicit `structureId="static"`).
+// PrimaryRef path uses scoresAxesSpecPerClonotype (empty — `processColumn`
+// prepends the upstream `pl7.app/vdj/scClonotypeKey` axis).
+
+// The `structureId` axis is a placeholder forced by `xsv-import-pt`'s
+// "at least one axis" requirement. On the PrimaryRef path every row's value
+// is "static" — the real per-clonotype axis is the prepended
+// `pl7.app/vdj/scClonotypeKey`. Marked `optional` so AG-Grid hides it by
+// default; users can re-enable from the Columns toolbar.
+scoresAxesSpecLegacy := [
+	{
+		name: "pl7.app/structure/id",
+		type: "String",
+		annotations: {
+			"pl7.app/label": "Structure",
+			"pl7.app/table/visibility": "optional"
+		}
+	}
+]
+
+scoresAxesSpecPerClonotype := []
+
+// Default visibility + orderPriority per spec R51:
+//   Default visible: mode, structuralDevelopabilityRisk, structuralIntegrityRisk,
+//     structuralDevelopabilityScore, surfacedMotifCount, exposedExtraCysCount,
+//     brokenCanonicalDisulfideCount, PSH/PPC/PNC flags, mode-specific flag.
+//   Hidden behind "show all": raw metric values, confidenceGatedMotifCount,
+//     pshPatchCount, motifStructuralRiskScore, totalCdrLength, missing/extra
+//     cysteine counts (taxonomy weights are exposed via the composite score),
+//     low-conf residue fractions.
+scoresColumnSpecs := {
+	mode: {
+		valueType: "String",
+		name: "pl7.app/liabilities/mode",
+		annotations: {
+			"pl7.app/label": "Mode (R7)",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1100"
+		}
+	},
+	extraCysCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/extraCysCount",
+		annotations: {
+			"pl7.app/label": "Extra cysteines",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "720"
+		}
+	},
+	exposedExtraCysCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/exposedExtraCysCount",
+		annotations: {
+			"pl7.app/label": "Exposed extra cysteines",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "990"
+		}
+	},
+	brokenCanonicalDisulfideCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/brokenCanonicalDisulfideCount",
+		annotations: {
+			"pl7.app/label": "Broken canonical disulfides",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "980"
+		}
+	},
+	missingCanonicalCysCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/missingCanonicalCysCount",
+		annotations: {
+			"pl7.app/label": "Missing canonical cysteines",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "710"
+		}
+	},
+	surfacedMotifCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/surfacedMotifCount",
+		annotations: {
+			"pl7.app/label": "Surfaced motifs",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1000"
+		}
+	},
+	confidenceGatedMotifCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/confidenceGatedMotifCount",
+		annotations: {
+			"pl7.app/label": "Confidence-gated motifs",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "900"
+		}
+	},
+	motifStructuralRiskScore: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/motifStructuralRiskScore",
+		annotations: {
+			"pl7.app/label": "Motif structural risk score",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "890"
+		}
+	},
+	structuralDevelopabilityScore: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/structuralDevelopabilityScore",
+		annotations: {
+			"pl7.app/label": "Developability score",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1030"
+		}
+	},
+	structuralDevelopabilityRisk: {
+		valueType: "String",
+		name: "pl7.app/liabilities/structuralDevelopabilityRisk",
+		annotations: {
+			"pl7.app/label": "Developability risk",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1050"
+		}
+	},
+	structuralIntegrityRisk: {
+		valueType: "String",
+		name: "pl7.app/liabilities/structuralIntegrityRisk",
+		annotations: {
+			"pl7.app/label": "Integrity risk",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1040"
+		}
+	},
+	totalCdrLength: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/totalCdrLength",
+		annotations: {
+			"pl7.app/label": "Total CDR length",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "870"
+		}
+	},
+	psh: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/psh",
+		annotations: {
+			"pl7.app/label": "PSH",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "860"
+		}
+	},
+	pshPatchCount: {
+		valueType: "Long",
+		name: "pl7.app/liabilities/pshPatchCount",
+		annotations: {
+			"pl7.app/label": "PSH patch count",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "850"
+		}
+	},
+	ppc: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/ppc",
+		annotations: {
+			"pl7.app/label": "PPC",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "840"
+		}
+	},
+	pnc: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/pnc",
+		annotations: {
+			"pl7.app/label": "PNC",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "830"
+		}
+	},
+	sfvcsp: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/sfvcsp",
+		annotations: {
+			"pl7.app/label": "SFvCSP",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "820"
+		}
+	},
+	cdrh3Compactness: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/cdrh3Compactness",
+		annotations: {
+			"pl7.app/label": "CDRH3 compactness",
+			"pl7.app/format": ".3f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "810"
+		}
+	},
+	totalCdrLengthLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/totalCdrLengthLowConfidenceResidueFraction",
+		annotations: {
+			"pl7.app/label": "Total CDR length low-conf fraction",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "790"
+		}
+	},
+	pshLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/pshLowConfidenceResidueFraction",
+		annotations: {
+			"pl7.app/label": "PSH low-conf fraction",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "780"
+		}
+	},
+	ppcLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/ppcLowConfidenceResidueFraction",
+		annotations: {
+			"pl7.app/label": "PPC low-conf fraction",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "770"
+		}
+	},
+	pncLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/pncLowConfidenceResidueFraction",
+		annotations: {
+			"pl7.app/label": "PNC low-conf fraction",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "760"
+		}
+	},
+	sfvcspLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/sfvcspLowConfidenceResidueFraction",
+		annotations: {
+			"pl7.app/label": "SFvCSP low-conf fraction",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "750"
+		}
+	},
+	cdrh3CompactnessLowConfidenceResidueFraction: {
+		valueType: "Double",
+		name: "pl7.app/liabilities/cdrh3CompactnessLowConfidenceResidueFraction",
+		annotations: {
+			"pl7.app/label": "CDRH3 compactness low-conf fraction",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "740"
+		}
+	},
+	totalCdrLengthFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/totalCdrLengthFlag",
+		annotations: {
+			"pl7.app/label": "Total CDR length flag",
+			"pl7.app/isScore": "true",
+			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "930"
+		}
+	},
+	pshFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/pshFlag",
+		annotations: {
+			"pl7.app/label": "PSH flag",
+			"pl7.app/isScore": "true",
+			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "970"
+		}
+	},
+	ppcFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/ppcFlag",
+		annotations: {
+			"pl7.app/label": "PPC flag",
+			"pl7.app/isScore": "true",
+			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "960"
+		}
+	},
+	pncFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/pncFlag",
+		annotations: {
+			"pl7.app/label": "PNC flag",
+			"pl7.app/isScore": "true",
+			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "950"
+		}
+	},
+	sfvcspFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/sfvcspFlag",
+		annotations: {
+			"pl7.app/label": "SFvCSP flag",
+			"pl7.app/isScore": "true",
+			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "940"
+		}
+	},
+	cdrh3CompactnessFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/cdrh3CompactnessFlag",
+		annotations: {
+			"pl7.app/label": "CDRH3 compactness flag",
+			"pl7.app/isScore": "true",
+			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "940"
+		}
+	}
+}
+
+scoresColumnIds := [
+	"mode",
+	"extraCysCount", "exposedExtraCysCount",
+	"brokenCanonicalDisulfideCount", "missingCanonicalCysCount",
+	"surfacedMotifCount", "confidenceGatedMotifCount",
+	"motifStructuralRiskScore", "structuralDevelopabilityScore",
+	"structuralDevelopabilityRisk", "structuralIntegrityRisk",
+	"totalCdrLength", "psh", "pshPatchCount", "ppc", "pnc",
+	"sfvcsp", "cdrh3Compactness",
+	"totalCdrLengthLowConfidenceResidueFraction",
+	"pshLowConfidenceResidueFraction",
+	"ppcLowConfidenceResidueFraction",
+	"pncLowConfidenceResidueFraction",
+	"sfvcspLowConfidenceResidueFraction",
+	"cdrh3CompactnessLowConfidenceResidueFraction",
+	"totalCdrLengthFlag", "pshFlag", "ppcFlag", "pncFlag",
+	"sfvcspFlag", "cdrh3CompactnessFlag"
+]
+
+// Workdir directory names that Python's pframe_writer.py emits parquet into.
+motifsFrameName := "motifs_pf"
+cysFrameName := "cysteines_pf"
+scoresFrameName := "scores_pf"
+
+// ──────────────── Xsv settings (PrimaryRef path) ────────────────
+// `pframes.processColumn` runs `xsv.importFile` over each per-clonotype
+// parquet file. Settings declare how to read the parquet:
+//   - `axes` maps parquet column names → axis specs (each entry's `column`
+//     is the parquet column name).
+//   - `columns` maps parquet column names → PColumn specs.
+// Parquet columns not listed here are silently dropped by pfconv. That's how
+// the scores frame omits the python-side `structureId="static"` placeholder
+// — processColumn prepends `pl7.app/vdj/scClonotypeKey` from the input column,
+// which replaces the placeholder per Spec R1-R6.
+
+// Maps parquet column name → axis spec, for the motif/cys axes.
+motifAxisParquetMapping := [
+	{ parquet: "chainId", spec: motifAxesSpec[0] },
+	{ parquet: "resSeq", spec: motifAxesSpec[1] },
+	{ parquet: "iCode", spec: motifAxesSpec[2] },
+	// Python writes the motif type into the "type" parquet column; the
+	// PColumn axis name is `pl7.app/liabilities/motifType`.
+	{ parquet: "type", spec: motifAxesSpec[3] }
+]
+
+cysAxisParquetMapping := [
+	{ parquet: "chainId", spec: cysAxesSpec[0] },
+	{ parquet: "resSeq", spec: cysAxesSpec[1] },
+	{ parquet: "iCode", spec: cysAxesSpec[2] }
+]
+
+// Build the Xsv column[] entries for a given frame, injecting
+// `pl7.app/blockId` into each column spec's domain so R43 traceability is
+// preserved on the PrimaryRef path (same as the legacy path).
+buildXsvColumns := func(columnIds, columnSpecs, blockId) {
+	out := []
+	for id in columnIds {
+		raw := columnSpecs[id]
+		out = append(out, {
+			column: id,
+			id: id,
+			spec: {
+				valueType: raw.valueType,
+				name: raw.name,
+				domain: { "pl7.app/blockId": blockId },
+				annotations: raw.annotations
+			}
+		})
+	}
+	return out
+}
+
+xsvAxesFromMapping := func(mapping) {
+	out := []
+	for entry in mapping {
+		out = append(out, { column: entry.parquet, spec: entry.spec })
+	}
+	return out
+}
+
+buildMotifsXsvSettings := func(blockId) {
+	return {
+		axes: xsvAxesFromMapping(motifAxisParquetMapping),
+		columns: buildXsvColumns(motifColumnIds, motifColumnSpecs, blockId),
+		storageFormat: "Parquet"
+	}
+}
+
+buildCysXsvSettings := func(blockId) {
+	return {
+		axes: xsvAxesFromMapping(cysAxisParquetMapping),
+		columns: buildXsvColumns(cysColumnIds, cysColumnSpecs, blockId),
+		storageFormat: "Parquet"
+	}
+}
+
+// Scores frame: parquet carries the legacy `structureId="static"` column;
+// `xsv.importFile` requires at least one declared axis, so we keep
+// structureId in the Xsv settings even on the PrimaryRef path. The
+// resulting PColumn ends up with axes [scClonotypeKey, structureId="static"]
+// — slightly redundant but a valid PColumn shape, and it lets the same
+// python output feed both the legacy and per-clonotype paths without
+// touching the writer.
+buildScoresXsvSettings := func(blockId) {
+	return {
+		axes: [
+			{ column: "structureId", spec: scoresAxesSpecLegacy[0] }
+		],
+		columns: buildXsvColumns(scoresColumnIds, scoresColumnSpecs, blockId),
+		storageFormat: "Parquet"
+	}
+}
+
+export ll.toStrict({
+	motifAxesSpec: motifAxesSpec,
+	motifColumnSpecs: motifColumnSpecs,
+	motifColumnIds: motifColumnIds,
+	cysAxesSpec: cysAxesSpec,
+	cysColumnSpecs: cysColumnSpecs,
+	cysColumnIds: cysColumnIds,
+	scoresAxesSpecLegacy: scoresAxesSpecLegacy,
+	scoresAxesSpecPerClonotype: scoresAxesSpecPerClonotype,
+	scoresColumnSpecs: scoresColumnSpecs,
+	scoresColumnIds: scoresColumnIds,
+	motifsFrameName: motifsFrameName,
+	cysFrameName: cysFrameName,
+	scoresFrameName: scoresFrameName,
+	buildMotifsXsvSettings: buildMotifsXsvSettings,
+	buildCysXsvSettings: buildCysXsvSettings,
+	buildScoresXsvSettings: buildScoresXsvSettings
+})

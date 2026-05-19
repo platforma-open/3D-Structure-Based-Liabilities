@@ -5,439 +5,167 @@ exec := import("@platforma-sdk/workflow-tengo:exec")
 assets := import("@platforma-sdk/workflow-tengo:assets")
 pframes := import("@platforma-sdk/workflow-tengo:pframes")
 ptUtil := import("@platforma-sdk/workflow-tengo:pt.util")
+smart := import("@platforma-sdk/workflow-tengo:smart")
+
+specs := import(":specs")
 
 liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-based-liabilities.software:liabilities")
 ptImportDirTpl := assets.importTemplate("@platforma-sdk/workflow-tengo:pt.import-dir")
+processPdbTpl := assets.importTemplate(":process-pdb")
 
-motifsFrameName := "motifs_pf"
-cysFrameName := "cysteines_pf"
-scoresFrameName := "scores_pf"
-
-motifAxesSpec := [
-	{
-		name: "pl7.app/structure/chainId",
-		type: "String",
-		annotations: { "pl7.app/label": "Chain" }
-	},
-	{
-		name: "pl7.app/structure/resSeq",
-		type: "Long",
-		annotations: { "pl7.app/label": "Position" }
-	},
-	{
-		name: "pl7.app/structure/iCode",
-		type: "String",
-		annotations: { "pl7.app/label": "Insertion code" }
-	},
-	{
-		name: "pl7.app/liabilities/motifType",
-		type: "String",
-		annotations: { "pl7.app/label": "Motif" }
-	}
-]
-
-motifColumnSpecs := {
-	resName: {
-		valueType: "String",
-		name: "pl7.app/structure/resName",
-		annotations: {
-			"pl7.app/label": "Residue",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "1000"
-		}
-	},
-	region: {
-		valueType: "String",
-		name: "pl7.app/structure/region",
-		annotations: {
-			"pl7.app/label": "Region",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "975"
-		}
-	},
-	rsasa: {
-		valueType: "Double",
-		name: "pl7.app/structure/rsasa",
-		annotations: {
-			"pl7.app/label": "rSASA",
-			"pl7.app/format": ".3f",
-			"pl7.app/min": "0",
-			"pl7.app/max": "1",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "950"
-		}
-	},
-	exposureFactor: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/exposureFactor",
-		annotations: {
-			"pl7.app/label": "Exposure factor",
-			"pl7.app/format": ".3f",
-			"pl7.app/min": "0",
-			"pl7.app/max": "1",
-			"pl7.app/table/visibility": "optional"
-		}
-	},
-	confidence: {
-		valueType: "Double",
-		name: "pl7.app/structure/confidence",
-		annotations: {
-			"pl7.app/label": "Confidence (Å)",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "925"
-		}
-	},
-	confidenceGated: {
-		valueType: "String",
-		name: "pl7.app/liabilities/confidenceGated",
-		annotations: {
-			"pl7.app/label": "Gated",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "920"
-		}
-	},
-	weightedScore: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/motifWeightedScore",
-		annotations: {
-			"pl7.app/label": "Score",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "900"
-		}
-	},
-	sequenceRiskClass: {
-		valueType: "String",
-		name: "pl7.app/liabilities/sequenceRiskClass",
-		annotations: {
-			"pl7.app/label": "Risk",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "850"
-		}
-	},
-	fixability: {
-		valueType: "String",
-		name: "pl7.app/liabilities/fixability",
-		annotations: {
-			"pl7.app/label": "Fixability",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "800"
-		}
-	}
+// Spec R43 trace step — identifies this block in the per-column trace
+// chain when downstream blocks consume our PFrames.
+traceStep := {
+	type: "milaboratories.3d-structure-based-liabilities",
+	id: "",
+	importance: 20,
+	label: "3D Structure-Based Liabilities"
 }
 
-motifColumnIds := ["resName", "region", "rsasa", "exposureFactor", "confidence", "confidenceGated", "weightedScore", "sequenceRiskClass", "fixability"]
-
-cysAxesSpec := [
-	{
-		name: "pl7.app/structure/chainId",
-		type: "String",
-		annotations: { "pl7.app/label": "Chain" }
-	},
-	{
-		name: "pl7.app/structure/resSeq",
-		type: "Long",
-		annotations: { "pl7.app/label": "Position" }
-	},
-	{
-		name: "pl7.app/structure/iCode",
-		type: "String",
-		annotations: { "pl7.app/label": "Insertion code" }
+// Spec R1-R6 — when pdbRef is set (PrimaryRef path), resolve the upstream
+// `pl7.app/structure/pdb` PColumn so wf.body can iterate per clonotype.
+// `errIfMissing: false` so the legacy single-PDB upload path stays alive
+// when no ref is selected — wf.body branches on `args.resolvedPdb` presence.
+wf.prepare(func(args) {
+	if is_undefined(args.pdbRef) || args.pdbRef == undefined {
+		return {}
 	}
-]
-
-cysColumnSpecs := {
-	cysClass: {
-		valueType: "String",
-		name: "pl7.app/liabilities/cysClass",
-		annotations: {
-			"pl7.app/label": "Class",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "1050"
-		}
-	},
-	chainRole: {
-		valueType: "String",
-		name: "pl7.app/structure/chainRole",
-		annotations: {
-			"pl7.app/label": "Role",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "1025"
-		}
-	},
-	bondingState: {
-		valueType: "String",
-		name: "pl7.app/liabilities/cysBondingState",
-		annotations: {
-			"pl7.app/label": "Bonding",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "1000"
-		}
-	},
-	rsasa: {
-		valueType: "Double",
-		name: "pl7.app/structure/rsasa",
-		annotations: {
-			"pl7.app/label": "rSASA",
-			"pl7.app/format": ".3f",
-			"pl7.app/min": "0",
-			"pl7.app/max": "1",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "950"
-		}
-	},
-	sidechainRsasa: {
-		valueType: "Double",
-		name: "pl7.app/structure/sideChainRsasa",
-		annotations: {
-			"pl7.app/label": "Side chain rSASA",
-			"pl7.app/format": ".3f",
-			"pl7.app/min": "0",
-			"pl7.app/max": "1",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "900"
-		}
-	},
-	sasa: {
-		valueType: "Double",
-		name: "pl7.app/structure/sasa",
-		annotations: {
-			"pl7.app/label": "SASA (Å²)",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional"
-		}
-	},
-	sidechainSasa: {
-		valueType: "Double",
-		name: "pl7.app/structure/sideChainSasa",
-		annotations: {
-			"pl7.app/label": "Side chain SASA (Å²)",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional"
-		}
-	},
-	partnerChainId: {
-		valueType: "String",
-		name: "pl7.app/liabilities/cysPartnerChainId",
-		annotations: {
-			"pl7.app/label": "Partner chain",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "850"
-		}
-	},
-	partnerResSeq: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/cysPartnerResSeq",
-		annotations: {
-			"pl7.app/label": "Partner position",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "800"
-		}
-	},
-	partnerIcode: {
-		valueType: "String",
-		name: "pl7.app/liabilities/cysPartnerIcode",
-		annotations: {
-			"pl7.app/label": "Partner iCode",
-			"pl7.app/table/visibility": "optional"
-		}
+	return {
+		resolvedPdb: wf.resolve(args.pdbRef, { errIfMissing: false })
 	}
-}
-
-cysColumnIds := ["cysClass", "chainRole", "bondingState", "rsasa", "sidechainRsasa", "sasa", "sidechainSasa", "partnerChainId", "partnerResSeq", "partnerIcode"]
-
-// Spec R38 scalar-per-structure PFrame. `structureId` is a placeholder
-// axis until upstream provides clonotype keys via PrimaryRef (R1-R6).
-// R23 summary counts + R38 motif scalars + R24-R30 surface metrics +
-// R36 low-conf fractions + R39 threshold flags all ride here.
-// R40: only the *Flag columns carry `pl7.app/isScore: "true"`.
-scoresAxesSpec := [
-	{
-		name: "pl7.app/structure/id",
-		type: "String",
-		annotations: { "pl7.app/label": "Structure" }
-	}
-]
-
-scoresColumnSpecs := {
-	mode: {
-		valueType: "String",
-		name: "pl7.app/liabilities/mode",
-		annotations: { "pl7.app/label": "Mode (R7)" }
-	},
-	extraCysCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/extraCysCount",
-		annotations: { "pl7.app/label": "Extra cysteines" }
-	},
-	exposedExtraCysCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/exposedExtraCysCount",
-		annotations: { "pl7.app/label": "Exposed extra cysteines" }
-	},
-	brokenCanonicalDisulfideCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/brokenCanonicalDisulfideCount",
-		annotations: { "pl7.app/label": "Broken canonical disulfides" }
-	},
-	missingCanonicalCysCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/missingCanonicalCysCount",
-		annotations: { "pl7.app/label": "Missing canonical cysteines" }
-	},
-	surfacedMotifCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/surfacedMotifCount",
-		annotations: { "pl7.app/label": "Surfaced motifs" }
-	},
-	confidenceGatedMotifCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/confidenceGatedMotifCount",
-		annotations: { "pl7.app/label": "Confidence-gated motifs" }
-	},
-	motifStructuralRiskScore: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/motifStructuralRiskScore",
-		annotations: { "pl7.app/label": "motifStructuralRiskScore", "pl7.app/format": ".2f" }
-	},
-	structuralDevelopabilityScore: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/structuralDevelopabilityScore",
-		annotations: { "pl7.app/label": "structuralDevelopabilityScore", "pl7.app/format": ".2f" }
-	},
-	structuralDevelopabilityRisk: {
-		valueType: "String",
-		name: "pl7.app/liabilities/structuralDevelopabilityRisk",
-		annotations: { "pl7.app/label": "structuralDevelopabilityRisk" }
-	},
-	structuralIntegrityRisk: {
-		valueType: "String",
-		name: "pl7.app/liabilities/structuralIntegrityRisk",
-		annotations: { "pl7.app/label": "structuralIntegrityRisk" }
-	},
-	totalCdrLength: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/totalCdrLength",
-		annotations: { "pl7.app/label": "Total CDR length" }
-	},
-	psh: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/psh",
-		annotations: { "pl7.app/label": "PSH", "pl7.app/format": ".2f" }
-	},
-	pshPatchCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/pshPatchCount",
-		annotations: { "pl7.app/label": "PSH patch count" }
-	},
-	ppc: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/ppc",
-		annotations: { "pl7.app/label": "PPC", "pl7.app/format": ".2f" }
-	},
-	pnc: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/pnc",
-		annotations: { "pl7.app/label": "PNC", "pl7.app/format": ".2f" }
-	},
-	sfvcsp: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/sfvcsp",
-		annotations: { "pl7.app/label": "SFvCSP", "pl7.app/format": ".2f" }
-	},
-	cdrh3Compactness: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/cdrh3Compactness",
-		annotations: { "pl7.app/label": "CDRH3 compactness", "pl7.app/format": ".3f" }
-	},
-	totalCdrLengthLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/totalCdrLengthLowConfidenceResidueFraction",
-		annotations: { "pl7.app/label": "Total CDR length low-conf fraction", "pl7.app/format": ".2f" }
-	},
-	pshLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/pshLowConfidenceResidueFraction",
-		annotations: { "pl7.app/label": "PSH low-conf fraction", "pl7.app/format": ".2f" }
-	},
-	ppcLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/ppcLowConfidenceResidueFraction",
-		annotations: { "pl7.app/label": "PPC low-conf fraction", "pl7.app/format": ".2f" }
-	},
-	pncLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/pncLowConfidenceResidueFraction",
-		annotations: { "pl7.app/label": "PNC low-conf fraction", "pl7.app/format": ".2f" }
-	},
-	sfvcspLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/sfvcspLowConfidenceResidueFraction",
-		annotations: { "pl7.app/label": "SFvCSP low-conf fraction", "pl7.app/format": ".2f" }
-	},
-	cdrh3CompactnessLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/cdrh3CompactnessLowConfidenceResidueFraction",
-		annotations: { "pl7.app/label": "CDRH3 compactness low-conf fraction", "pl7.app/format": ".2f" }
-	},
-	totalCdrLengthFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/totalCdrLengthFlag",
-		annotations: { "pl7.app/label": "Total CDR length flag", "pl7.app/isScore": "true" }
-	},
-	pshFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/pshFlag",
-		annotations: { "pl7.app/label": "PSH flag", "pl7.app/isScore": "true" }
-	},
-	ppcFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/ppcFlag",
-		annotations: { "pl7.app/label": "PPC flag", "pl7.app/isScore": "true" }
-	},
-	pncFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/pncFlag",
-		annotations: { "pl7.app/label": "PNC flag", "pl7.app/isScore": "true" }
-	},
-	sfvcspFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/sfvcspFlag",
-		annotations: { "pl7.app/label": "SFvCSP flag", "pl7.app/isScore": "true" }
-	},
-	cdrh3CompactnessFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/cdrh3CompactnessFlag",
-		annotations: { "pl7.app/label": "CDRH3 compactness flag", "pl7.app/isScore": "true" }
-	}
-}
-
-scoresColumnIds := [
-	"mode",
-	"extraCysCount", "exposedExtraCysCount",
-	"brokenCanonicalDisulfideCount", "missingCanonicalCysCount",
-	"surfacedMotifCount", "confidenceGatedMotifCount",
-	"motifStructuralRiskScore", "structuralDevelopabilityScore",
-	"structuralDevelopabilityRisk", "structuralIntegrityRisk",
-	"totalCdrLength", "psh", "pshPatchCount", "ppc", "pnc",
-	"sfvcsp", "cdrh3Compactness",
-	"totalCdrLengthLowConfidenceResidueFraction",
-	"pshLowConfidenceResidueFraction",
-	"ppcLowConfidenceResidueFraction",
-	"pncLowConfidenceResidueFraction",
-	"sfvcspLowConfidenceResidueFraction",
-	"cdrh3CompactnessLowConfidenceResidueFraction",
-	"totalCdrLengthFlag", "pshFlag", "ppcFlag", "pncFlag",
-	"sfvcspFlag", "cdrh3CompactnessFlag"
-]
+})
 
 wf.body(func(args) {
-	// Spec R43 — every emitted PColumn carries `domain.pl7.app/blockId`
-	// scoped to this block instance so downstream blocks can disambiguate
-	// outputs from multiple instances of the same block kind.
 	blockId := wf.blockId().getDataAsJson()
+	trace := { type: traceStep.type, id: blockId, importance: traceStep.importance, label: traceStep.label }
 
+	// ──────────────── PrimaryRef path (Spec R1-R6) ────────────────
+	// args.resolvedPdb is populated by wf.prepare when args.pdbRef is set;
+	// it carries the upstream `pl7.app/structure/pdb` ResourceMap PColumn
+	// (single axis: pl7.app/vdj/scClonotypeKey, valueType File).
+	if !is_undefined(args.resolvedPdb) {
+		pdbCol := args.resolvedPdb
+
+		motifsXsv := specs.buildMotifsXsvSettings(blockId)
+		cysXsv := specs.buildCysXsvSettings(blockId)
+		scoresXsv := specs.buildScoresXsvSettings(blockId)
+
+		// Per-row body inputs — Tengo strings/numbers go through
+		// smart.createJsonResource so each scalar lands as a JSON-typed
+		// resource the body template can read.
+		bodyExtra := {
+			numberingScheme: smart.createJsonResource(is_undefined(args.numberingScheme) ? "" : args.numberingScheme),
+			heavyChainId: smart.createJsonResource(is_undefined(args.heavyChainId) ? "" : args.heavyChainId),
+			lightChainId: smart.createJsonResource(is_undefined(args.lightChainId) ? "" : args.lightChainId),
+			rsasaBuriedCutoff: smart.createJsonResource(args.rsasaBuriedCutoff),
+			frConfThresh: smart.createJsonResource(args.frConfThresh),
+			cdrConfThresh: smart.createJsonResource(args.cdrConfThresh)
+		}
+
+		processResult := pframes.processColumn(
+			{ spec: pdbCol.spec, data: pdbCol.data },
+			processPdbTpl,
+			[
+				{
+					type: "Resource",
+					name: "liabilitiesJson",
+					spec: {
+						kind: "PColumn",
+						name: "pl7.app/liabilities/perClonotypeReport",
+						domain: { "pl7.app/blockId": blockId },
+						valueType: "File",
+						axesSpec: [],
+						annotations: {
+							"pl7.app/label": "Liabilities JSON report",
+							"pl7.app/table/visibility": "hidden"
+						}
+					}
+				},
+				{
+					type: "Xsv",
+					xsvType: "parquet",
+					settings: motifsXsv,
+					name: "motifs",
+					path: ["motifsParquet"],
+					mem: "2GiB",
+					cpu: 1
+				},
+				{
+					type: "Xsv",
+					xsvType: "parquet",
+					settings: cysXsv,
+					name: "cysteines",
+					path: ["cysParquet"],
+					mem: "2GiB",
+					cpu: 1
+				},
+				{
+					type: "Xsv",
+					xsvType: "parquet",
+					settings: scoresXsv,
+					name: "scores",
+					path: ["scoresParquet"],
+					mem: "2GiB",
+					cpu: 1
+				}
+			],
+			{
+				traceSteps: [trace],
+				extra: bodyExtra
+			}
+		)
+
+		// Build PFrames from processColumn outputs. processResult.output()
+		// for Xsv-typed targets returns a map of `{colId: {spec, data}}`.
+		motifsPfBuilder := pframes.pFrameBuilder()
+		for colId in specs.motifColumnIds {
+			out := processResult.output("motifs", colId)
+			motifsPfBuilder.add(colId, out.spec, out.data)
+		}
+		motifsPf := motifsPfBuilder.build()
+
+		cysPfBuilder := pframes.pFrameBuilder()
+		for colId in specs.cysColumnIds {
+			out := processResult.output("cysteines", colId)
+			cysPfBuilder.add(colId, out.spec, out.data)
+		}
+		cysPf := cysPfBuilder.build()
+
+		scoresPfBuilder := pframes.pFrameBuilder()
+		for colId in specs.scoresColumnIds {
+			out := processResult.output("scores", colId)
+			scoresPfBuilder.add(colId, out.spec, out.data)
+		}
+		scoresPf := scoresPfBuilder.build()
+
+		// liabilitiesJson: per-clonotype File ResourceMap (axes:
+		// [scClonotypeKey], valueType: File). The UI currently reads
+		// `liabilitiesJson` as a single file's content; on the PrimaryRef
+		// path it's a per-clonotype map — UI migration is a separate task.
+		jsonsOut := processResult.output("liabilitiesJson")
+		jsonsPfBuilder := pframes.pFrameBuilder()
+		jsonsPfBuilder.add("liabilitiesJson", jsonsOut.spec, jsonsOut.data)
+		jsonsPf := jsonsPfBuilder.build()
+
+		return {
+			outputs: {
+				motifsData: pframes.exportFrame(motifsPf),
+				cysData: pframes.exportFrame(cysPf),
+				scoresData: pframes.exportFrame(scoresPf),
+				liabilitiesJsonsData: pframes.exportFrame(jsonsPf)
+			},
+			exports: {
+				motifs: motifsPf,
+				cysteines: cysPf,
+				scores: scoresPf,
+				liabilitiesJsons: jsonsPf
+			}
+		}
+	}
+
+	// ──────────────── Legacy single-PDB upload path ────────────────
+	// Used when no PrimaryRef is selected (args.pdb is an ImportFileHandle).
+	// Same software invocation, but everything runs once.
 	pdbImport := file.importFile(args.pdb)
 
 	cmd := exec.builder().
@@ -448,9 +176,9 @@ wf.body(func(args) {
 		addFile("input.pdb", pdbImport.file).
 		arg("--pdb").arg("input.pdb").
 		arg("--output").arg("liabilities.json").
-		arg("--motifs-pframe-dir").arg(motifsFrameName).
-		arg("--cysteines-pframe-dir").arg(cysFrameName).
-		arg("--scores-pframe-dir").arg(scoresFrameName)
+		arg("--motifs-pframe-dir").arg(specs.motifsFrameName).
+		arg("--cysteines-pframe-dir").arg(specs.cysFrameName).
+		arg("--scores-pframe-dir").arg(specs.scoresFrameName)
 
 	if !is_undefined(args.numberingScheme) && args.numberingScheme != "" {
 		cmd = cmd.arg("--numbering-scheme").arg(args.numberingScheme)
@@ -461,7 +189,6 @@ wf.body(func(args) {
 	if !is_undefined(args.lightChainId) && args.lightChainId != "" {
 		cmd = cmd.arg("--chain-l").arg(args.lightChainId)
 	}
-	// Spec R49 / R12 — advanced thresholds plumbed from BlockData.
 	if !is_undefined(args.rsasaBuriedCutoff) {
 		cmd = cmd.arg("--rsasa-buried-cutoff").arg(string(args.rsasaBuriedCutoff))
 	}
@@ -476,17 +203,17 @@ wf.body(func(args) {
 		saveFile("liabilities.json").
 		processWorkdir("motifsResult", ptImportDirTpl, func() {
 			m := {}
-			m[motifsFrameName] = motifColumnIds
+			m[specs.motifsFrameName] = specs.motifColumnIds
 			return m
 		}()).
 		processWorkdir("cysResult", ptImportDirTpl, func() {
 			m := {}
-			m[cysFrameName] = cysColumnIds
+			m[specs.cysFrameName] = specs.cysColumnIds
 			return m
 		}()).
 		processWorkdir("scoresResult", ptImportDirTpl, func() {
 			m := {}
-			m[scoresFrameName] = scoresColumnIds
+			m[specs.scoresFrameName] = specs.scoresColumnIds
 			return m
 		}()).
 		run()
@@ -496,46 +223,49 @@ wf.body(func(args) {
 	scoresData := result.getProcessorResult("scoresResult")
 
 	motifsPfBuilder := pframes.pFrameBuilder()
-	for colId in motifColumnIds {
+	for colId in specs.motifColumnIds {
+		raw := specs.motifColumnSpecs[colId]
 		spec := {
 			kind: "PColumn",
-			valueType: motifColumnSpecs[colId].valueType,
-			name: motifColumnSpecs[colId].name,
+			valueType: raw.valueType,
+			name: raw.name,
 			domain: { "pl7.app/blockId": blockId },
-			annotations: motifColumnSpecs[colId].annotations,
-			axesSpec: motifAxesSpec
+			annotations: raw.annotations,
+			axesSpec: specs.motifAxesSpec
 		}
-		columnRef := ptUtil.makeFrameColumnRef(motifsFrameName, colId)
+		columnRef := ptUtil.makeFrameColumnRef(specs.motifsFrameName, colId)
 		motifsPfBuilder.add(colId, spec, motifData.getFutureInputField(columnRef))
 	}
 	motifsPf := motifsPfBuilder.build()
 
 	cysPfBuilder := pframes.pFrameBuilder()
-	for colId in cysColumnIds {
+	for colId in specs.cysColumnIds {
+		raw := specs.cysColumnSpecs[colId]
 		spec := {
 			kind: "PColumn",
-			valueType: cysColumnSpecs[colId].valueType,
-			name: cysColumnSpecs[colId].name,
+			valueType: raw.valueType,
+			name: raw.name,
 			domain: { "pl7.app/blockId": blockId },
-			annotations: cysColumnSpecs[colId].annotations,
-			axesSpec: cysAxesSpec
+			annotations: raw.annotations,
+			axesSpec: specs.cysAxesSpec
 		}
-		columnRef := ptUtil.makeFrameColumnRef(cysFrameName, colId)
+		columnRef := ptUtil.makeFrameColumnRef(specs.cysFrameName, colId)
 		cysPfBuilder.add(colId, spec, cysData.getFutureInputField(columnRef))
 	}
 	cysPf := cysPfBuilder.build()
 
 	scoresPfBuilder := pframes.pFrameBuilder()
-	for colId in scoresColumnIds {
+	for colId in specs.scoresColumnIds {
+		raw := specs.scoresColumnSpecs[colId]
 		spec := {
 			kind: "PColumn",
-			valueType: scoresColumnSpecs[colId].valueType,
-			name: scoresColumnSpecs[colId].name,
+			valueType: raw.valueType,
+			name: raw.name,
 			domain: { "pl7.app/blockId": blockId },
-			annotations: scoresColumnSpecs[colId].annotations,
-			axesSpec: scoresAxesSpec
+			annotations: raw.annotations,
+			axesSpec: specs.scoresAxesSpecLegacy
 		}
-		columnRef := ptUtil.makeFrameColumnRef(scoresFrameName, colId)
+		columnRef := ptUtil.makeFrameColumnRef(specs.scoresFrameName, colId)
 		scoresPfBuilder.add(colId, spec, scoresData.getFutureInputField(columnRef))
 	}
 	scoresPf := scoresPfBuilder.build()

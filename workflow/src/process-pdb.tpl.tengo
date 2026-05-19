@@ -1,0 +1,90 @@
+// vim: filetype=go
+//
+// process-pdb — per-row body template for `pframes.processColumn` over the
+// upstream `pl7.app/structure/pdb` ResourceMap (Spec R1-R6). One invocation
+// runs the liabilities software on one PDB and exposes four files:
+//
+//   - liabilities.json                — R37 per-clonotype JSON report
+//   - motifs_pf/partition_0.parquet   — R38 motifs parquet (axes-tagged)
+//   - cysteines_pf/partition_0.parquet — R38 cysteines parquet
+//   - scores_pf/partition_0.parquet   — R38 per-structure scalar parquet
+//
+// The orchestrator (main.tpl.tengo) converts these into PColumns via target
+// outputs of type Resource (liabilitiesJson) and Xsv parquet (motifs/cys/scores).
+// `pframes.processColumn` prepends the input column's axes
+// (`pl7.app/vdj/scClonotypeKey`) to each output PColumn automatically, so the
+// scores frame's Xsv axes are empty here (the python keeps writing the
+// legacy `structureId="static"` axis column — pfconv ignores undeclared
+// parquet columns, matching the spec's PrimaryRef R1-R6 wording that
+// structureId is replaced by the upstream clonotype key).
+
+self := import("@platforma-sdk/workflow-tengo:tpl")
+ll := import("@platforma-sdk/workflow-tengo:ll")
+smart := import("@platforma-sdk/workflow-tengo:smart")
+exec := import("@platforma-sdk/workflow-tengo:exec")
+assets := import("@platforma-sdk/workflow-tengo:assets")
+pConstants := import("@platforma-sdk/workflow-tengo:pframes.constants")
+
+liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-based-liabilities.software:liabilities")
+
+self.defineOutputs(
+	"liabilitiesJson",
+	"motifsParquet",
+	"cysParquet",
+	"scoresParquet"
+)
+
+self.body(func(inputs) {
+	pdbFile := inputs[pConstants.VALUE_FIELD_NAME]
+	if !smart.isReference(pdbFile) {
+		ll.panic("process-pdb: expected __value__ to be a file reference, got: %v", pdbFile)
+	}
+
+	cmd := exec.builder().
+		software(liabilitiesSw).
+		mem("2GiB").
+		cpu(1).
+		printErrStreamToStdout().
+		addFile("input.pdb", pdbFile).
+		arg("--pdb").arg("input.pdb").
+		arg("--output").arg("liabilities.json").
+		arg("--motifs-pframe-dir").arg("motifs_pf").
+		arg("--cysteines-pframe-dir").arg("cysteines_pf").
+		arg("--scores-pframe-dir").arg("scores_pf")
+
+	// Optional knobs — passed via processColumn `extra` as JSON scalar
+	// resources. is_undefined guards each so an unset value just omits the
+	// CLI flag (the python side already has spec-calibrated defaults).
+	if !is_undefined(inputs.numberingScheme) && inputs.numberingScheme != "" {
+		cmd = cmd.arg("--numbering-scheme").arg(inputs.numberingScheme)
+	}
+	if !is_undefined(inputs.heavyChainId) && inputs.heavyChainId != "" {
+		cmd = cmd.arg("--chain-h").arg(inputs.heavyChainId)
+	}
+	if !is_undefined(inputs.lightChainId) && inputs.lightChainId != "" {
+		cmd = cmd.arg("--chain-l").arg(inputs.lightChainId)
+	}
+	if !is_undefined(inputs.rsasaBuriedCutoff) {
+		cmd = cmd.arg("--rsasa-buried-cutoff").arg(string(inputs.rsasaBuriedCutoff))
+	}
+	if !is_undefined(inputs.frConfThresh) {
+		cmd = cmd.arg("--fr-conf-thresh").arg(string(inputs.frConfThresh))
+	}
+	if !is_undefined(inputs.cdrConfThresh) {
+		cmd = cmd.arg("--cdr-conf-thresh").arg(string(inputs.cdrConfThresh))
+	}
+
+	result := cmd.
+		saveFile("liabilities.json").
+		saveFile("motifs_pf/partition_0.parquet").
+		saveFile("cysteines_pf/partition_0.parquet").
+		saveFile("scores_pf/partition_0.parquet").
+		run()
+
+	return {
+		liabilitiesJson: result.getFile("liabilities.json"),
+		motifsParquet: result.getFile("motifs_pf/partition_0.parquet"),
+		cysParquet: result.getFile("cysteines_pf/partition_0.parquet"),
+		scoresParquet: result.getFile("scores_pf/partition_0.parquet")
+	}
+})
