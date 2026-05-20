@@ -190,6 +190,91 @@ _PLACEHOLDER_STRUCTURE_ID = "static"
 _FLAG_SENTINEL = "-"
 
 
+def _build_scores_row(
+    *,
+    mode: str,
+    motif_hits,
+    cys_hits,
+    motif_structural_risk_score: float,
+    surface_metrics,
+    developability,
+    rsasa_buried_cutoff: float,
+) -> dict:
+    """Assemble the single-row dict that becomes the per-structure scores PFrame.
+
+    All the source data already lives in `surface_metrics`, `developability`,
+    and the motif / cysteine hit lists — this function is just the spec-
+    mandated mapping into one flat dict matching `_SCORES_COLUMNS`. Pulling
+    the assembly out keeps `main()` readable and the field-name → source
+    correspondence reviewable in one place.
+
+    `surface_metrics` is an empty dict when no scheme/chain mapping was
+    provided (R14 fallback); we route every metric field through
+    `sm.get(...)` so they cleanly become NULLs in that case.
+
+    `_FLAG_SENTINEL` ("-") goes into the threshold-flag columns when the
+    metric is inapplicable in the current mode (e.g. SFvCSP in VHH).
+    """
+    sm = surface_metrics if isinstance(surface_metrics, dict) and "mode" in surface_metrics else {}
+    flags = developability["flags"]
+
+    # R23 — cysteine-class counts. The cys hit list carries the four-state
+    # classification; we tally each state into its own PColumn.
+    extra_cys = sum(1 for h in cys_hits if h.cysClass == "cys_extra")
+    exposed_extra_cys = sum(
+        1
+        for h in cys_hits
+        if h.cysClass == "cys_extra"
+        and h.sidechainRsasa is not None
+        and h.sidechainRsasa >= rsasa_buried_cutoff
+    )
+    broken_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_broken")
+    missing_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_missing")
+
+    return {
+        # Placeholder axis until upstream provides a clonotype key via
+        # PrimaryRef (R1-R6). The workflow swaps this column out for the
+        # real scClonotypeKey axis on the PrimaryRef path.
+        "structureId": _PLACEHOLDER_STRUCTURE_ID,
+        "mode": mode,
+        # R23 summary counts.
+        "extraCysCount": extra_cys,
+        "exposedExtraCysCount": exposed_extra_cys,
+        "brokenCanonicalDisulfideCount": broken_canonical,
+        "missingCanonicalCysCount": missing_canonical,
+        # R38 motif counts + composite score + risks.
+        "surfacedMotifCount": len(motif_hits),
+        "confidenceGatedMotifCount": sum(1 for h in motif_hits if h.confidenceGated == "yes"),
+        "motifStructuralRiskScore": motif_structural_risk_score,
+        "structuralDevelopabilityScore": developability["structuralDevelopabilityScore"],
+        "structuralDevelopabilityRisk": developability["structuralDevelopabilityRisk"],
+        "structuralIntegrityRisk": developability["structuralIntegrityRisk"],
+        # R24-R30 raw surface metrics (sfvcsp / cdrh3Compactness are mode-specific).
+        "totalCdrLength": sm.get("totalCdrLength"),
+        "psh": sm.get("psh"),
+        "pshPatchCount": sm.get("pshPatchCount"),
+        "ppc": sm.get("ppc"),
+        "pnc": sm.get("pnc"),
+        "sfvcsp": sm.get("sfvcsp"),
+        "cdrh3Compactness": sm.get("cdrh3Compactness"),
+        # R36 per-metric low-confidence-residue fractions.
+        "totalCdrLengthLowConfidenceResidueFraction": sm.get("totalCdrLengthLowConfidenceResidueFraction"),
+        "pshLowConfidenceResidueFraction": sm.get("pshLowConfidenceResidueFraction"),
+        "ppcLowConfidenceResidueFraction": sm.get("ppcLowConfidenceResidueFraction"),
+        "pncLowConfidenceResidueFraction": sm.get("pncLowConfidenceResidueFraction"),
+        "sfvcspLowConfidenceResidueFraction": sm.get("sfvcspLowConfidenceResidueFraction"),
+        "cdrh3CompactnessLowConfidenceResidueFraction": sm.get("cdrh3CompactnessLowConfidenceResidueFraction"),
+        # R39 three-band threshold flags — green/amber/red, or "-" sentinel
+        # when the metric is inapplicable in the current mode.
+        "totalCdrLengthFlag": flags.get("totalCdrLengthFlag", _FLAG_SENTINEL),
+        "pshFlag": flags.get("pshFlag", _FLAG_SENTINEL),
+        "ppcFlag": flags.get("ppcFlag", _FLAG_SENTINEL),
+        "pncFlag": flags.get("pncFlag", _FLAG_SENTINEL),
+        "sfvcspFlag": flags.get("sfvcspFlag", _FLAG_SENTINEL),
+        "cdrh3CompactnessFlag": flags.get("cdrh3CompactnessFlag", _FLAG_SENTINEL),
+    }
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pdb", required=True, type=Path)
@@ -387,55 +472,20 @@ def main() -> None:
     cys_written = write_pframe(args.cysteines_pframe_dir, cys_rows, _CYS_AXES, _CYS_COLUMNS)
     chown_paths_to_host(cys_written)
 
-    # Spec R23 / R38 / R39 per-structure scalar PFrame. R23 summary counts
-    # are derived here from cys_hits; the rest of the row is the same data
-    # that's already in the JSON `scores` / `surfaceMetrics` / `thresholdFlags`.
-    flags = developability["flags"]
-    sm = surface_metrics if isinstance(surface_metrics, dict) and "mode" in surface_metrics else {}
-    extra_cys = sum(1 for h in cys_hits if h.cysClass == "cys_extra")
-    exposed_extra_cys = sum(
-        1 for h in cys_hits
-        if h.cysClass == "cys_extra"
-        and h.sidechainRsasa is not None
-        and h.sidechainRsasa >= args.rsasa_buried_cutoff
+    # Spec R23 / R38 / R39 per-structure scalar PFrame. One row per structure,
+    # flat layout matching `_SCORES_COLUMNS`. The same scalar data also lives
+    # under `report.scores` / `report.surfaceMetrics` / `report.thresholdFlags`
+    # in the JSON report above; the PColumn path is what downstream blocks
+    # (Lead Selection, etc.) consume.
+    scores_row = _build_scores_row(
+        mode=mode,
+        motif_hits=motif_hits,
+        cys_hits=cys_hits,
+        motif_structural_risk_score=motif_structural_risk_score,
+        surface_metrics=surface_metrics,
+        developability=developability,
+        rsasa_buried_cutoff=args.rsasa_buried_cutoff,
     )
-    broken_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_broken")
-    missing_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_missing")
-    scores_row = {
-        "structureId": _PLACEHOLDER_STRUCTURE_ID,
-        "mode": mode,
-        "extraCysCount": extra_cys,
-        "exposedExtraCysCount": exposed_extra_cys,
-        "brokenCanonicalDisulfideCount": broken_canonical,
-        "missingCanonicalCysCount": missing_canonical,
-        "surfacedMotifCount": len(motif_hits),
-        "confidenceGatedMotifCount": sum(
-            1 for h in motif_hits if h.confidenceGated == "yes"
-        ),
-        "motifStructuralRiskScore": motif_structural_risk_score,
-        "structuralDevelopabilityScore": developability["structuralDevelopabilityScore"],
-        "structuralDevelopabilityRisk": developability["structuralDevelopabilityRisk"],
-        "structuralIntegrityRisk": developability["structuralIntegrityRisk"],
-        "totalCdrLength": sm.get("totalCdrLength"),
-        "psh": sm.get("psh"),
-        "pshPatchCount": sm.get("pshPatchCount"),
-        "ppc": sm.get("ppc"),
-        "pnc": sm.get("pnc"),
-        "sfvcsp": sm.get("sfvcsp"),
-        "cdrh3Compactness": sm.get("cdrh3Compactness"),
-        "totalCdrLengthLowConfidenceResidueFraction": sm.get("totalCdrLengthLowConfidenceResidueFraction"),
-        "pshLowConfidenceResidueFraction": sm.get("pshLowConfidenceResidueFraction"),
-        "ppcLowConfidenceResidueFraction": sm.get("ppcLowConfidenceResidueFraction"),
-        "pncLowConfidenceResidueFraction": sm.get("pncLowConfidenceResidueFraction"),
-        "sfvcspLowConfidenceResidueFraction": sm.get("sfvcspLowConfidenceResidueFraction"),
-        "cdrh3CompactnessLowConfidenceResidueFraction": sm.get("cdrh3CompactnessLowConfidenceResidueFraction"),
-        "totalCdrLengthFlag": flags.get("totalCdrLengthFlag", _FLAG_SENTINEL),
-        "pshFlag": flags.get("pshFlag", _FLAG_SENTINEL),
-        "ppcFlag": flags.get("ppcFlag", _FLAG_SENTINEL),
-        "pncFlag": flags.get("pncFlag", _FLAG_SENTINEL),
-        "sfvcspFlag": flags.get("sfvcspFlag", _FLAG_SENTINEL),
-        "cdrh3CompactnessFlag": flags.get("cdrh3CompactnessFlag", _FLAG_SENTINEL),
-    }
     scores_written = write_pframe(
         args.scores_pframe_dir, [scores_row], _SCORES_AXES, _SCORES_COLUMNS
     )

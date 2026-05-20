@@ -390,6 +390,17 @@ def compute_metrics(
 
         # Build a unified residue list for the Fv (H then L) and re-derive
         # CDR-vicinity over the joined list so cross-chain pairs are counted.
+        #
+        # Indexing convention for the unified list:
+        #
+        #   unified_idx ∈ [0, len(h_res))                  → heavy residue h_res[idx]
+        #   unified_idx ∈ [offset, offset + len(l_res))    → light residue l_res[idx - offset]
+        #     where offset = len(h_res)
+        #
+        # Per-chain rsasa_lookup / in_bridge dicts use chain-local indices;
+        # rebuilding them under the unified index lets us reuse the same
+        # `_residue_pair_sum` helper for both intra-chain AND cross-chain
+        # pairs without a separate "is this pair across chains?" check.
         residues = h_res + l_res
         aa_letters = h_aa + l_aa
         rsasa_lookup: dict[int, float] = {}

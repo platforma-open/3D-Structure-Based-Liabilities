@@ -1,3 +1,24 @@
+"""Minimal PDB v3.30 parser. We only consume the records we need:
+
+  ATOM / HETATM   — per-atom coordinates and B-factor (R34 confidence).
+  SSBOND          — disulfide bonds declared in the header (R21 cross-check).
+  REMARK 99       — `REMARK 99 PLATFORMA CDR<role><idx> <chain><start>-<chain><end>`
+                    records emitted by the Structure Prediction block:
+                      • CDR boundaries override scheme-fixed ranges (R10).
+                      • The chain letter prefix is authoritative for which
+                        physical chain plays the H / L role (R9).
+
+PDB v3.30 is a fixed-column text format — every record's fields live at
+specific byte offsets, not whitespace-separated tokens. Examples used here:
+
+  ATOM   1234  CA  ARG A  42      11.234  22.345  33.456  1.00  4.50
+  cols   0-5  6-10 12-15 17-19 21  22-25 26  30-37 38-45 46-53 60-65
+                            ^-resName  ^-iCode  ^----- x,y,z ------^   ^B-factor
+  chain at col 21, resSeq cols 22-25, altLoc at col 16, atom name 12-15.
+
+PDB spec: https://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#ATOM
+"""
+
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
@@ -74,6 +95,9 @@ def parse_pdb(text: str) -> Parsed:
     model_count = 0
 
     for raw in text.splitlines():
+        # PDB lines are nominally 80 columns; many producers strip trailing
+        # whitespace. Pad to a full 80 so fixed-offset slicing further down
+        # never reads past the end of `raw`.
         line = raw.ljust(80)
         tag = line[0:6].rstrip()
 
@@ -107,6 +131,9 @@ def parse_pdb(text: str) -> Parsed:
                 elif existing.upper() != chain_start.upper():
                     out.chain_role_to_pdb_chain.pop(role, None)
         elif tag == "SSBOND":
+            # SSBOND record fixed offsets (PDB v3.30):
+            #   col 15 = chainID1, 17-20 = resSeq1, 21 = iCode1
+            #   col 29 = chainID2, 31-34 = resSeq2, 35 = iCode2
             try:
                 chain1 = line[15:16]
                 res1 = int(line[17:21].strip())
@@ -129,8 +156,17 @@ def parse_pdb(text: str) -> Parsed:
         elif tag in ("ATOM", "HETATM"):
             if not in_first_model:
                 continue
-            # altLoc: only keep the primary location (' ' or 'A') so geometry
-            # tests don't see alternate side-chain conformers.
+            # ATOM / HETATM record fixed offsets (PDB v3.30). We pull:
+            #   12-15 atom name        16    altLoc
+            #   17-19 residue 3-letter 21    chainID
+            #   22-25 residue seq num  26    iCode (insertion code)
+            #   30-37 x   38-45 y      46-53 z  (Å, free-form floats)
+            #   60-65 B-factor (Å² for crystals, Å for ImmuneBuilder-predicted)
+            #
+            # altLoc filter — multi-conformer side chains list each alternate
+            # location with a letter ('A', 'B', ...). Keeping only ' ' and 'A'
+            # ensures geometry tests (distance pairs, salt bridges) don't
+            # double-count atoms.
             alt_loc = line[16:17]
             if alt_loc not in (" ", "A"):
                 continue
