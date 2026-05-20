@@ -1,13 +1,12 @@
 // vim: filetype=go
-// Shared PColumn spec setup for both the legacy single-PDB body path and
-// the per-clonotype PrimaryRef path. Declares axes + column specs for the
-// motifs, cysteines, and scores PFrames the Python software produces.
+// PColumn spec setup for the per-clonotype PrimaryRef workflow path.
+// Declares axes + column specs for the motifs, cysteines, and scores
+// PFrames the Python software produces.
 //
-// `axesSpec` / `columnSpecs` / `columnIds` mirror the parquet column layout
-// `software/src/pframe_writer.py` writes. The per-clonotype path adds a
-// leading `pl7.app/vdj/scClonotypeKey` axis via `pframes.processColumn`'s
-// input-axis prepending; the legacy single-PDB path uses an explicit
-// `structureId` axis on the scores frame.
+// `axesSpec` / `columnSpecs` / `columnIds` mirror the parquet column
+// layout `software/src/pframe_writer.py` writes. `pframes.processColumn`
+// in main.tpl.tengo prepends a leading `pl7.app/vdj/scClonotypeKey` axis
+// to every output PColumn (R1-R6).
 
 ll := import("@platforma-sdk/workflow-tengo:ll")
 json := import("json")
@@ -334,16 +333,13 @@ cysColumnSpecs := {
 cysColumnIds := ["cysClass", "chainRole", "bondingState", "rsasa", "sidechainRsasa", "sasa", "sidechainSasa", "partnerChainId", "partnerResSeq", "partnerIcode"]
 
 // ──────────────── Scores PFrame ────────────────
-// Legacy path uses scoresAxesSpecLegacy (explicit `structureId="static"`).
-// PrimaryRef path uses scoresAxesSpecPerClonotype (empty — `processColumn`
-// prepends the upstream `pl7.app/vdj/scClonotypeKey` axis).
-
-// The `structureId` axis is a placeholder forced by `xsv-import-pt`'s
-// "at least one axis" requirement. On the PrimaryRef path every row's value
-// is "static" — the real per-clonotype axis is the prepended
-// `pl7.app/vdj/scClonotypeKey`. Marked `optional` so AG-Grid hides it by
-// default; users can re-enable from the Columns toolbar.
-scoresAxesSpecLegacy := [
+// processColumn's xsv-import-pt requires at least one declared axis even
+// though the upstream `pl7.app/vdj/scClonotypeKey` axis is auto-prepended.
+// We keep `pl7.app/structure/id` as a "static"-valued placeholder so the
+// xsv settings have a non-empty axes list; the final PColumn axes end up
+// as [scClonotypeKey, structureId="static"]. Marked optional so AG-Grid
+// hides it by default.
+scoresAxesSpec := [
 	{
 		name: "pl7.app/structure/id",
 		type: "String",
@@ -353,8 +349,6 @@ scoresAxesSpecLegacy := [
 		}
 	}
 ]
-
-scoresAxesSpecPerClonotype := []
 
 // Default visibility + orderPriority per spec R51:
 //   Default visible: mode, structuralDevelopabilityRisk, structuralIntegrityRisk,
@@ -560,21 +554,15 @@ scoresColumnIds := [
 	"sfvcspFlag", "cdrh3CompactnessFlag"
 ]
 
-// Workdir directory names that Python's pframe_writer.py emits parquet into.
-motifsFrameName := "motifs_pf"
-cysFrameName := "cysteines_pf"
-scoresFrameName := "scores_pf"
-
 // ──────────────── Xsv settings (PrimaryRef path) ────────────────
 // `pframes.processColumn` runs `xsv.importFile` over each per-clonotype
 // parquet file. Settings declare how to read the parquet:
 //   - `axes` maps parquet column names → axis specs (each entry's `column`
 //     is the parquet column name).
 //   - `columns` maps parquet column names → PColumn specs.
-// Parquet columns not listed here are silently dropped by pfconv. That's how
-// the scores frame omits the python-side `structureId="static"` placeholder
-// — processColumn prepends `pl7.app/vdj/scClonotypeKey` from the input column,
-// which replaces the placeholder per Spec R1-R6.
+// Parquet columns not listed here are silently dropped by pfconv.
+// processColumn prepends `pl7.app/vdj/scClonotypeKey` from the input
+// column to every output PColumn (Spec R1-R6 — the real per-clonotype axis).
 
 // Maps parquet column name → axis spec, for the motif/cys axes.
 motifAxisParquetMapping := [
@@ -593,8 +581,8 @@ cysAxisParquetMapping := [
 ]
 
 // Build the Xsv column[] entries for a given frame, injecting
-// `pl7.app/blockId` into each column spec's domain so R43 traceability is
-// preserved on the PrimaryRef path (same as the legacy path).
+// `pl7.app/blockId` into each column spec's domain so R43 traceability
+// reaches downstream blocks.
 buildXsvColumns := func(columnIds, columnSpecs, blockId) {
 	out := []
 	for id in columnIds {
@@ -637,17 +625,14 @@ buildCysXsvSettings := func(blockId) {
 	}
 }
 
-// Scores frame: parquet carries the legacy `structureId="static"` column;
-// `xsv.importFile` requires at least one declared axis, so we keep
-// structureId in the Xsv settings even on the PrimaryRef path. The
-// resulting PColumn ends up with axes [scClonotypeKey, structureId="static"]
-// — slightly redundant but a valid PColumn shape, and it lets the same
-// python output feed both the legacy and per-clonotype paths without
-// touching the writer.
+// Scores frame: parquet carries a `structureId="static"` column the
+// python writer emits for the xsv.importFile "at least one axis"
+// requirement (see `scoresAxesSpec` comment above). Final PColumn axes:
+// [scClonotypeKey, structureId="static"].
 buildScoresXsvSettings := func(blockId) {
 	return {
 		axes: [
-			{ column: "structureId", spec: scoresAxesSpecLegacy[0] }
+			{ column: "structureId", spec: scoresAxesSpec[0] }
 		],
 		columns: buildXsvColumns(scoresColumnIds, scoresColumnSpecs, blockId),
 		storageFormat: "Parquet"
@@ -661,13 +646,9 @@ export ll.toStrict({
 	cysAxesSpec: cysAxesSpec,
 	cysColumnSpecs: cysColumnSpecs,
 	cysColumnIds: cysColumnIds,
-	scoresAxesSpecLegacy: scoresAxesSpecLegacy,
-	scoresAxesSpecPerClonotype: scoresAxesSpecPerClonotype,
+	scoresAxesSpec: scoresAxesSpec,
 	scoresColumnSpecs: scoresColumnSpecs,
 	scoresColumnIds: scoresColumnIds,
-	motifsFrameName: motifsFrameName,
-	cysFrameName: cysFrameName,
-	scoresFrameName: scoresFrameName,
 	buildMotifsXsvSettings: buildMotifsXsvSettings,
 	buildCysXsvSettings: buildCysXsvSettings,
 	buildScoresXsvSettings: buildScoresXsvSettings

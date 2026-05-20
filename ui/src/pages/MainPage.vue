@@ -1,10 +1,8 @@
 <script setup lang="ts">
-import type { LiabilitiesReport } from "@platforma-open/milabs.3d-structure-based-liabilities.model";
 import type { PlStructureViewerProps } from "@milaboratories/structure-viewer";
 import { PlStructureViewer } from "@milaboratories/structure-viewer";
-import { createPlDataTableStateV2, type PlRef } from "@platforma-sdk/model";
+import { createPlDataTableStateV2 } from "@platforma-sdk/model";
 import {
-  computedResult,
   PlAccordionSection,
   PlAgDataTableV2,
   PlAlert,
@@ -13,11 +11,11 @@ import {
   PlCheckbox,
   PlDropdown,
   PlDropdownRef,
-  PlFileInput,
   PlMaskIcon24,
   PlNumberField,
   PlSlideModal,
   PlTabs,
+  PlTextField,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
 import { computed, ref, watchEffect } from "vue";
@@ -25,30 +23,11 @@ import { useApp } from "../app";
 
 import ClonotypeDetailPanel from "../components/ClonotypeDetailPanel.vue";
 import RiskSummaryBar from "../components/RiskSummaryBar.vue";
-import PdbLiabilityMap from "../components/pdb/PdbLiabilityMap.vue";
 import { useClonotypeDetailFetch } from "../composables/useClonotypeDetailFetch";
 import { useClusterAssignments } from "../composables/useClusterAssignments";
 import { useRunSummaryAlerts } from "../composables/useRunSummaryAlerts";
 
-// Spec R12 — Raybould 2019 canonical cutoff. rSASA below this is "buried".
-const BURIED_CUTOFF = 0.075;
-
 const app = useApp();
-// `liabilitiesJson` is only emitted on the legacy single-PDB upload path.
-// On the PrimaryRef path the workflow produces a per-clonotype File
-// ResourceMap instead, so this output is absent — `computedResult` returns
-// an unsettled / error result and `report` stays null (which hides the
-// single-structure stats panel + residue map below).
-const liabilitiesJson = computedResult(() => app.model.outputs.liabilitiesJson);
-
-const report = computed<LiabilitiesReport | null>(() => {
-  try {
-    const text = liabilitiesJson.value?.value;
-    return text ? (JSON.parse(text) as LiabilitiesReport) : null;
-  } catch {
-    return null;
-  }
-});
 
 // Spec R51 — per-clonotype scalar metrics table.
 // `scoresData` PFrame is only emitted on the PrimaryRef path; on the
@@ -98,11 +77,11 @@ const { runSummary, showRedAlert, showGatedAlert } = useRunSummaryAlerts(scoresT
 // overview, the visualisation is the deep-dive readout per spec R52/R53.
 const activeView = ref<"viewer" | "table">("viewer");
 
-// Settings slide-over (predicted structures dropdown + numbering scheme +
-// chain mapping + Advanced thresholds + hydrophobicity scale). Opens
-// by default when no input source is configured so first-run users
-// don't see an empty Main tab and wonder where to start.
-const settingsOpen = ref(!app.model.data.pdbRef && !app.model.data.pdb);
+// Settings slide-over (predicted structures dropdown + numbering scheme
+// override + chain mapping override + Advanced thresholds + hydrophobicity
+// scale). Auto-opens on first load when no input is configured so new
+// users land on the input form instead of an empty page.
+const settingsOpen = ref(!app.model.data.pdbRef);
 const viewTabOptions = [
   { value: "viewer" as const, label: "3D structure + detail" },
   { value: "table" as const, label: "Per-clonotype table" },
@@ -151,38 +130,6 @@ function pct(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
-const mode = computed(() => report.value?.mode ?? "empty");
-const surfacedMotifCount = computed(() => report.value?.scores?.surfacedMotifCount ?? 0);
-const confidenceGatedMotifCount = computed(
-  () => report.value?.scores?.confidenceGatedMotifCount ?? 0,
-);
-const motifStructuralRiskScore = computed(
-  () => report.value?.scores?.motifStructuralRiskScore ?? 0,
-);
-const surfaceMetrics = computed(() => {
-  const m = report.value?.surfaceMetrics;
-  if (!m || !("mode" in m)) return null;
-  return m;
-});
-const developabilityScore = computed(
-  () => report.value?.scores?.structuralDevelopabilityScore ?? 0,
-);
-const developabilityRisk = computed(
-  () => report.value?.scores?.structuralDevelopabilityRisk ?? "None",
-);
-const integrityRisk = computed(() => report.value?.scores?.structuralIntegrityRisk ?? "None");
-function fmtLowConf(value: number | null | undefined): string {
-  if (value == null) return "";
-  return ` (${Math.round(value * 100)}% low-conf)`;
-}
-const RISK_COLOR: Record<string, string> = {
-  None: "#65a30d",
-  Low: "#84cc16",
-  Medium: "#d97706",
-  High: "#dc2626",
-  Present: "#dc2626",
-};
-
 const numberingSchemeOptions = [
   { value: "", label: "— unknown (no region weighting) —" },
   { value: "imgt", label: "IMGT" },
@@ -190,11 +137,9 @@ const numberingSchemeOptions = [
   { value: "kabat", label: "Kabat" },
 ];
 
-// R48 — hydrophobicity scales selectable for PSH. KD is the Raybould 2019
-// default; the others are the spec's calibration set (Raybould refs 31–35
-// plus Black-Mould for the Gordon TNP comparison). Labels match the
-// citation rather than the internal key so the dropdown reads like the
-// literature.
+// R48 — selectable hydrophobicity scales for PSH. KD is the Raybould 2019
+// default; the rest are the spec's calibration set (Raybould refs 31–35
+// plus Black-Mould for the Gordon TNP comparison).
 const hydrophobicityScaleOptions = [
   { value: "kd", label: "Kyte-Doolittle (default)" },
   { value: "ww", label: "Wimley-White (interface)" },
@@ -202,29 +147,6 @@ const hydrophobicityScaleOptions = [
   { value: "em", label: "Eisenberg-McLachlan (consensus)" },
   { value: "bm", label: "Black-Mould (normalized)" },
 ];
-
-// Heavy / light chain dropdowns offer the chain IDs from the loaded PDB plus
-// a "none" option (so antigen chains can be left untagged).
-// When the user picks an upstream PDBs dataset, drop the legacy file upload
-// (the two inputs are mutually exclusive) and force numberingScheme to IMGT —
-// that's the domain the upstream column carries.
-function onPdbRefUpdate(ref: PlRef | undefined) {
-  if (ref) {
-    app.model.data.pdb = undefined;
-    if (!app.model.data.numberingScheme) {
-      app.model.data.numberingScheme = "imgt";
-    }
-  }
-}
-
-const chainOptions = computed(() => {
-  const opts: { value: string; label: string }[] = [{ value: "", label: "— none —" }];
-  if (!report.value) return opts;
-  for (const c of report.value.chains) {
-    opts.push({ value: c.id, label: `${c.id} (${c.residues.length} residues)` });
-  }
-  return opts;
-});
 </script>
 
 <template>
@@ -246,21 +168,6 @@ const chainOptions = computed(() => {
         :options="app.model.outputs.pdbOptions ?? []"
         label="Predicted structures (from 3D Structure Prediction)"
         clearable
-        @update:model-value="onPdbRefUpdate"
-      />
-      <p
-        v-if="!app.model.data.pdbRef"
-        :style="{ fontSize: '12px', color: '#6b7280', margin: '6px 0 12px' }"
-      >
-        Or upload a single PDB file (dev / single-structure workflow):
-      </p>
-      <PlFileInput
-        v-if="!app.model.data.pdbRef"
-        v-model="app.model.data.pdb"
-        label="PDB file"
-        :extensions="['.pdb']"
-        placeholder="Drop a .pdb file"
-        clearable
       />
 
       <div
@@ -277,21 +184,22 @@ const chainOptions = computed(() => {
           :options="numberingSchemeOptions"
           label="Numbering scheme"
         />
-        <PlDropdown
+        <PlTextField
           v-model="app.model.data.heavyChainId"
-          :options="chainOptions"
-          label="Heavy chain"
+          label="Heavy chain override"
+          placeholder="auto from REMARK 99"
         />
-        <PlDropdown
+        <PlTextField
           v-model="app.model.data.lightChainId"
-          :options="chainOptions"
-          label="Light chain"
+          label="Light chain override"
+          placeholder="auto from REMARK 99"
         />
       </div>
       <p :style="{ fontSize: '12px', color: '#6b7280', marginTop: '0', marginBottom: '12px' }">
-        Region weighting (R19) on motif scores is applied only when a scheme and at least one of
-        heavy/light is set. Antigen chains (and any chain not mapped to H or L) get
-        <code>region = "-"</code> and the neutral weight.
+        Heavy / light chain letters are auto-detected from each PDB's
+        <code>REMARK 99 PLATFORMA CDR*</code> records (spec R9, emitted by upstream IMGT-numbered
+        ImmuneBuilder PDBs). Set the override fields to a single chain letter (e.g. <code>A</code>)
+        only when REMARK 99 is absent and you need to manually map H / L.
       </p>
 
       <PlAccordionSection label="Advanced thresholds">
@@ -346,169 +254,6 @@ const chainOptions = computed(() => {
         </p>
       </PlAccordionSection>
     </PlSlideModal>
-
-    <div v-if="report">
-      <p
-        v-if="app.model.data.pdbRef"
-        :style="{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }"
-      >
-        Note: stats panel + residue map below are populated from a single liabilities.json. On the
-        predicted-structures path each clonotype has its own report — multi-clonotype stats /
-        per-row drill-down is the next UI slice. The motif and cysteine tables already show all
-        clonotypes.
-      </p>
-      <table
-        :style="{
-          fontSize: '15px',
-          color: '#374151',
-          background: 'rgba(148, 163, 184, 0.08)',
-          border: '1px solid rgba(148, 163, 184, 0.25)',
-          borderRadius: '4px',
-          padding: '4px',
-          marginBottom: '16px',
-          borderCollapse: 'separate',
-          borderSpacing: '0',
-        }"
-      >
-        <tbody>
-          <tr :title="`Spec R7 — auto-detected from chain count`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              Mode (R7)
-            </td>
-            <td :style="{ padding: '8px 12px' }">{{ mode }}</td>
-          </tr>
-          <tr :title="`Spec R38 — surfacedMotifCount, confidenceGatedMotifCount`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              Surface-exposed motifs
-            </td>
-            <td :style="{ padding: '8px 12px' }">
-              {{ surfacedMotifCount }}
-              <span :style="{ color: '#6b7280' }">
-                ({{ confidenceGatedMotifCount }} confidence-gated)
-              </span>
-            </td>
-          </tr>
-          <tr :title="`Sum of non-gated motif weightedScore (spec R20)`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              motifStructuralRiskScore
-            </td>
-            <td :style="{ padding: '8px 12px' }">{{ motifStructuralRiskScore.toFixed(1) }}</td>
-          </tr>
-          <tr :title="`Spec R41 — motif + flag + Cys contributions`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              structuralDevelopabilityScore
-            </td>
-            <td :style="{ padding: '8px 12px' }">{{ developabilityScore.toFixed(1) }}</td>
-          </tr>
-          <tr :title="`Spec R41a — over fixable items`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              structuralDevelopabilityRisk
-            </td>
-            <td :style="{ padding: '8px 12px' }">
-              <b :style="{ color: RISK_COLOR[developabilityRisk] }">{{ developabilityRisk }}</b>
-            </td>
-          </tr>
-          <tr :title="`Spec R41a — Present if any hard-to-fix / structural item`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              structuralIntegrityRisk
-            </td>
-            <td :style="{ padding: '8px 12px' }">
-              <b :style="{ color: RISK_COLOR[integrityRisk] }">{{ integrityRisk }}</b>
-            </td>
-          </tr>
-          <template v-if="surfaceMetrics">
-            <tr :title="`Spec R24 — sum of CDR loop lengths`">
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                Total CDR length
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.totalCdrLength }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.totalCdrLengthLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-            <tr :title="`Spec R25 — Patches of Surface Hydrophobicity`">
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                PSH
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.psh.toFixed(2) }}
-                <span :style="{ color: '#6b7280' }"
-                  >({{ surfaceMetrics.pshPatchCount }} pairs){{
-                    fmtLowConf(surfaceMetrics.pshLowConfidenceResidueFraction)
-                  }}</span
-                >
-              </td>
-            </tr>
-            <tr :title="`Spec R26 — Patches of Positive Charge`">
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                PPC
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.ppc.toFixed(2) }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.ppcLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-            <tr :title="`Spec R26 — Patches of Negative Charge`">
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                PNC
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.pnc.toFixed(2) }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.pncLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-            <tr
-              v-if="surfaceMetrics.mode === 'TAP' && surfaceMetrics.sfvcsp != null"
-              :title="`Spec R28 — Symmetry of Fv Charges Product`"
-            >
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                SFvCSP
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.sfvcsp.toFixed(2) }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.sfvcspLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-            <tr
-              v-if="surfaceMetrics.mode === 'TNP' && surfaceMetrics.cdrh3Compactness != null"
-              :title="`Spec R30 — CDRH3 compactness (length / ρ, IMGT anchors)`"
-            >
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                CDRH3 compactness
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.cdrh3Compactness.toFixed(3) }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.cdrh3CompactnessLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-
-      <PdbLiabilityMap :chains="report.chains" :motifs="report.motifs" />
-    </div>
 
     <!-- Spec R44 — run-summary alert: >10% of clonotypes have any red flag. -->
     <PlAlert

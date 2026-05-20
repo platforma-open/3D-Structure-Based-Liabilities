@@ -2,68 +2,23 @@
 //
 // 3D Structure-Based Liabilities — workflow entry point.
 //
-// The workflow has two execution paths, picked in wf.body based on whether
-// the user wired an upstream PDB ResourceMap or uploaded a single file.
-//
-//   PrimaryRef path (Spec R1–R6, default for production runs)
-//     • Triggered when `args.pdbRef` resolves a `pl7.app/structure/pdb`
-//       PColumn from the result pool.
-//     • Uses `pframes.processColumn` to iterate per-clonotype: for each
-//       row in the upstream ResourceMap, fire the `process-pdb` body
-//       template with that clonotype's PDB file as input.
-//     • Output PFrames carry the `pl7.app/vdj/scClonotypeKey` axis
-//       automatically (processColumn prepends input axes).
-//
-//   Legacy single-PDB path (dev fixtures like 1N8Z)
-//     • Triggered when `args.pdb` is set and there's no PrimaryRef.
-//     • Runs the same liabilities software ONCE via `exec.builder`, then
-//       imports the resulting parquet files via `processWorkdir` →
-//       `:pt.import-dir`. Outputs carry a placeholder `structureId`
-//       String axis instead of the clonotype key.
-//
-// Both paths emit identical PColumn shapes (R37/R38) so downstream
-// consumers (Lead Selection, etc.) see the same contract regardless of
-// which path produced them. R43 trace step is attached to every output
-// via processColumn's `traceSteps` option (PrimaryRef path) or the
-// `domain.pl7.app/blockId` annotation (legacy path).
+// PrimaryRef path only (Spec R1–R6). `args.pdbRef` resolves a
+// `pl7.app/structure/pdb` PColumn from the result pool — typically
+// emitted by the 3D Structure Prediction block. `pframes.processColumn`
+// iterates per clonotype: for each row in the upstream ResourceMap, fire
+// the `process-pdb` body template with that clonotype's PDB as input.
+// Output PFrames carry the `pl7.app/vdj/scClonotypeKey` axis automatically
+// (processColumn prepends input axes). R43 trace step is attached via
+// processColumn's `traceSteps` option.
 
 wf := import("@platforma-sdk/workflow-tengo:workflow")
-file := import("@platforma-sdk/workflow-tengo:file")
-exec := import("@platforma-sdk/workflow-tengo:exec")
 assets := import("@platforma-sdk/workflow-tengo:assets")
 pframes := import("@platforma-sdk/workflow-tengo:pframes")
-ptUtil := import("@platforma-sdk/workflow-tengo:pt.util")
 smart := import("@platforma-sdk/workflow-tengo:smart")
 
 specs := import(":specs")
 
-liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-based-liabilities.software:liabilities")
-ptImportDirTpl := assets.importTemplate("@platforma-sdk/workflow-tengo:pt.import-dir")
 processPdbTpl := assets.importTemplate(":process-pdb")
-
-// Build a PFrame from one of the legacy-path `processWorkdir` results
-// (motifs / cysteines / scores). Each call site differs only in the
-// column-ids list, the per-column spec dict, the axes, and the
-// processWorkdir output bucket — everything else (PColumn kind, blockId
-// domain, futureInputField wiring) is identical, so this helper keeps
-// the wf.body legacy branch readable.
-buildLegacyPFrame := func(blockId, frameName, processorResult, columnIds, columnSpecs, axesSpec) {
-	builder := pframes.pFrameBuilder()
-	for colId in columnIds {
-		raw := columnSpecs[colId]
-		spec := {
-			kind: "PColumn",
-			valueType: raw.valueType,
-			name: raw.name,
-			domain: { "pl7.app/blockId": blockId },
-			annotations: raw.annotations,
-			axesSpec: axesSpec
-		}
-		columnRef := ptUtil.makeFrameColumnRef(frameName, colId)
-		builder.add(colId, spec, processorResult.getFutureInputField(columnRef))
-	}
-	return builder.build()
-}
 
 // Spec R43 trace step — identifies this block in the per-column trace
 // chain when downstream blocks consume our PFrames.
@@ -74,22 +29,13 @@ traceStep := {
 	label: "3D Structure-Based Liabilities"
 }
 
-// Spec R1-R6 — when pdbRef is set (PrimaryRef path), resolve the upstream
-// `pl7.app/structure/pdb` PColumn here so the wf.body branch below can
-// iterate per clonotype. wf.prepare runs once before wf.body and is the
-// only place we can fetch external PColumns via wf.resolve.
-//
-// `errIfMissing: false` keeps the workflow alive when:
-//   • no ref is selected at all (legacy single-PDB upload path)
-//   • the ref is selected but the upstream block hasn't run yet
-// In both cases `args.resolvedPdb` ends up undefined and wf.body falls
-// through to the legacy path.
+// Spec R1-R6 — resolve the upstream `pl7.app/structure/pdb` PColumn here
+// so the wf.body branch below can iterate per clonotype. wf.prepare runs
+// once before wf.body and is the only place we can fetch external
+// PColumns via wf.resolve.
 wf.prepare(func(args) {
-	if is_undefined(args.pdbRef) || args.pdbRef == undefined {
-		return {}
-	}
 	return {
-		resolvedPdb: wf.resolve(args.pdbRef, { errIfMissing: false })
+		resolvedPdb: wf.resolve(args.pdbRef, { errIfMissing: true })
 	}
 })
 
@@ -97,210 +43,124 @@ wf.body(func(args) {
 	blockId := wf.blockId().getDataAsJson()
 	trace := { type: traceStep.type, id: blockId, importance: traceStep.importance, label: traceStep.label }
 
-	// ──────────────── PrimaryRef path (Spec R1-R6) ────────────────
-	// args.resolvedPdb is populated by wf.prepare when args.pdbRef is set;
-	// it carries the upstream `pl7.app/structure/pdb` ResourceMap PColumn
-	// (single axis: pl7.app/vdj/scClonotypeKey, valueType File).
-	if !is_undefined(args.resolvedPdb) {
-		pdbCol := args.resolvedPdb
+	pdbCol := args.resolvedPdb
 
-		motifsXsv := specs.buildMotifsXsvSettings(blockId)
-		cysXsv := specs.buildCysXsvSettings(blockId)
-		scoresXsv := specs.buildScoresXsvSettings(blockId)
+	motifsXsv := specs.buildMotifsXsvSettings(blockId)
+	cysXsv := specs.buildCysXsvSettings(blockId)
+	scoresXsv := specs.buildScoresXsvSettings(blockId)
 
-		// Per-row body inputs. processColumn's body template inputs must be
-		// pl7 resources (handles), not raw Tengo values — `smart.createJsonResource`
-		// wraps each scalar into a JSON-typed resource that the body template
-		// reads back via `inputs.<name>`. Empty-string fallback for optional
-		// args keeps the body's `is_undefined` guard simple (the empty string
-		// distinguishes "user left it blank" from missing input).
-		bodyExtra := {
-			numberingScheme: smart.createJsonResource(is_undefined(args.numberingScheme) ? "" : args.numberingScheme),
-			heavyChainId: smart.createJsonResource(is_undefined(args.heavyChainId) ? "" : args.heavyChainId),
-			lightChainId: smart.createJsonResource(is_undefined(args.lightChainId) ? "" : args.lightChainId),
-			rsasaBuriedCutoff: smart.createJsonResource(args.rsasaBuriedCutoff),
-			frConfThresh: smart.createJsonResource(args.frConfThresh),
-			cdrConfThresh: smart.createJsonResource(args.cdrConfThresh),
-			hydrophobicityScale: smart.createJsonResource(is_undefined(args.hydrophobicityScale) ? "" : args.hydrophobicityScale)
-		}
+	// Per-row body inputs. processColumn's body template inputs must be
+	// pl7 resources (handles), not raw Tengo values — `smart.createJsonResource`
+	// wraps each scalar into a JSON-typed resource that the body template
+	// reads back via `inputs.<name>`. Empty-string fallback for optional
+	// args keeps the body's `is_undefined` guard simple (the empty string
+	// distinguishes "user left it blank" from missing input).
+	bodyExtra := {
+		numberingScheme: smart.createJsonResource(is_undefined(args.numberingScheme) ? "" : args.numberingScheme),
+		heavyChainId: smart.createJsonResource(is_undefined(args.heavyChainId) ? "" : args.heavyChainId),
+		lightChainId: smart.createJsonResource(is_undefined(args.lightChainId) ? "" : args.lightChainId),
+		rsasaBuriedCutoff: smart.createJsonResource(args.rsasaBuriedCutoff),
+		frConfThresh: smart.createJsonResource(args.frConfThresh),
+		cdrConfThresh: smart.createJsonResource(args.cdrConfThresh),
+		hydrophobicityScale: smart.createJsonResource(is_undefined(args.hydrophobicityScale) ? "" : args.hydrophobicityScale)
+	}
 
-		processResult := pframes.processColumn(
-			{ spec: pdbCol.spec, data: pdbCol.data },
-			processPdbTpl,
-			[
-				{
-					type: "Resource",
-					name: "liabilitiesJson",
-					spec: {
-						kind: "PColumn",
-						name: "pl7.app/liabilities/perClonotypeReport",
-						domain: { "pl7.app/blockId": blockId },
-						valueType: "File",
-						axesSpec: [],
-						annotations: {
-							"pl7.app/label": "Liabilities JSON report",
-							"pl7.app/table/visibility": "hidden"
-						}
-					}
-				},
-				{
-					type: "Xsv",
-					xsvType: "parquet",
-					settings: motifsXsv,
-					name: "motifs",
-					path: ["motifsParquet"],
-					mem: "2GiB",
-					cpu: 1
-				},
-				{
-					type: "Xsv",
-					xsvType: "parquet",
-					settings: cysXsv,
-					name: "cysteines",
-					path: ["cysParquet"],
-					mem: "2GiB",
-					cpu: 1
-				},
-				{
-					type: "Xsv",
-					xsvType: "parquet",
-					settings: scoresXsv,
-					name: "scores",
-					path: ["scoresParquet"],
-					mem: "2GiB",
-					cpu: 1
-				}
-			],
+	processResult := pframes.processColumn(
+		{ spec: pdbCol.spec, data: pdbCol.data },
+		processPdbTpl,
+		[
 			{
-				traceSteps: [trace],
-				extra: bodyExtra
-			}
-		)
-
-		// Build PFrames from processColumn outputs. processResult.output()
-		// for Xsv-typed targets returns a map of `{colId: {spec, data}}`.
-		motifsPfBuilder := pframes.pFrameBuilder()
-		for colId in specs.motifColumnIds {
-			out := processResult.output("motifs", colId)
-			motifsPfBuilder.add(colId, out.spec, out.data)
-		}
-		motifsPf := motifsPfBuilder.build()
-
-		cysPfBuilder := pframes.pFrameBuilder()
-		for colId in specs.cysColumnIds {
-			out := processResult.output("cysteines", colId)
-			cysPfBuilder.add(colId, out.spec, out.data)
-		}
-		cysPf := cysPfBuilder.build()
-
-		scoresPfBuilder := pframes.pFrameBuilder()
-		for colId in specs.scoresColumnIds {
-			out := processResult.output("scores", colId)
-			scoresPfBuilder.add(colId, out.spec, out.data)
-		}
-		scoresPf := scoresPfBuilder.build()
-
-		// liabilitiesJson: per-clonotype File ResourceMap (axes:
-		// [scClonotypeKey], valueType: File). The UI currently reads
-		// `liabilitiesJson` as a single file's content; on the PrimaryRef
-		// path it's a per-clonotype map — UI migration is a separate task.
-		jsonsOut := processResult.output("liabilitiesJson")
-		jsonsPfBuilder := pframes.pFrameBuilder()
-		jsonsPfBuilder.add("liabilitiesJson", jsonsOut.spec, jsonsOut.data)
-		jsonsPf := jsonsPfBuilder.build()
-
-		return {
-			outputs: {
-				motifsData: pframes.exportFrame(motifsPf),
-				cysData: pframes.exportFrame(cysPf),
-				scoresData: pframes.exportFrame(scoresPf),
-				liabilitiesJsonsData: pframes.exportFrame(jsonsPf)
+				type: "Resource",
+				name: "liabilitiesJson",
+				spec: {
+					kind: "PColumn",
+					name: "pl7.app/liabilities/perClonotypeReport",
+					domain: { "pl7.app/blockId": blockId },
+					valueType: "File",
+					axesSpec: [],
+					annotations: {
+						"pl7.app/label": "Liabilities JSON report",
+						"pl7.app/table/visibility": "hidden"
+					}
+				}
 			},
-			exports: {
-				motifs: motifsPf,
-				cysteines: cysPf,
-				scores: scoresPf,
-				liabilitiesJsons: jsonsPf
+			{
+				type: "Xsv",
+				xsvType: "parquet",
+				settings: motifsXsv,
+				name: "motifs",
+				path: ["motifsParquet"],
+				mem: "2GiB",
+				cpu: 1
+			},
+			{
+				type: "Xsv",
+				xsvType: "parquet",
+				settings: cysXsv,
+				name: "cysteines",
+				path: ["cysParquet"],
+				mem: "2GiB",
+				cpu: 1
+			},
+			{
+				type: "Xsv",
+				xsvType: "parquet",
+				settings: scoresXsv,
+				name: "scores",
+				path: ["scoresParquet"],
+				mem: "2GiB",
+				cpu: 1
 			}
+		],
+		{
+			traceSteps: [trace],
+			extra: bodyExtra
 		}
-	}
+	)
 
-	// ──────────────── Legacy single-PDB upload path ────────────────
-	// Used when no PrimaryRef is selected (args.pdb is an ImportFileHandle).
-	// Same software invocation, but everything runs once.
-	pdbImport := file.importFile(args.pdb)
+	// Build PFrames from processColumn outputs. processResult.output()
+	// for Xsv-typed targets returns a map of `{colId: {spec, data}}`.
+	motifsPfBuilder := pframes.pFrameBuilder()
+	for colId in specs.motifColumnIds {
+		out := processResult.output("motifs", colId)
+		motifsPfBuilder.add(colId, out.spec, out.data)
+	}
+	motifsPf := motifsPfBuilder.build()
 
-	cmd := exec.builder().
-		software(liabilitiesSw).
-		mem("2GiB").
-		cpu(1).
-		printErrStreamToStdout().
-		addFile("input.pdb", pdbImport.file).
-		arg("--pdb").arg("input.pdb").
-		arg("--output").arg("liabilities.json").
-		arg("--motifs-pframe-dir").arg(specs.motifsFrameName).
-		arg("--cysteines-pframe-dir").arg(specs.cysFrameName).
-		arg("--scores-pframe-dir").arg(specs.scoresFrameName)
+	cysPfBuilder := pframes.pFrameBuilder()
+	for colId in specs.cysColumnIds {
+		out := processResult.output("cysteines", colId)
+		cysPfBuilder.add(colId, out.spec, out.data)
+	}
+	cysPf := cysPfBuilder.build()
 
-	if !is_undefined(args.numberingScheme) && args.numberingScheme != "" {
-		cmd = cmd.arg("--numbering-scheme").arg(args.numberingScheme)
+	scoresPfBuilder := pframes.pFrameBuilder()
+	for colId in specs.scoresColumnIds {
+		out := processResult.output("scores", colId)
+		scoresPfBuilder.add(colId, out.spec, out.data)
 	}
-	if !is_undefined(args.heavyChainId) && args.heavyChainId != "" {
-		cmd = cmd.arg("--chain-h").arg(args.heavyChainId)
-	}
-	if !is_undefined(args.lightChainId) && args.lightChainId != "" {
-		cmd = cmd.arg("--chain-l").arg(args.lightChainId)
-	}
-	if !is_undefined(args.rsasaBuriedCutoff) {
-		cmd = cmd.arg("--rsasa-buried-cutoff").arg(string(args.rsasaBuriedCutoff))
-	}
-	if !is_undefined(args.frConfThresh) {
-		cmd = cmd.arg("--fr-conf-thresh").arg(string(args.frConfThresh))
-	}
-	if !is_undefined(args.cdrConfThresh) {
-		cmd = cmd.arg("--cdr-conf-thresh").arg(string(args.cdrConfThresh))
-	}
-	if !is_undefined(args.hydrophobicityScale) && args.hydrophobicityScale != "" {
-		cmd = cmd.arg("--hydrophobicity-scale").arg(args.hydrophobicityScale)
-	}
+	scoresPf := scoresPfBuilder.build()
 
-	result := cmd.
-		saveFile("liabilities.json").
-		processWorkdir("motifsResult", ptImportDirTpl, func() {
-			m := {}
-			m[specs.motifsFrameName] = specs.motifColumnIds
-			return m
-		}()).
-		processWorkdir("cysResult", ptImportDirTpl, func() {
-			m := {}
-			m[specs.cysFrameName] = specs.cysColumnIds
-			return m
-		}()).
-		processWorkdir("scoresResult", ptImportDirTpl, func() {
-			m := {}
-			m[specs.scoresFrameName] = specs.scoresColumnIds
-			return m
-		}()).
-		run()
-
-	motifsPf := buildLegacyPFrame(
-		blockId, specs.motifsFrameName, result.getProcessorResult("motifsResult"),
-		specs.motifColumnIds, specs.motifColumnSpecs, specs.motifAxesSpec)
-	cysPf := buildLegacyPFrame(
-		blockId, specs.cysFrameName, result.getProcessorResult("cysResult"),
-		specs.cysColumnIds, specs.cysColumnSpecs, specs.cysAxesSpec)
-	scoresPf := buildLegacyPFrame(
-		blockId, specs.scoresFrameName, result.getProcessorResult("scoresResult"),
-		specs.scoresColumnIds, specs.scoresColumnSpecs, specs.scoresAxesSpecLegacy)
+	// Per-clonotype File ResourceMap (axes: [scClonotypeKey], valueType: File).
+	// Consumed by the UI's R53 detail panel — clicking a clonotype fetches
+	// its matching report blob and renders motifs / cysteines / metrics.
+	jsonsOut := processResult.output("liabilitiesJson")
+	jsonsPfBuilder := pframes.pFrameBuilder()
+	jsonsPfBuilder.add("liabilitiesJson", jsonsOut.spec, jsonsOut.data)
+	jsonsPf := jsonsPfBuilder.build()
 
 	return {
 		outputs: {
-			liabilitiesJson: file.exportFile(result.getFile("liabilities.json")),
 			motifsData: pframes.exportFrame(motifsPf),
 			cysData: pframes.exportFrame(cysPf),
 			scoresData: pframes.exportFrame(scoresPf),
-			pdbImportHandle: pdbImport.handle
+			liabilitiesJsonsData: pframes.exportFrame(jsonsPf)
 		},
-		exports: {}
+		exports: {
+			motifs: motifsPf,
+			cysteines: cysPf,
+			scores: scoresPf,
+			liabilitiesJsons: jsonsPf
+		}
 	}
 })

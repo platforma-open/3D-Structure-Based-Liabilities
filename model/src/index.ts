@@ -195,12 +195,31 @@ type BlockDataV7 = BlockDataV6 & {
   graphStateDevScoreV2: GraphMakerState;
 };
 
-/** Current shape (v8) — adds R48 hydrophobicity scale selector. Default
- * "kd" matches the Raybould 2019 PSH definition and keeps existing
- * instances numerically identical post-migration. */
-export type BlockData = BlockDataV7 & {
+/** v8 — adds R48 hydrophobicity scale selector. */
+type BlockDataV8 = BlockDataV7 & {
   hydrophobicityScale: HydrophobicityScale;
 };
+
+/** Current shape (v9) — strips the legacy single-PDB path's `pdb`
+ * field, the three persisted-but-unused PlAgDataTable v-model states
+ * (`tableState` / `cysTableState` / `scoresTableState`), and the six
+ * GraphMakerState fields left over from the GraphMaker→SVG histogram
+ * migration. Tables now use UI-local state refs and the histograms are
+ * hand-rolled SVG so none of these blobs need to round-trip through
+ * persistence. */
+export type BlockData = Omit<
+  BlockDataV8,
+  | "pdb"
+  | "tableState"
+  | "cysTableState"
+  | "scoresTableState"
+  | "graphStatePshV2"
+  | "graphStatePpcV2"
+  | "graphStatePncV2"
+  | "graphStateSfvcspV2"
+  | "graphStateCdrh3CompactnessV2"
+  | "graphStateDevScoreV2"
+>;
 
 const initialGraphState = (title: string, fillColor: string): GraphMakerState => ({
   title,
@@ -251,16 +270,32 @@ const dataModel = new DataModelBuilder()
     ),
     graphStateDevScoreV2: initialGraphState("Developability score distribution", "#cf6e83"),
   }))
-  .migrate<BlockData>("v8", (v7) => ({
+  .migrate<BlockDataV8>("v8", (v7) => ({
     ...v7,
     hydrophobicityScale: "kd",
   }))
+  .migrate<BlockData>("v9", (v8) => {
+    // Strip the persisted-but-unused fields. Destructuring discards them
+    // from the object literal returned to downstream code; the runtime
+    // payload effectively shrinks for every block instance that lands
+    // here. `_unused` names silence the no-unused-vars lint.
+    const {
+      pdb: _pdb,
+      tableState: _t1,
+      cysTableState: _t2,
+      scoresTableState: _t3,
+      graphStatePshV2: _g1,
+      graphStatePpcV2: _g2,
+      graphStatePncV2: _g3,
+      graphStateSfvcspV2: _g4,
+      graphStateCdrh3CompactnessV2: _g5,
+      graphStateDevScoreV2: _g6,
+      ...rest
+    } = v8;
+    return rest;
+  })
   .init(() => ({
-    pdb: undefined,
     pdbRef: undefined,
-    tableState: createPlDataTableStateV2(),
-    cysTableState: createPlDataTableStateV2(),
-    scoresTableState: createPlDataTableStateV2(),
     numberingScheme: "",
     heavyChainId: "",
     lightChainId: "",
@@ -268,29 +303,17 @@ const dataModel = new DataModelBuilder()
     frConfThresh: 4.0,
     cdrConfThresh: 6.0,
     hydrophobicityScale: "kd",
-    graphStatePshV2: initialGraphState("PSH distribution", "#7da3d1"),
-    graphStatePpcV2: initialGraphState("PPC distribution", "#e5a06f"),
-    graphStatePncV2: initialGraphState("PNC distribution", "#82c79c"),
-    graphStateSfvcspV2: initialGraphState("SFvCSP distribution (Fv)", "#bb86d6"),
-    graphStateCdrh3CompactnessV2: initialGraphState(
-      "CDRH3 compactness distribution (VHH)",
-      "#d6b06b",
-    ),
-    graphStateDevScoreV2: initialGraphState("Developability score distribution", "#cf6e83"),
   }));
 
 export const platforma = BlockModelV3.create(dataModel)
   .args((data) => {
-    // Spec R1-R6 — when a predicted-structures dataset is selected, pdbRef
-    // takes priority and the workflow's wf.prepare hook resolves the upstream
-    // `pl7.app/structure/pdb` PColumn, then iterates per clonotype via
-    // `pframes.processColumn`. The legacy single-PDB upload (data.pdb) is
-    // kept for local dev fixtures (e.g. 1N8Z) and used when no ref is set.
-    if (!data.pdbRef && !data.pdb) {
-      throw new Error("Pick a predicted structures dataset (preferred) or upload a PDB file");
+    // Spec R1-R6 — the user picks a predicted-structures dataset from the
+    // dropdown; the workflow's wf.prepare resolves it into per-clonotype
+    // PDBs and iterates via `pframes.processColumn`.
+    if (!data.pdbRef) {
+      throw new Error("Pick a predicted structures dataset");
     }
     return {
-      pdb: data.pdb,
       pdbRef: data.pdbRef,
       numberingScheme: data.numberingScheme,
       heavyChainId: data.heavyChainId,
@@ -313,18 +336,6 @@ export const platforma = BlockModelV3.create(dataModel)
       },
     ]),
   )
-  // `liabilitiesJson` and `pdbImportHandle` are only emitted on the legacy
-  // single-PDB upload path. On the PrimaryRef path the workflow exposes a
-  // per-clonotype File ResourceMap instead, and these field lookups would
-  // raise "field not found". try/catch keeps the model surface clean and
-  // lets the UI fall back to the table-only view.
-  .output("liabilitiesJson", (ctx) => {
-    try {
-      return ctx.outputs?.resolve("liabilitiesJson")?.getFileContentAsString();
-    } catch {
-      return undefined;
-    }
-  })
   // Pass `undefined` for tableState (instead of ctx.data.tableState) so
   // grid state writes via the UI's v-model don't trigger model re-runs —
   // that feedback loop kept AG-Grid in placeholder state on multi-table
@@ -412,17 +423,6 @@ export const platforma = BlockModelV3.create(dataModel)
     ];
     return createPlDataTableV2(ctx, allCols, undefined);
   })
-  .output(
-    "pdbImportProgress",
-    (ctx) => {
-      try {
-        return ctx.outputs?.resolve("pdbImportHandle")?.getImportProgress();
-      } catch {
-        return undefined;
-      }
-    },
-    { isActive: true },
-  )
   // Spec R54 — per-metric histograms. One PFrame + Spec output pair per
   // metric. Splitting avoids GraphMaker pre-filling extra slots
   // (color/facet) with sibling columns when given a multi-column source.
@@ -601,17 +601,16 @@ export const platforma = BlockModelV3.create(dataModel)
   .subtitle((ctx) => {
     if (!ctx.args) return "";
     const a = ctx.args;
-    const inputMode = a.pdbRef ? "predicted-structures" : a.pdb ? "single-PDB" : "no input";
     const scheme = a.numberingScheme || "scheme unset";
     const chains: string[] = [];
     if (a.heavyChainId) chains.push(`H=${a.heavyChainId}`);
     if (a.lightChainId) chains.push(`L=${a.lightChainId}`);
-    const chainPart = chains.length ? chains.join("/") : "chains unset";
+    const chainPart = chains.length ? chains.join("/") : "chains auto-detect";
     const scaleSuffix =
       a.hydrophobicityScale && a.hydrophobicityScale !== "kd"
         ? `, hScale=${a.hydrophobicityScale}`
         : "";
-    return `${inputMode} · ${scheme}, ${chainPart}, rSASA<${a.rsasaBuriedCutoff}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å${scaleSuffix}`;
+    return `${scheme}, ${chainPart}, rSASA<${a.rsasaBuriedCutoff}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å${scaleSuffix}`;
   })
   .done();
 
