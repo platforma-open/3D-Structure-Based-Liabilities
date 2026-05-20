@@ -32,6 +32,69 @@ thresholdsFor := func(colName, values) {
 	return string(json.encode(entries))
 }
 
+// ──────────── PColumn spec helpers (scores frame) ────────────
+//
+// The scores PFrame carries ~25 columns that fall into three repetitive
+// shapes. Each helper below collapses one of those shapes into a single
+// call site so the column → label → threshold mapping is reviewable as a
+// table instead of buried in 10 lines of dict-per-column boilerplate.
+// New columns added through these helpers automatically inherit the spec's
+// visibility / format / isScore conventions.
+
+// Raw Double surface metric (PSH, PPC, PNC, SFvCSP, CDRH3 compactness).
+// Always hidden by default per R51 ("show all" reveals); carries the
+// Raybould 2019 / Gordon 2025 amber/red threshold values as a graph
+// annotation (R39 / R54).
+metricColumnSpec := func(name, label, format, orderPriority, thresholdValues) {
+	return {
+		valueType: "Double",
+		name: name,
+		annotations: {
+			"pl7.app/label": label,
+			"pl7.app/format": format,
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": orderPriority,
+			"pl7.app/graph/thresholds": thresholdsFor(name, thresholdValues)
+		}
+	}
+}
+
+// R36 per-metric low-confidence-residue fraction. Always Double, always
+// hidden by default, never carries threshold annotations (fractions don't
+// have Raybould bands).
+lowConfFractionSpec := func(name, label, orderPriority) {
+	return {
+		valueType: "Double",
+		name: name,
+		annotations: {
+			"pl7.app/label": label,
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": orderPriority
+		}
+	}
+}
+
+// R39 three-band flag column. Always String ("green" / "amber" / "red" /
+// "-" sentinel when inapplicable), always visible by default per R51,
+// always carries the apo-vs-bound tooltip and isScore so PlAgDataTable
+// styles the cell. Identical shape per flag; only label / orderPriority
+// differ.
+_FLAG_DESCRIPTION := "Flag reflects predicted apo conformation; bound conformation may differ."
+flagColumnSpec := func(name, label, orderPriority) {
+	return {
+		valueType: "String",
+		name: name,
+		annotations: {
+			"pl7.app/label": label,
+			"pl7.app/isScore": "true",
+			"pl7.app/description": _FLAG_DESCRIPTION,
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": orderPriority
+		}
+	}
+}
+
 // ──────────────── Motifs PFrame ────────────────
 
 motifAxesSpec := [
@@ -403,6 +466,8 @@ scoresColumnSpecs := {
 			"pl7.app/table/orderPriority": "1040"
 		}
 	},
+	// R24/R29 — total CDR length. Long-valued (residue count), so it can't
+	// use metricColumnSpec which is Double-only.
 	totalCdrLength: {
 		valueType: "Long",
 		name: "pl7.app/liabilities/totalCdrLength",
@@ -413,17 +478,11 @@ scoresColumnSpecs := {
 			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/totalCdrLength", [54, 60])
 		}
 	},
-	psh: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/psh",
-		annotations: {
-			"pl7.app/label": "PSH",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "860",
-			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/psh", [83.84, 100.71, 156.20, 173.85])
-		}
-	},
+	// R25 PSH — surface-hydrophobicity patch score; Raybould 2019 Table 2.
+	psh: metricColumnSpec(
+		"pl7.app/liabilities/psh", "PSH", ".2f", "860",
+		[83.84, 100.71, 156.20, 173.85]),
+	// R25 — diagnostic Long count of distinct patches discovered (not score).
 	pshPatchCount: {
 		valueType: "Long",
 		name: "pl7.app/liabilities/pshPatchCount",
@@ -433,176 +492,53 @@ scoresColumnSpecs := {
 			"pl7.app/table/orderPriority": "850"
 		}
 	},
-	ppc: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/ppc",
-		annotations: {
-			"pl7.app/label": "PPC",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "840",
-			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/ppc", [1.25, 3.16])
-		}
-	},
-	pnc: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/pnc",
-		annotations: {
-			"pl7.app/label": "PNC",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "830",
-			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/pnc", [1.84, 3.50])
-		}
-	},
-	sfvcsp: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/sfvcsp",
-		annotations: {
-			"pl7.app/label": "SFvCSP",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "820",
-			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/sfvcsp", [-20.40, -6.30])
-		}
-	},
-	cdrh3Compactness: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/cdrh3Compactness",
-		annotations: {
-			"pl7.app/label": "CDRH3 compactness",
-			"pl7.app/format": ".3f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "810",
-			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/cdrh3Compactness", [0.56, 0.82, 1.57, 1.61])
-		}
-	},
-	totalCdrLengthLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/totalCdrLengthLowConfidenceResidueFraction",
-		annotations: {
-			"pl7.app/label": "Total CDR length low-conf fraction",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "790"
-		}
-	},
-	pshLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/pshLowConfidenceResidueFraction",
-		annotations: {
-			"pl7.app/label": "PSH low-conf fraction",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "780"
-		}
-	},
-	ppcLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/ppcLowConfidenceResidueFraction",
-		annotations: {
-			"pl7.app/label": "PPC low-conf fraction",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "770"
-		}
-	},
-	pncLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/pncLowConfidenceResidueFraction",
-		annotations: {
-			"pl7.app/label": "PNC low-conf fraction",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "760"
-		}
-	},
-	sfvcspLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/sfvcspLowConfidenceResidueFraction",
-		annotations: {
-			"pl7.app/label": "SFvCSP low-conf fraction",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "750"
-		}
-	},
-	cdrh3CompactnessLowConfidenceResidueFraction: {
-		valueType: "Double",
-		name: "pl7.app/liabilities/cdrh3CompactnessLowConfidenceResidueFraction",
-		annotations: {
-			"pl7.app/label": "CDRH3 compactness low-conf fraction",
-			"pl7.app/format": ".2f",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "740"
-		}
-	},
-	totalCdrLengthFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/totalCdrLengthFlag",
-		annotations: {
-			"pl7.app/label": "Total CDR length flag",
-			"pl7.app/isScore": "true",
-			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "930"
-		}
-	},
-	pshFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/pshFlag",
-		annotations: {
-			"pl7.app/label": "PSH flag",
-			"pl7.app/isScore": "true",
-			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "970"
-		}
-	},
-	ppcFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/ppcFlag",
-		annotations: {
-			"pl7.app/label": "PPC flag",
-			"pl7.app/isScore": "true",
-			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "960"
-		}
-	},
-	pncFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/pncFlag",
-		annotations: {
-			"pl7.app/label": "PNC flag",
-			"pl7.app/isScore": "true",
-			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "950"
-		}
-	},
-	sfvcspFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/sfvcspFlag",
-		annotations: {
-			"pl7.app/label": "SFvCSP flag",
-			"pl7.app/isScore": "true",
-			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "940"
-		}
-	},
-	cdrh3CompactnessFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/cdrh3CompactnessFlag",
-		annotations: {
-			"pl7.app/label": "CDRH3 compactness flag",
-			"pl7.app/isScore": "true",
-			"pl7.app/description": "Flag reflects predicted apo conformation; bound conformation may differ.",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "940"
-		}
-	}
+	// R26 PPC / PNC — positive / negative patch scores.
+	ppc: metricColumnSpec(
+		"pl7.app/liabilities/ppc", "PPC", ".2f", "840", [1.25, 3.16]),
+	pnc: metricColumnSpec(
+		"pl7.app/liabilities/pnc", "PNC", ".2f", "830", [1.84, 3.50]),
+	// R28 SFvCSP — paired-Fv only. Lower = worse (asymmetric charges →
+	// viscosity).
+	sfvcsp: metricColumnSpec(
+		"pl7.app/liabilities/sfvcsp", "SFvCSP", ".2f", "820", [-20.40, -6.30]),
+	// R30 CDRH3 compactness — VHH only. Bidirectional risk.
+	cdrh3Compactness: metricColumnSpec(
+		"pl7.app/liabilities/cdrh3Compactness", "CDRH3 compactness", ".3f", "810",
+		[0.56, 0.82, 1.57, 1.61]),
+
+	// R36 per-metric low-confidence residue fractions.
+	totalCdrLengthLowConfidenceResidueFraction: lowConfFractionSpec(
+		"pl7.app/liabilities/totalCdrLengthLowConfidenceResidueFraction",
+		"Total CDR length low-conf fraction", "790"),
+	pshLowConfidenceResidueFraction: lowConfFractionSpec(
+		"pl7.app/liabilities/pshLowConfidenceResidueFraction",
+		"PSH low-conf fraction", "780"),
+	ppcLowConfidenceResidueFraction: lowConfFractionSpec(
+		"pl7.app/liabilities/ppcLowConfidenceResidueFraction",
+		"PPC low-conf fraction", "770"),
+	pncLowConfidenceResidueFraction: lowConfFractionSpec(
+		"pl7.app/liabilities/pncLowConfidenceResidueFraction",
+		"PNC low-conf fraction", "760"),
+	sfvcspLowConfidenceResidueFraction: lowConfFractionSpec(
+		"pl7.app/liabilities/sfvcspLowConfidenceResidueFraction",
+		"SFvCSP low-conf fraction", "750"),
+	cdrh3CompactnessLowConfidenceResidueFraction: lowConfFractionSpec(
+		"pl7.app/liabilities/cdrh3CompactnessLowConfidenceResidueFraction",
+		"CDRH3 compactness low-conf fraction", "740"),
+
+	// R39 three-band threshold flags. Visible by default per R51.
+	totalCdrLengthFlag: flagColumnSpec(
+		"pl7.app/liabilities/totalCdrLengthFlag", "Total CDR length flag", "930"),
+	pshFlag: flagColumnSpec(
+		"pl7.app/liabilities/pshFlag", "PSH flag", "970"),
+	ppcFlag: flagColumnSpec(
+		"pl7.app/liabilities/ppcFlag", "PPC flag", "960"),
+	pncFlag: flagColumnSpec(
+		"pl7.app/liabilities/pncFlag", "PNC flag", "950"),
+	sfvcspFlag: flagColumnSpec(
+		"pl7.app/liabilities/sfvcspFlag", "SFvCSP flag", "940"),
+	cdrh3CompactnessFlag: flagColumnSpec(
+		"pl7.app/liabilities/cdrh3CompactnessFlag", "CDRH3 compactness flag", "940")
 }
 
 scoresColumnIds := [

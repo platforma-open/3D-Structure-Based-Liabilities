@@ -52,31 +52,39 @@ self.body(func(inputs) {
 		arg("--cysteines-pframe-dir").arg("cysteines_pf").
 		arg("--scores-pframe-dir").arg("scores_pf")
 
-	// Optional knobs — passed via processColumn `extra` as JSON scalar
-	// resources. is_undefined guards each so an unset value just omits the
-	// CLI flag (the python side already has spec-calibrated defaults).
-	if !is_undefined(inputs.numberingScheme) && inputs.numberingScheme != "" {
-		cmd = cmd.arg("--numbering-scheme").arg(inputs.numberingScheme)
+	// Optional CLI knobs — appended to `cmd` only when the corresponding
+	// `bodyExtra` field was set by main.tpl.tengo. Each row is
+	//   [<inputs key>, <CLI flag>]
+	// Empty strings (default for string args when the user left the
+	// setting blank) skip the flag so the python falls through to its
+	// spec-calibrated default. Numeric args (rsasa / fr / cdr) are always
+	// emitted when present because every numeric value is meaningful.
+	stringOptArgs := [
+		["numberingScheme", "--numbering-scheme"],
+		["heavyChainId", "--chain-h"],
+		["lightChainId", "--chain-l"],
+		["hydrophobicityScale", "--hydrophobicity-scale"]    // R48
+	]
+	for entry in stringOptArgs {
+		key := entry[0]
+		flag := entry[1]
+		v := inputs[key]
+		if !is_undefined(v) && v != "" {
+			cmd = cmd.arg(flag).arg(v)
+		}
 	}
-	if !is_undefined(inputs.heavyChainId) && inputs.heavyChainId != "" {
-		cmd = cmd.arg("--chain-h").arg(inputs.heavyChainId)
-	}
-	if !is_undefined(inputs.lightChainId) && inputs.lightChainId != "" {
-		cmd = cmd.arg("--chain-l").arg(inputs.lightChainId)
-	}
-	if !is_undefined(inputs.rsasaBuriedCutoff) {
-		cmd = cmd.arg("--rsasa-buried-cutoff").arg(string(inputs.rsasaBuriedCutoff))
-	}
-	if !is_undefined(inputs.frConfThresh) {
-		cmd = cmd.arg("--fr-conf-thresh").arg(string(inputs.frConfThresh))
-	}
-	if !is_undefined(inputs.cdrConfThresh) {
-		cmd = cmd.arg("--cdr-conf-thresh").arg(string(inputs.cdrConfThresh))
-	}
-	// R48 — pass-through. is_undefined guard keeps legacy callers (still
-	// emitting bodyExtra without this key) on the python default ("kd").
-	if !is_undefined(inputs.hydrophobicityScale) && inputs.hydrophobicityScale != "" {
-		cmd = cmd.arg("--hydrophobicity-scale").arg(inputs.hydrophobicityScale)
+	numericOptArgs := [
+		["rsasaBuriedCutoff", "--rsasa-buried-cutoff"],   // R12
+		["frConfThresh", "--fr-conf-thresh"],             // R34
+		["cdrConfThresh", "--cdr-conf-thresh"]            // R34
+	]
+	for entry in numericOptArgs {
+		key := entry[0]
+		flag := entry[1]
+		v := inputs[key]
+		if !is_undefined(v) {
+			cmd = cmd.arg(flag).arg(string(v))
+		}
 	}
 
 	result := cmd.

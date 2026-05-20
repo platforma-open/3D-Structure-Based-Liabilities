@@ -1,4 +1,32 @@
 // vim: filetype=go
+//
+// 3D Structure-Based Liabilities — workflow entry point.
+//
+// The workflow has two execution paths, picked in wf.body based on whether
+// the user wired an upstream PDB ResourceMap or uploaded a single file.
+//
+//   PrimaryRef path (Spec R1–R6, default for production runs)
+//     • Triggered when `args.pdbRef` resolves a `pl7.app/structure/pdb`
+//       PColumn from the result pool.
+//     • Uses `pframes.processColumn` to iterate per-clonotype: for each
+//       row in the upstream ResourceMap, fire the `process-pdb` body
+//       template with that clonotype's PDB file as input.
+//     • Output PFrames carry the `pl7.app/vdj/scClonotypeKey` axis
+//       automatically (processColumn prepends input axes).
+//
+//   Legacy single-PDB path (dev fixtures like 1N8Z)
+//     • Triggered when `args.pdb` is set and there's no PrimaryRef.
+//     • Runs the same liabilities software ONCE via `exec.builder`, then
+//       imports the resulting parquet files via `processWorkdir` →
+//       `:pt.import-dir`. Outputs carry a placeholder `structureId`
+//       String axis instead of the clonotype key.
+//
+// Both paths emit identical PColumn shapes (R37/R38) so downstream
+// consumers (Lead Selection, etc.) see the same contract regardless of
+// which path produced them. R43 trace step is attached to every output
+// via processColumn's `traceSteps` option (PrimaryRef path) or the
+// `domain.pl7.app/blockId` annotation (legacy path).
+
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 file := import("@platforma-sdk/workflow-tengo:file")
 exec := import("@platforma-sdk/workflow-tengo:exec")
@@ -13,6 +41,30 @@ liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-base
 ptImportDirTpl := assets.importTemplate("@platforma-sdk/workflow-tengo:pt.import-dir")
 processPdbTpl := assets.importTemplate(":process-pdb")
 
+// Build a PFrame from one of the legacy-path `processWorkdir` results
+// (motifs / cysteines / scores). Each call site differs only in the
+// column-ids list, the per-column spec dict, the axes, and the
+// processWorkdir output bucket — everything else (PColumn kind, blockId
+// domain, futureInputField wiring) is identical, so this helper keeps
+// the wf.body legacy branch readable.
+buildLegacyPFrame := func(blockId, frameName, processorResult, columnIds, columnSpecs, axesSpec) {
+	builder := pframes.pFrameBuilder()
+	for colId in columnIds {
+		raw := columnSpecs[colId]
+		spec := {
+			kind: "PColumn",
+			valueType: raw.valueType,
+			name: raw.name,
+			domain: { "pl7.app/blockId": blockId },
+			annotations: raw.annotations,
+			axesSpec: axesSpec
+		}
+		columnRef := ptUtil.makeFrameColumnRef(frameName, colId)
+		builder.add(colId, spec, processorResult.getFutureInputField(columnRef))
+	}
+	return builder.build()
+}
+
 // Spec R43 trace step — identifies this block in the per-column trace
 // chain when downstream blocks consume our PFrames.
 traceStep := {
@@ -23,9 +75,15 @@ traceStep := {
 }
 
 // Spec R1-R6 — when pdbRef is set (PrimaryRef path), resolve the upstream
-// `pl7.app/structure/pdb` PColumn so wf.body can iterate per clonotype.
-// `errIfMissing: false` so the legacy single-PDB upload path stays alive
-// when no ref is selected — wf.body branches on `args.resolvedPdb` presence.
+// `pl7.app/structure/pdb` PColumn here so the wf.body branch below can
+// iterate per clonotype. wf.prepare runs once before wf.body and is the
+// only place we can fetch external PColumns via wf.resolve.
+//
+// `errIfMissing: false` keeps the workflow alive when:
+//   • no ref is selected at all (legacy single-PDB upload path)
+//   • the ref is selected but the upstream block hasn't run yet
+// In both cases `args.resolvedPdb` ends up undefined and wf.body falls
+// through to the legacy path.
 wf.prepare(func(args) {
 	if is_undefined(args.pdbRef) || args.pdbRef == undefined {
 		return {}
@@ -50,9 +108,12 @@ wf.body(func(args) {
 		cysXsv := specs.buildCysXsvSettings(blockId)
 		scoresXsv := specs.buildScoresXsvSettings(blockId)
 
-		// Per-row body inputs — Tengo strings/numbers go through
-		// smart.createJsonResource so each scalar lands as a JSON-typed
-		// resource the body template can read.
+		// Per-row body inputs. processColumn's body template inputs must be
+		// pl7 resources (handles), not raw Tengo values — `smart.createJsonResource`
+		// wraps each scalar into a JSON-typed resource that the body template
+		// reads back via `inputs.<name>`. Empty-string fallback for optional
+		// args keeps the body's `is_undefined` guard simple (the empty string
+		// distinguishes "user left it blank" from missing input).
 		bodyExtra := {
 			numberingScheme: smart.createJsonResource(is_undefined(args.numberingScheme) ? "" : args.numberingScheme),
 			heavyChainId: smart.createJsonResource(is_undefined(args.heavyChainId) ? "" : args.heavyChainId),
@@ -222,57 +283,15 @@ wf.body(func(args) {
 		}()).
 		run()
 
-	motifData := result.getProcessorResult("motifsResult")
-	cysData := result.getProcessorResult("cysResult")
-	scoresData := result.getProcessorResult("scoresResult")
-
-	motifsPfBuilder := pframes.pFrameBuilder()
-	for colId in specs.motifColumnIds {
-		raw := specs.motifColumnSpecs[colId]
-		spec := {
-			kind: "PColumn",
-			valueType: raw.valueType,
-			name: raw.name,
-			domain: { "pl7.app/blockId": blockId },
-			annotations: raw.annotations,
-			axesSpec: specs.motifAxesSpec
-		}
-		columnRef := ptUtil.makeFrameColumnRef(specs.motifsFrameName, colId)
-		motifsPfBuilder.add(colId, spec, motifData.getFutureInputField(columnRef))
-	}
-	motifsPf := motifsPfBuilder.build()
-
-	cysPfBuilder := pframes.pFrameBuilder()
-	for colId in specs.cysColumnIds {
-		raw := specs.cysColumnSpecs[colId]
-		spec := {
-			kind: "PColumn",
-			valueType: raw.valueType,
-			name: raw.name,
-			domain: { "pl7.app/blockId": blockId },
-			annotations: raw.annotations,
-			axesSpec: specs.cysAxesSpec
-		}
-		columnRef := ptUtil.makeFrameColumnRef(specs.cysFrameName, colId)
-		cysPfBuilder.add(colId, spec, cysData.getFutureInputField(columnRef))
-	}
-	cysPf := cysPfBuilder.build()
-
-	scoresPfBuilder := pframes.pFrameBuilder()
-	for colId in specs.scoresColumnIds {
-		raw := specs.scoresColumnSpecs[colId]
-		spec := {
-			kind: "PColumn",
-			valueType: raw.valueType,
-			name: raw.name,
-			domain: { "pl7.app/blockId": blockId },
-			annotations: raw.annotations,
-			axesSpec: specs.scoresAxesSpecLegacy
-		}
-		columnRef := ptUtil.makeFrameColumnRef(specs.scoresFrameName, colId)
-		scoresPfBuilder.add(colId, spec, scoresData.getFutureInputField(columnRef))
-	}
-	scoresPf := scoresPfBuilder.build()
+	motifsPf := buildLegacyPFrame(
+		blockId, specs.motifsFrameName, result.getProcessorResult("motifsResult"),
+		specs.motifColumnIds, specs.motifColumnSpecs, specs.motifAxesSpec)
+	cysPf := buildLegacyPFrame(
+		blockId, specs.cysFrameName, result.getProcessorResult("cysResult"),
+		specs.cysColumnIds, specs.cysColumnSpecs, specs.cysAxesSpec)
+	scoresPf := buildLegacyPFrame(
+		blockId, specs.scoresFrameName, result.getProcessorResult("scoresResult"),
+		specs.scoresColumnIds, specs.scoresColumnSpecs, specs.scoresAxesSpecLegacy)
 
 	return {
 		outputs: {
