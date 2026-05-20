@@ -1,5 +1,6 @@
 import type { GraphMakerState } from "@milaboratories/graph-maker";
 import type {
+  AxisId,
   ImportFileHandle,
   InferOutputsType,
   PColumnIdAndSpec,
@@ -13,6 +14,7 @@ import {
   createPlDataTableStateV2,
   createPlDataTableV2,
   DataModelBuilder,
+  parseResourceMap,
 } from "@platforma-sdk/model";
 
 export type SequenceRiskClass = "High" | "Medium" | "Low";
@@ -54,6 +56,23 @@ export type ChainSummary = {
   }[];
 };
 
+/** Spec R23 — per-cysteine entry in the report's `cysteines[]` array. */
+export type CysteineHit = {
+  chainId: string;
+  resSeq: number;
+  iCode: string;
+  cysClass: string;
+  chainRole: string | null;
+  bondingState: string;
+  rsasa: number | null;
+  sidechainRsasa: number | null;
+  sasa: number | null;
+  sidechainSasa: number | null;
+  partnerChainId: string | null;
+  partnerResSeq: number | null;
+  partnerIcode: string | null;
+};
+
 /** Spec R37 — per-clonotype JSON report. The cysteines array is consumed via
  * the `cysTable` PColumn output, not from this JSON. `chains` is a transient
  * extra used by the UI residue map until per-residue PColumn outputs land. */
@@ -63,7 +82,12 @@ export type LiabilitiesReport = {
    * (the spec rejects but we keep going for dev fixtures like 1N8Z). */
   mode?: "TAP" | "TNP" | "complex" | "empty";
   motifs: MotifHit[];
+  /** Spec R23 — per-cysteine entries with structural state classification. */
+  cysteines?: CysteineHit[];
   chains: ChainSummary[];
+  /** Spec R39 per-metric flags. Three-band: "green" | "amber" | "red"
+   * or "-" when the metric isn't applicable to the current mode. */
+  thresholdFlags?: Record<string, string>;
   scores?: {
     /** R20 sum of non-gated motif weighted scores. */
     motifStructuralRiskScore: number;
@@ -469,6 +493,64 @@ export const platforma = BlockModelV3.create(dataModel)
     // `createPFrameForGraphs` is duck-typed to read `.spec` / `.data` so
     // the cast is safe at runtime.
     return createPFrameForGraphs(ctx, labelCols as never);
+  })
+  // Spec R52 — per-clonotype PDB ResourceMap exposed for the viewer modal.
+  // Reads the upstream `pl7.app/structure/pdb` PColumn (axis:
+  // scClonotypeKey, valueType File) and parses it into [{key, value}]
+  // pairs; UI consumes via `entry.value.handle` (a RemoteBlobHandle) and
+  // hands it to PlStructureViewer.
+  .output("clonotypePdbsMap", (ctx) => {
+    // Resolve through the user-picked PlRef rather than fuzzy-matching the
+    // result pool. `findDataWithCompatibleSpec` was returning empty here
+    // even with name + valueType + axes + domain all aligned, so we use
+    // the canonical ref-based path — same as how the workflow accesses it.
+    const ref = ctx.args?.pdbRef ?? ctx.data?.pdbRef;
+    if (!ref) return undefined;
+    const pdbCol = ctx.resultPool.getPColumnByRef(ref);
+    if (!pdbCol) return undefined;
+    const parsed = parseResourceMap(
+      (pdbCol as unknown as { data: unknown }).data as never,
+      (acc) => acc.getRemoteFileHandle(),
+      false,
+    );
+    if (!parsed.isComplete) return undefined;
+    return parsed.data;
+  })
+  // Spec R53 — per-clonotype JSON report ResourceMap. Parsed from this
+  // block's own `liabilitiesJsonsData` PFrame so the UI can fetch the
+  // specific clonotype's report and render the detail panel alongside
+  // the viewer modal. Keyed by scClonotypeKey, values carry a
+  // RemoteBlobHandle pointing at the JSON file.
+  .output("clonotypeJsonsMap", (ctx) => {
+    const pCols = ctx.outputs?.resolve("liabilitiesJsonsData")?.getPColumns();
+    if (pCols === undefined) return undefined;
+    const jsonCol = pCols.find((c) => c.spec.name === "pl7.app/liabilities/perClonotypeReport");
+    if (jsonCol === undefined) return undefined;
+    const parsed = parseResourceMap(
+      (jsonCol as unknown as { data: unknown }).data as never,
+      (acc) => acc.getRemoteFileHandle(),
+      false,
+    );
+    if (!parsed.isComplete) return undefined;
+    return parsed.data;
+  })
+  // Spec R52 — axis identifier for the scClonotypeKey axis on the scoresTable.
+  // UI uses this to attach PlAgDataTable's `show-cell-button-for-axis-id`
+  // so the viewer-trigger button renders on the clonotype-key column.
+  .output("clonotypeAxisId", (ctx): AxisId | undefined => {
+    // Resolve through the user-picked PlRef, then read its spec.
+    const ref = ctx.args?.pdbRef ?? ctx.data?.pdbRef;
+    if (!ref) return undefined;
+    const pdbSpec = ctx.resultPool.getPColumnSpecByRef(ref);
+    if (!pdbSpec) return undefined;
+    const spec = pdbSpec as unknown as { axesSpec: AxisId[] };
+    // The upstream PDB column carries [sampleId, scClonotypeKey] — match
+    // the clonotype axis by name rather than index, since `[0]` is
+    // sampleId here and the cell button must hang off the clonotype axis.
+    const found = spec.axesSpec.find(
+      (a) => (a as unknown as { name: string }).name === "pl7.app/vdj/scClonotypeKey",
+    );
+    return found;
   })
   .sections(() => [
     { type: "link", href: "/", label: "Main" },

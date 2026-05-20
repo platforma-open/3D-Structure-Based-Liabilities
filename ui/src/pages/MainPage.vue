@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { LiabilitiesReport } from "@platforma-open/milabs.3d-structure-based-liabilities.model";
+import type { PlStructureViewerProps } from "@milaboratories/structure-viewer";
+import { PlStructureViewer } from "@milaboratories/structure-viewer";
 import {
   createPlDataTableStateV2,
   getRawPlatformaInstance,
@@ -15,11 +17,14 @@ import {
   PlDropdownRef,
   PlFileInput,
   PlNumberField,
+  PlTabs,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
 import { computed, ref, watchEffect } from "vue";
 import { useApp } from "../app";
 
+import ClonotypeDetailPanel from "../components/ClonotypeDetailPanel.vue";
+import RiskSummaryBar from "../components/RiskSummaryBar.vue";
 import PdbLiabilityMap from "../components/pdb/PdbLiabilityMap.vue";
 
 // Spec R12 — Raybould 2019 canonical cutoff. rSASA below this is "buried".
@@ -57,6 +62,79 @@ const scoresTableSettings = usePlDataTableSettingsV2({
 // own routes — see app.ts. Putting all three tables on one page caused
 // AG-Grid to stick in placeholder state (header rendered, body collapsed).
 const scoresLocalState = ref(createPlDataTableStateV2());
+
+// Spec R52 + R53 — inline viewer + per-clonotype detail panel below the
+// scoresTable. `clonotypePdbsMap` / `clonotypeJsonsMap` are
+// {key, value: {handle}} pairs keyed by scClonotypeKey. We auto-pick the
+// first clonotype on load; a small dropdown lets the user switch.
+//
+// Color schemes (by-confidence / by-rsasa / by-hydrophobicity per spec)
+// are not yet supported — PlStructureViewer renders Mol*'s default preset
+// (cartoon, by chain). Documented gap in progression.md (R52 row).
+const pdbsMap = computed(() => app.model.outputs.clonotypePdbsMap);
+const jsonsMap = computed(() => app.model.outputs.clonotypeJsonsMap);
+
+const selectedClonotypeKey = ref<string | null>(null);
+const detailReport = ref<LiabilitiesReport | null>(null);
+
+// Tab between the 3D viewer + detail panel and the per-clonotype
+// scoresTable. Default to the visualisation — the table is the bulk
+// overview, the visualisation is the deep-dive readout per spec R52/R53.
+const activeView = ref<"viewer" | "table">("viewer");
+const viewTabOptions = [
+  { value: "viewer" as const, label: "3D structure + detail" },
+  { value: "table" as const, label: "Per-clonotype table" },
+];
+
+// Auto-select the first available clonotype as soon as the PDB map
+// arrives; reset when the input shape changes so we don't dangle on a
+// stale key. The user can override via the dropdown.
+watchEffect(() => {
+  const entries = pdbsMap.value;
+  if (!entries || entries.length === 0) {
+    selectedClonotypeKey.value = null;
+    return;
+  }
+  const current = selectedClonotypeKey.value;
+  if (!current || !entries.some((e) => String(e.key.at(0)) === current)) {
+    selectedClonotypeKey.value = String(entries[0].key.at(0));
+  }
+});
+
+const viewerProps = computed<PlStructureViewerProps | null>(() => {
+  const key = selectedClonotypeKey.value;
+  if (!key) return null;
+  const handle = pdbsMap.value?.find((e) => String(e.key.at(0)) === key)?.value?.handle;
+  if (!handle) return null;
+  return { handle, fileName: `${key}.pdb` };
+});
+
+const clonotypeOptions = computed(() => {
+  const entries = pdbsMap.value ?? [];
+  return entries.map((e) => {
+    const k = String(e.key.at(0));
+    return { value: k, label: k };
+  });
+});
+
+// Fetch the per-clonotype JSON whenever the selected key changes. The
+// captured `expectedKey` guards against fast-switch races.
+watchEffect(async () => {
+  const key = selectedClonotypeKey.value;
+  detailReport.value = null;
+  if (!key) return;
+  const jsonHandle = jsonsMap.value?.find((e) => String(e.key.at(0)) === key)?.value?.handle;
+  if (!jsonHandle) return;
+  const expectedKey = key;
+  try {
+    const bytes = await getRawPlatformaInstance().blobDriver.getContent(jsonHandle);
+    if (selectedClonotypeKey.value !== expectedKey) return;
+    const text = new TextDecoder().decode(bytes);
+    detailReport.value = JSON.parse(text) as LiabilitiesReport;
+  } catch (err) {
+    console.warn("[liabilities] failed to load per-clonotype JSON", err);
+  }
+});
 
 // Spec R44 / R45 run-summary alerts.
 // Reads the *Flag columns + confidenceGatedMotifCount from the scores PTable
@@ -272,7 +350,7 @@ const chainOptions = computed(() => {
     <div
       :style="{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
         gap: '12px',
         marginTop: '12px',
         marginBottom: '4px',
@@ -304,7 +382,7 @@ const chainOptions = computed(() => {
       <div
         :style="{
           display: 'grid',
-          gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: '12px',
           marginBottom: '8px',
         }"
@@ -544,39 +622,86 @@ const chainOptions = computed(() => {
       for this dataset.
     </PlAlert>
 
-    <!-- Spec R51 — per-clonotype scalar metrics table.
-         One row per clonotype. Only populated on the PrimaryRef path (the
-         workflow emits scoresData as a per-clonotype PFrame keyed on
-         scClonotypeKey); on the legacy single-PDB path the table stays in
-         its "not ready" state. -->
-    <h3 :style="{ margin: '12px 0 6px' }">Per-clonotype developability</h3>
-    <p :style="{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }">
-      One row per clonotype. Default view shows mode, both risk classes, the composite
-      developability score, surfaced motif / exposed extra cys / broken canonical disulfide counts,
-      and the Raybould threshold flags (R39, R41a). Raw metric values, motif risk score,
-      low-confidence fractions, and totalCdrLength are hidden behind "Columns".
-    </p>
-    <div :style="{ height: '280px', flexShrink: 0, marginBottom: '16px' }">
-      <PlAgDataTableV2
-        v-model="scoresLocalState"
-        :settings="scoresTableSettings"
-        not-ready-text="Run on a predicted-structures dataset to see per-clonotype scores"
-        no-rows-text="No scored clonotypes"
-      />
-    </div>
+    <!-- Spec R51 (table) + R52 / R53 (viewer + detail) — same data,
+         different framing. Defaults to the visualisation; switching to
+         the table gives the bulk-overview view per R51. -->
+    <div :style="{ marginTop: '12px', marginBottom: '16px' }">
+      <div
+        :style="{
+          display: 'flex',
+          alignItems: 'flex-end',
+          justifyContent: 'space-between',
+          gap: '12px',
+          borderBottom: '1px solid #e5e7eb',
+          marginBottom: '12px',
+        }"
+      >
+        <PlTabs v-model="activeView" :options="viewTabOptions" />
+        <div :style="{ minWidth: '260px', paddingBottom: '8px' }">
+          <PlDropdown
+            v-if="activeView === 'viewer' && clonotypeOptions.length > 1"
+            :model-value="selectedClonotypeKey ?? ''"
+            :options="clonotypeOptions"
+            label="Clonotype"
+            @update:model-value="(v) => (selectedClonotypeKey = v ? String(v) : null)"
+          />
+        </div>
+      </div>
 
-    <!-- Motifs + cysteines tables. Their PColumn outputs are populated on
-         both the legacy single-PDB path and the PrimaryRef per-clonotype
-         path (the row axis prepends scClonotypeKey in PrimaryRef mode), so
-         they render whenever the workflow has produced data — not gated on
-         the single-file `report`. -->
-    <!-- Spec R51 drill-downs (motif hits, cysteine state) live on their own
-         routes — see the sidebar links. Putting all three tables on one
-         page kept AG-Grid stuck in placeholder state (multi-table mount
-         race). One PlAgDataTableV2 per page is the working configuration. -->
-    <p :style="{ fontSize: '12px', color: '#6b7280', marginTop: '12px' }">
-      Per-clonotype detail: see <strong>Motifs</strong> and <strong>Cysteine state</strong>
-      pages in the left sidebar for drill-down tables.
-    </p>
+      <div v-show="activeView === 'viewer'" :style="{ paddingTop: '12px' }">
+        <RiskSummaryBar v-if="viewerProps" :report="detailReport" />
+        <div
+          v-if="viewerProps"
+          :style="{
+            display: 'flex',
+            alignItems: 'flex-start',
+            border: '1px solid #e5e7eb',
+            borderRadius: '6px',
+            background: '#fff',
+          }"
+        >
+          <div
+            :style="{
+              flex: '1 1 auto',
+              minWidth: '0',
+              height: '720px',
+              display: 'flex',
+              padding: '12px 12px 8px',
+              position: 'sticky',
+              top: '0',
+            }"
+          >
+            <PlStructureViewer v-bind="viewerProps" />
+          </div>
+          <div :style="{ flex: '0 0 400px', minWidth: '380px', maxWidth: '440px' }">
+            <ClonotypeDetailPanel
+              v-if="selectedClonotypeKey"
+              :report="detailReport"
+              :clonotype-key="selectedClonotypeKey"
+            />
+          </div>
+        </div>
+        <p v-else :style="{ fontSize: '13px', color: '#6b7280', padding: '24px 4px' }">
+          Run on a predicted-structures dataset to see the 3D viewer + per-clonotype detail.
+        </p>
+      </div>
+
+      <div v-show="activeView === 'table'" :style="{ paddingTop: '12px' }">
+        <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 8px' }">
+          One row per clonotype. Default view shows mode, both risk classes, the composite
+          developability score, surfaced motif / exposed extra cys / broken canonical disulfide
+          counts, and the Raybould threshold flags (R39, R41a). Raw metric values, motif risk score,
+          low-confidence fractions, and totalCdrLength are hidden behind "Columns".
+        </p>
+        <div :style="{ height: '480px' }">
+          <PlAgDataTableV2
+            v-model="scoresLocalState"
+            :settings="scoresTableSettings"
+            not-ready-text="Run on a predicted-structures dataset to see per-clonotype scores"
+            no-rows-text="No scored clonotypes"
+          />
+        </div>
+      </div>
+    </div>
   </PlBlockPage>
 </template>
