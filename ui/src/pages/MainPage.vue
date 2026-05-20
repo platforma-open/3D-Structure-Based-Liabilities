@@ -13,10 +13,13 @@ import {
   PlAgDataTableV2,
   PlAlert,
   PlBlockPage,
+  PlBtnGhost,
   PlDropdown,
   PlDropdownRef,
   PlFileInput,
+  PlMaskIcon24,
   PlNumberField,
+  PlSlideModal,
   PlTabs,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
@@ -81,6 +84,12 @@ const detailReport = ref<LiabilitiesReport | null>(null);
 // scoresTable. Default to the visualisation — the table is the bulk
 // overview, the visualisation is the deep-dive readout per spec R52/R53.
 const activeView = ref<"viewer" | "table">("viewer");
+
+// Settings slide-over (predicted structures dropdown + numbering scheme +
+// chain mapping + Advanced thresholds + hydrophobicity scale). Opens
+// by default when no input source is configured so first-run users
+// don't see an empty Main tab and wonder where to start.
+const settingsOpen = ref(!app.model.data.pdbRef && !app.model.data.pdb);
 const viewTabOptions = [
   { value: "viewer" as const, label: "3D structure + detail" },
   { value: "table" as const, label: "Per-clonotype table" },
@@ -325,110 +334,123 @@ const chainOptions = computed(() => {
 
 <template>
   <PlBlockPage title="3D Structure-Based Liabilities">
-    <PlDropdownRef
-      v-model="app.model.data.pdbRef"
-      :options="app.model.outputs.pdbOptions ?? []"
-      label="Predicted structures (from 3D Structure Prediction)"
-      clearable
-      @update:model-value="onPdbRefUpdate"
-    />
-    <p
-      v-if="!app.model.data.pdbRef"
-      :style="{ fontSize: '12px', color: '#6b7280', margin: '6px 0 12px' }"
-    >
-      Or upload a single PDB file (dev / single-structure workflow):
-    </p>
-    <PlFileInput
-      v-if="!app.model.data.pdbRef"
-      v-model="app.model.data.pdb"
-      label="PDB file"
-      :extensions="['.pdb']"
-      placeholder="Drop a .pdb file"
-      clearable
-    />
+    <template #append>
+      <PlBtnGhost @click.stop="() => (settingsOpen = true)">
+        Settings
+        <template #append>
+          <PlMaskIcon24 name="settings" />
+        </template>
+      </PlBtnGhost>
+    </template>
 
-    <div
-      :style="{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        gap: '12px',
-        marginTop: '12px',
-        marginBottom: '4px',
-      }"
-    >
-      <PlDropdown
-        v-model="app.model.data.numberingScheme"
-        :options="numberingSchemeOptions"
-        label="Numbering scheme"
-      />
-      <PlDropdown
-        v-model="app.model.data.heavyChainId"
-        :options="chainOptions"
-        label="Heavy chain"
-      />
-      <PlDropdown
-        v-model="app.model.data.lightChainId"
-        :options="chainOptions"
-        label="Light chain"
-      />
-    </div>
-    <p :style="{ fontSize: '12px', color: '#6b7280', marginTop: '0', marginBottom: '12px' }">
-      Region weighting (R19) on motif scores is applied only when a scheme and at least one of
-      heavy/light is set. Antigen chains (and any chain not mapped to H or L) get
-      <code>region = "-"</code> and the neutral weight.
-    </p>
+    <PlSlideModal v-model="settingsOpen" close-on-outside-click shadow>
+      <template #title>Settings</template>
 
-    <PlAccordionSection label="Advanced thresholds">
+      <PlDropdownRef
+        v-model="app.model.data.pdbRef"
+        :options="app.model.outputs.pdbOptions ?? []"
+        label="Predicted structures (from 3D Structure Prediction)"
+        clearable
+        @update:model-value="onPdbRefUpdate"
+      />
+      <p
+        v-if="!app.model.data.pdbRef"
+        :style="{ fontSize: '12px', color: '#6b7280', margin: '6px 0 12px' }"
+      >
+        Or upload a single PDB file (dev / single-structure workflow):
+      </p>
+      <PlFileInput
+        v-if="!app.model.data.pdbRef"
+        v-model="app.model.data.pdb"
+        label="PDB file"
+        :extensions="['.pdb']"
+        placeholder="Drop a .pdb file"
+        clearable
+      />
+
       <div
         :style="{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
           gap: '12px',
-          marginBottom: '8px',
+          marginTop: '12px',
+          marginBottom: '4px',
         }"
       >
-        <PlNumberField
-          v-model="app.model.data.rsasaBuriedCutoff"
-          label="rSASA buried cutoff (R12)"
-          :minValue="0"
-          :maxValue="1"
-          :step="0.005"
-        />
-        <PlNumberField
-          v-model="app.model.data.frConfThresh"
-          label="FR confidence threshold (Å, R34)"
-          :minValue="1"
-          :maxValue="10"
-          :step="0.5"
-        />
-        <PlNumberField
-          v-model="app.model.data.cdrConfThresh"
-          label="CDR confidence threshold (Å, R34)"
-          :minValue="1"
-          :maxValue="12"
-          :step="0.5"
-        />
-      </div>
-      <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }">
-        Defaults (0.075 / 4.0 / 6.0) are calibrated for ImmuneBuilder-predicted PDBs (R34). Raise
-        the confidence thresholds when running on experimental crystal structures whose B-factors
-        are Å² temperature factors rather than predicted error.
-      </p>
-      <div :style="{ marginBottom: '8px' }">
         <PlDropdown
-          v-model="app.model.data.hydrophobicityScale"
-          :options="hydrophobicityScaleOptions"
-          label="Hydrophobicity scale (R48)"
+          v-model="app.model.data.numberingScheme"
+          :options="numberingSchemeOptions"
+          label="Numbering scheme"
+        />
+        <PlDropdown
+          v-model="app.model.data.heavyChainId"
+          :options="chainOptions"
+          label="Heavy chain"
+        />
+        <PlDropdown
+          v-model="app.model.data.lightChainId"
+          :options="chainOptions"
+          label="Light chain"
         />
       </div>
-      <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }">
-        PSH weights each residue by its hydrophobicity (R25). Kyte-Doolittle is Raybould 2019's
-        choice; switching scales lets you cross-check PSH and reproduce the spec's R48 sensitivity
-        analysis. All scales are min-max normalized to [1.0, 2.0] so PSH magnitudes stay in the same
-        ballpark, but relative ordering between residues changes — expect different red/amber/green
-        calls near the threshold.
+      <p :style="{ fontSize: '12px', color: '#6b7280', marginTop: '0', marginBottom: '12px' }">
+        Region weighting (R19) on motif scores is applied only when a scheme and at least one of
+        heavy/light is set. Antigen chains (and any chain not mapped to H or L) get
+        <code>region = "-"</code> and the neutral weight.
       </p>
-    </PlAccordionSection>
+
+      <PlAccordionSection label="Advanced thresholds">
+        <div
+          :style="{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: '12px',
+            marginBottom: '8px',
+          }"
+        >
+          <PlNumberField
+            v-model="app.model.data.rsasaBuriedCutoff"
+            label="rSASA buried cutoff (R12)"
+            :minValue="0"
+            :maxValue="1"
+            :step="0.005"
+          />
+          <PlNumberField
+            v-model="app.model.data.frConfThresh"
+            label="FR confidence threshold (Å, R34)"
+            :minValue="1"
+            :maxValue="10"
+            :step="0.5"
+          />
+          <PlNumberField
+            v-model="app.model.data.cdrConfThresh"
+            label="CDR confidence threshold (Å, R34)"
+            :minValue="1"
+            :maxValue="12"
+            :step="0.5"
+          />
+        </div>
+        <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }">
+          Defaults (0.075 / 4.0 / 6.0) are calibrated for ImmuneBuilder-predicted PDBs (R34). Raise
+          the confidence thresholds when running on experimental crystal structures whose B-factors
+          are Å² temperature factors rather than predicted error.
+        </p>
+        <div :style="{ marginBottom: '8px' }">
+          <PlDropdown
+            v-model="app.model.data.hydrophobicityScale"
+            :options="hydrophobicityScaleOptions"
+            label="Hydrophobicity scale (R48)"
+          />
+        </div>
+        <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }">
+          PSH weights each residue by its hydrophobicity (R25). Kyte-Doolittle is Raybould 2019's
+          choice; switching scales lets you cross-check PSH and reproduce the spec's R48 sensitivity
+          analysis. All scales are min-max normalized to [1.0, 2.0] so PSH magnitudes stay in the
+          same ballpark, but relative ordering between residues changes — expect different
+          red/amber/green calls near the threshold.
+        </p>
+      </PlAccordionSection>
+    </PlSlideModal>
 
     <div v-if="report">
       <p
