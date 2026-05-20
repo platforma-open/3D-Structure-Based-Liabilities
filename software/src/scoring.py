@@ -134,6 +134,71 @@ def _cys_class_bump(cys_class: str, sidechain_rsasa: Optional[float], buried_cut
     return 0.0
 
 
+# R41a — engineering-grade fixability tiers + the four-step risk ladder.
+# `_ENGINEERING_FIXABILITIES` is the same set the sequence-liabilities
+# block uses for `classify_developability_risk` (motifs we can credibly
+# fix without a sequence redesign).
+_ENGINEERING_FIXABILITIES = ("fixable", "easily_fixable")
+_RISK_LEVELS = ["None", "Low", "Medium", "High"]
+_RISK_ORDER = {n: i for i, n in enumerate(_RISK_LEVELS)}
+
+
+def _seq_risk_to_level(rc: str) -> str:
+    """R41a — sequence-side risk class → R41a level. Identity-ish mapping
+    that defends against unexpected `sequenceRiskClass` values by falling
+    through to "None"."""
+    return {"High": "High", "Medium": "Medium", "Low": "Low"}.get(rc, "None")
+
+
+def _developability_risk(motif_hits, flags: dict[str, str]) -> str:
+    """R41a — over engineering-fixable, non-gated motifs only:
+       1. Take the highest sequenceRiskClass among them as the base level.
+       2. Promote to Medium if ANY metric flag is amber.
+       3. Promote to High if ANY metric flag is red.
+    Mirror of `classify_developability_risk` in sequence-liabilities."""
+    base_level = "None"
+    for h in motif_hits:
+        if h.confidenceGated == "yes":
+            continue
+        if h.fixability not in _ENGINEERING_FIXABILITIES:
+            continue
+        candidate = _seq_risk_to_level(h.sequenceRiskClass)
+        if _RISK_ORDER[candidate] > _RISK_ORDER[base_level]:
+            base_level = candidate
+
+    if any(v == "red" for v in flags.values()) and _RISK_ORDER[base_level] < _RISK_ORDER["High"]:
+        return "High"
+    if (
+        any(v == "amber" for v in flags.values())
+        and _RISK_ORDER[base_level] < _RISK_ORDER["Medium"]
+    ):
+        return "Medium"
+    return base_level
+
+
+def _has_integrity_issue(motif_hits, cys_hits, rsasa_buried_cutoff: float) -> bool:
+    """R41a structuralIntegrityRisk — Present iff at least one of:
+       • a canonical disulfide is broken or missing entirely (cys side),
+       • an extra Cys is surface-exposed (free thiol → covalent aggregation risk),
+       • a non-gated motif lives in the {hard_to_fix, structural} tier.
+    Any one is enough — short-circuits as soon as it finds a trigger."""
+    for h in cys_hits:
+        if h.cysClass in ("disulfide_broken", "disulfide_missing"):
+            return True
+        if (
+            h.cysClass == "cys_extra"
+            and h.sidechainRsasa is not None
+            and h.sidechainRsasa >= rsasa_buried_cutoff
+        ):
+            return True
+    for h in motif_hits:
+        if h.confidenceGated == "yes":
+            continue
+        if h.fixability in ("hard_to_fix", "structural"):
+            return True
+    return False
+
+
 def compute_developability(
     motif_hits,
     cys_hits,
@@ -159,53 +224,10 @@ def compute_developability(
 
     structural_developability_score = motif_contrib + flag_contrib + cys_contrib
 
-    # R41a structuralDevelopabilityRisk over fixable items only.
-    # "Fixable" motifs are those in {fixable, easily_fixable}; their highest
-    # sequence risk class drives the base level, then promoted by any
-    # amber/red metric flag.
-    _engineering_fixabilities = ("fixable", "easily_fixable")
-    risk_levels = ["None", "Low", "Medium", "High"]
-    risk_order = {n: i for i, n in enumerate(risk_levels)}
-
-    def _seq_risk_to_level(rc: str) -> str:
-        # Mirror of classify_developability_risk in sequence-liabilities.
-        return {"High": "High", "Medium": "Medium", "Low": "Low"}.get(rc, "None")
-
-    base_level = "None"
-    for h in motif_hits:
-        if h.confidenceGated == "yes":
-            continue
-        if h.fixability not in _engineering_fixabilities:
-            continue
-        candidate = _seq_risk_to_level(h.sequenceRiskClass)
-        if risk_order[candidate] > risk_order[base_level]:
-            base_level = candidate
-
-    has_amber = any(v == "amber" for v in flags.values())
-    has_red = any(v == "red" for v in flags.values())
-    if has_red and risk_order[base_level] < risk_order["High"]:
-        base_level = "High"
-    elif has_amber and risk_order[base_level] < risk_order["Medium"]:
-        base_level = "Medium"
-
-    # R41a structuralIntegrityRisk: Present if any hard_to_fix / structural
-    # item, OR any canonical disulfide broken/missing OR exposed extra Cys.
-    structural_present = False
-    for h in cys_hits:
-        if h.cysClass in ("disulfide_broken", "disulfide_missing"):
-            structural_present = True
-            break
-        if h.cysClass == "cys_extra" and h.sidechainRsasa is not None and h.sidechainRsasa >= rsasa_buried_cutoff:
-            structural_present = True
-            break
-    if not structural_present:
-        for h in motif_hits:
-            if h.confidenceGated == "yes":
-                continue
-            if h.fixability in ("hard_to_fix", "structural"):
-                structural_present = True
-                break
-    structural_integrity_risk = "Present" if structural_present else "None"
+    base_level = _developability_risk(motif_hits, flags)
+    structural_integrity_risk = (
+        "Present" if _has_integrity_issue(motif_hits, cys_hits, rsasa_buried_cutoff) else "None"
+    )
 
     return {
         "flags": flags,

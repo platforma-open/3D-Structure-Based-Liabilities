@@ -53,6 +53,83 @@ def _bonding_test(ca1, sg1, ca2, sg2) -> bool:
     return _dist(sg1, sg2) <= SG_SG_MAX_ANGSTROMS and _dist(ca1, ca2) <= CA_CA_MAX_ANGSTROMS
 
 
+def _collect_cys_records(parsed):
+    """Build (chain_id, residue, ca_atom, sg_atom) tuples for every Cys
+    that carries both atoms we need for geometry tests. Cys residues
+    missing CA or SG (mutations, partial occupancy) are skipped silently."""
+    out: list[tuple[str, object, object, object]] = []
+    for chain_id in parsed.chain_order:
+        for r in parsed.residues_by_chain[chain_id]:
+            if r.res_name != "CYS":
+                continue
+            ca = r.atom("CA")
+            sg = r.atom("SG")
+            if ca is None or sg is None:
+                continue
+            out.append((chain_id, r, ca, sg))
+    return out
+
+
+def _scan_disulfides(cys_records) -> dict[int, int]:
+    """Pairwise scan over cys_records; returns idx → partner_idx for every
+    Cys engaged in a disulfide. First-match wins on ambiguous geometry —
+    if one Cys could bond to two partners, we lock the first one we hit
+    and treat the other as `unbonded` (consistent with REMARK SSBOND-style
+    1:1 bond accounting; ambiguous cases are rare and biologically odd)."""
+    partner_of: dict[int, int] = {}
+    for i in range(len(cys_records)):
+        for j in range(i + 1, len(cys_records)):
+            _, _, ca_i, sg_i = cys_records[i]
+            _, _, ca_j, sg_j = cys_records[j]
+            if not _bonding_test(ca_i, sg_i, ca_j, sg_j):
+                continue
+            if i in partner_of or j in partner_of:
+                continue
+            partner_of[i] = j
+            partner_of[j] = i
+    return partner_of
+
+
+def _classify_cys(
+    res_seq: int,
+    role: Optional[str],
+    bonding_state: str,
+    canonical_keys: set[tuple[str, int]],
+    canonical_positions: dict,
+) -> str:
+    """R23 four-state classification. Falls back to raw bonding state
+    when numbering isn't wired (no role / no canonical positions for the
+    scheme), so the table is still useful in the auto-detect-only case."""
+    if role is not None and (role, res_seq) in canonical_keys:
+        return "disulfide" if bonding_state == "bonded" else "disulfide_broken"
+    if role is not None and canonical_positions:
+        return "cys_extra"
+    return bonding_state
+
+
+def _phantom_missing_cys(role: str, pos: int, chain_id_for_role: str) -> CysteineHit:
+    """Emit a placeholder row for a canonical Cys position the structure
+    doesn't actually contain (resName "-" sentinel). Spec R23: missing
+    canonical Cys is a developability red flag and needs to appear in
+    the cys table even without a real residue to attach to."""
+    return CysteineHit(
+        chainId=chain_id_for_role,
+        resSeq=pos,
+        iCode="-",
+        resName="-",
+        chainRole=role,
+        cysClass="disulfide_missing",
+        bondingState="missing",
+        sasa=None,
+        rsasa=None,
+        sidechainSasa=None,
+        sidechainRsasa=None,
+        partnerChainId="-",
+        partnerResSeq=None,
+        partnerIcode="-",
+    )
+
+
 def detect_cysteines(
     parsed,
     sasa_lookup,
@@ -63,49 +140,26 @@ def detect_cysteines(
     """Walk every Cys residue, compute pairwise bonding state, and (when
     numbering is wired) classify each Cys against the scheme's canonical
     disulfide positions. Phantom entries are added for canonical positions
-    that should hold a Cys but don't."""
+    that should hold a Cys but don't (spec R23 `disulfide_missing`)."""
+    cys_records = _collect_cys_records(parsed)
+    partner_of = _scan_disulfides(cys_records)
 
-    # Collect Cys with the two atoms we need.
-    cys_records: list[tuple[str, object, object, object]] = []  # (chain, res, ca, sg)
-    for chain_id in parsed.chain_order:
-        for r in parsed.residues_by_chain[chain_id]:
-            if r.res_name != "CYS":
-                continue
-            ca = r.atom("CA")
-            sg = r.atom("SG")
-            if ca is None or sg is None:
-                continue
-            cys_records.append((chain_id, r, ca, sg))
-
-    # Pairwise bonding scan. First-match wins on ambiguous geometry.
-    partner_of: dict[int, int] = {}
-    for i in range(len(cys_records)):
-        for j in range(i + 1, len(cys_records)):
-            _, _, ca_i, sg_i = cys_records[i]
-            _, _, ca_j, sg_j = cys_records[j]
-            if _bonding_test(ca_i, sg_i, ca_j, sg_j):
-                if i not in partner_of and j not in partner_of:
-                    partner_of[i] = j
-                    partner_of[j] = i
-
-    # Build index for canonical lookup: (chain_role, res_seq) -> cys_record index.
+    # Per-scheme canonical positions + the set we test each real Cys against.
+    canonical_positions: dict[str, tuple[int, int]] = (
+        CANONICAL_CYS_POSITIONS.get(numbering_scheme, {}) if numbering_scheme else {}
+    )
+    canonical_keys: set[tuple[str, int]] = {
+        (role, pos) for role, positions in canonical_positions.items() for pos in positions
+    }
+    # Used below to skip phantom rows for canonical positions that ARE
+    # filled — keyed by (role, res_seq).
     cys_by_role_pos: dict[tuple[str, int], int] = {}
     for idx, (chain_id, r, _ca, _sg) in enumerate(cys_records):
         role = role_of_chain(chain_id, heavy_chain_id, light_chain_id)
         if role is not None:
             cys_by_role_pos[(role, r.res_seq)] = idx
 
-    # Per-scheme expected canonical positions.
-    canonical_positions: dict[str, tuple[int, int]] = {}
-    if numbering_scheme and numbering_scheme in CANONICAL_CYS_POSITIONS:
-        canonical_positions = CANONICAL_CYS_POSITIONS[numbering_scheme]
-    canonical_keys: set[tuple[str, int]] = set()
-    for role, (p1, p2) in canonical_positions.items():
-        canonical_keys.add((role, p1))
-        canonical_keys.add((role, p2))
-
     hits: list[CysteineHit] = []
-
     for idx, (chain_id, r, _ca, _sg) in enumerate(cys_records):
         key = (chain_id, f"{r.res_seq}{r.i_code}".strip())
         sasa_info = sasa_lookup.get(key, {})
@@ -116,26 +170,13 @@ def detect_cysteines(
             p_chain, p_res, _, _ = cys_records[partner_idx]
             bonding_state = "bonded"
             partner_chain = p_chain
-            partner_res_seq = p_res.res_seq
+            partner_res_seq: Optional[int] = p_res.res_seq
             partner_icode = p_res.i_code or "-"
         else:
             bonding_state = "unbonded"
             partner_chain = "-"
             partner_res_seq = None
             partner_icode = "-"
-
-        # Four-state classification: only meaningful when role is known AND
-        # we know the canonical positions for that role/scheme.
-        cys_class: str
-        if role is not None and (role, r.res_seq) in canonical_keys:
-            if bonding_state == "bonded":
-                cys_class = "disulfide"
-            else:
-                cys_class = "disulfide_broken"
-        elif role is not None and canonical_positions:
-            cys_class = "cys_extra"
-        else:
-            cys_class = bonding_state  # fall back to raw bonding state
 
         hits.append(
             CysteineHit(
@@ -144,7 +185,9 @@ def detect_cysteines(
                 iCode=r.i_code or "-",
                 resName="CYS",
                 chainRole=role or "-",
-                cysClass=cys_class,
+                cysClass=_classify_cys(
+                    r.res_seq, role, bonding_state, canonical_keys, canonical_positions
+                ),
                 bondingState=bonding_state,
                 sasa=sasa_info.get("sasa"),
                 rsasa=sasa_info.get("rsasa"),
@@ -156,8 +199,7 @@ def detect_cysteines(
             )
         )
 
-    # Phantom rows for missing canonical Cys — only when canonical positions
-    # are known and the corresponding chain ID is mapped.
+    # Phantom rows for missing canonical Cys (R23).
     for role, (p1, p2) in canonical_positions.items():
         chain_id_for_role = heavy_chain_id if role == "H" else light_chain_id
         if not chain_id_for_role:
@@ -165,23 +207,6 @@ def detect_cysteines(
         for pos in (p1, p2):
             if (role, pos) in cys_by_role_pos:
                 continue
-            hits.append(
-                CysteineHit(
-                    chainId=chain_id_for_role,
-                    resSeq=pos,
-                    iCode="-",
-                    resName="-",
-                    chainRole=role,
-                    cysClass="disulfide_missing",
-                    bondingState="missing",
-                    sasa=None,
-                    rsasa=None,
-                    sidechainSasa=None,
-                    sidechainRsasa=None,
-                    partnerChainId="-",
-                    partnerResSeq=None,
-                    partnerIcode="-",
-                )
-            )
+            hits.append(_phantom_missing_cys(role, pos, chain_id_for_role))
 
     return hits
