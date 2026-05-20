@@ -14,6 +14,7 @@ import {
   PlAlert,
   PlBlockPage,
   PlBtnGhost,
+  PlCheckbox,
   PlDropdown,
   PlDropdownRef,
   PlFileInput,
@@ -80,6 +81,20 @@ const jsonsMap = computed(() => app.model.outputs.clonotypeJsonsMap);
 const selectedClonotypeKey = ref<string | null>(null);
 const detailReport = ref<LiabilitiesReport | null>(null);
 
+// Spec R42 — when the 3D Structure Clustering block is upstream, the
+// scoresTable picks up `pl7.app/clusterId` + isCentroid + TM-score
+// columns. We fetch them once per scoresTable change into a map keyed
+// by clonotype so the viewer header + dropdown filter can use them
+// without re-walking the PTable on every render.
+type ClusterAssignment = {
+  clusterId: string;
+  isCentroid: boolean;
+  tmDistanceToCentroid: number | null;
+  tmScoreToCentroid: number | null;
+};
+const clusterMap = ref<Record<string, ClusterAssignment>>({});
+const centroidsOnly = ref(false);
+
 // Tab between the 3D viewer + detail panel and the per-clonotype
 // scoresTable. Default to the visualisation — the table is the bulk
 // overview, the visualisation is the deep-dive readout per spec R52/R53.
@@ -120,11 +135,25 @@ const viewerProps = computed<PlStructureViewerProps | null>(() => {
 
 const clonotypeOptions = computed(() => {
   const entries = pdbsMap.value ?? [];
-  return entries.map((e) => {
+  const cmap = clusterMap.value;
+  const filtered = centroidsOnly.value
+    ? entries.filter((e) => cmap[String(e.key.at(0))]?.isCentroid)
+    : entries;
+  return filtered.map((e) => {
     const k = String(e.key.at(0));
-    return { value: k, label: k };
+    const assignment = cmap[k];
+    const label = assignment
+      ? `${k} · cluster ${assignment.clusterId}${assignment.isCentroid ? " ★" : ""}`
+      : k;
+    return { value: k, label };
   });
 });
+
+// Cluster-aware availability flags.
+const hasClusterData = computed(() => Object.keys(clusterMap.value).length > 0);
+const selectedClusterAssignment = computed<ClusterAssignment | undefined>(() =>
+  selectedClonotypeKey.value ? clusterMap.value[selectedClonotypeKey.value] : undefined,
+);
 
 // Fetch the per-clonotype JSON whenever the selected key changes. The
 // captured `expectedKey` guards against fast-switch races.
@@ -143,6 +172,91 @@ watchEffect(async () => {
   } catch (err) {
     console.warn("[liabilities] failed to load per-clonotype JSON", err);
   }
+});
+
+// R42 — populate clusterMap from the scoresTable PTable (cluster columns
+// were auto-joined by the model). Empty when no clustering block is
+// upstream, in which case the header + filter UI just hide themselves.
+watchEffect(async () => {
+  const tableOutput = app.model.outputs.scoresTable;
+  if (!tableOutput?.ok || !tableOutput.value?.fullTableHandle) {
+    clusterMap.value = {};
+    return;
+  }
+  const handle = tableOutput.value.fullTableHandle;
+  const pf = getRawPlatformaInstance().pFrameDriver;
+  const shape = await pf.getShape(handle);
+  if (shape.rows === 0) {
+    clusterMap.value = {};
+    return;
+  }
+  const spec = await pf.getSpec(handle);
+  let keyIdx = -1;
+  let clusterIdIdx = -1;
+  let isCentroidIdx = -1;
+  let tmDistIdx = -1;
+  let tmScoreIdx = -1;
+  for (let i = 0; i < spec.length; i++) {
+    const e = spec[i];
+    if (e?.type === "axis" && e.spec?.name === "pl7.app/vdj/scClonotypeKey") keyIdx = i;
+    else if (e?.type === "column") {
+      const n = e.spec?.name;
+      if (n === "pl7.app/clusterId") clusterIdIdx = i;
+      else if (n === "pl7.app/structure/clustering/isCentroid") isCentroidIdx = i;
+      else if (n === "pl7.app/structure/clustering/tmDistanceToCentroid") tmDistIdx = i;
+      else if (n === "pl7.app/structure/clustering/tmScoreToCentroid") tmScoreIdx = i;
+    }
+  }
+  if (keyIdx === -1 || clusterIdIdx === -1) {
+    clusterMap.value = {};
+    return;
+  }
+  const indices = [keyIdx, clusterIdIdx, isCentroidIdx, tmDistIdx, tmScoreIdx].filter(
+    (i) => i >= 0,
+  );
+  const data = await pf.getData(handle, indices, { offset: 0, length: shape.rows });
+  const posOf = (idx: number) => indices.indexOf(idx);
+  function read(colIdx: number, row: number): string | number | null {
+    if (colIdx === -1) return null;
+    const col = data[posOf(colIdx)];
+    const d = col?.data as unknown;
+    if (Array.isArray(d)) return ((d as unknown[])[row] ?? null) as string | number | null;
+    if (d && typeof d === "object")
+      return ((d as Record<string, unknown>)[String(row)] ?? null) as string | number | null;
+    return null;
+  }
+  const out: Record<string, ClusterAssignment> = {};
+  for (let row = 0; row < shape.rows; row++) {
+    const k = read(keyIdx, row);
+    const cid = read(clusterIdIdx, row);
+    if (k == null || cid == null) continue;
+    const isC = read(isCentroidIdx, row);
+    const tmD = read(tmDistIdx, row);
+    const tmS = read(tmScoreIdx, row);
+    out[String(k)] = {
+      clusterId: String(cid),
+      isCentroid: Number(isC) === 1,
+      tmDistanceToCentroid: tmD == null ? null : Number(tmD),
+      tmScoreToCentroid: tmS == null ? null : Number(tmS),
+    };
+  }
+  clusterMap.value = out;
+});
+
+// When the user toggles "Centroids only" and the current selection isn't
+// a centroid, jump to the centroid of the same cluster so the viewer
+// doesn't go blank.
+watchEffect(() => {
+  if (!centroidsOnly.value) return;
+  const key = selectedClonotypeKey.value;
+  if (!key) return;
+  const cmap = clusterMap.value;
+  const current = cmap[key];
+  if (current?.isCentroid) return;
+  const sameClusterCentroid = Object.entries(cmap).find(
+    ([, a]) => a.clusterId === current?.clusterId && a.isCentroid,
+  );
+  if (sameClusterCentroid) selectedClonotypeKey.value = sameClusterCentroid[0];
 });
 
 // Spec R44 / R45 run-summary alerts.
@@ -659,19 +773,75 @@ const chainOptions = computed(() => {
         }"
       >
         <PlTabs v-model="activeView" :options="viewTabOptions" />
-        <div :style="{ minWidth: '260px', paddingBottom: '8px' }">
-          <PlDropdown
-            v-if="activeView === 'viewer' && clonotypeOptions.length > 1"
-            :model-value="selectedClonotypeKey ?? ''"
-            :options="clonotypeOptions"
-            label="Clonotype"
-            @update:model-value="(v) => (selectedClonotypeKey = v ? String(v) : null)"
-          />
+        <div
+          :style="{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            paddingBottom: '8px',
+            flexWrap: 'wrap',
+          }"
+        >
+          <PlCheckbox v-if="activeView === 'viewer' && hasClusterData" v-model="centroidsOnly">
+            Centroids only
+          </PlCheckbox>
+          <div :style="{ minWidth: '260px' }">
+            <PlDropdown
+              v-if="activeView === 'viewer' && clonotypeOptions.length > 1"
+              :model-value="selectedClonotypeKey ?? ''"
+              :options="clonotypeOptions"
+              label="Clonotype"
+              @update:model-value="(v) => (selectedClonotypeKey = v ? String(v) : null)"
+            />
+          </div>
         </div>
       </div>
 
       <div v-show="activeView === 'viewer'" :style="{ paddingTop: '12px' }">
         <RiskSummaryBar v-if="viewerProps" :report="detailReport" />
+
+        <!-- R42 cluster info badge. Only renders when the 3D Structure
+             Clustering block is upstream and the selected clonotype has
+             an assignment in clusterMap. -->
+        <div
+          v-if="viewerProps && selectedClusterAssignment"
+          :style="{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            padding: '6px 12px',
+            marginBottom: '12px',
+            background: 'rgba(99, 102, 241, 0.08)',
+            border: '1px solid rgba(99, 102, 241, 0.25)',
+            borderRadius: '6px',
+            fontSize: '13px',
+            color: '#3730a3',
+          }"
+        >
+          <span :style="{ fontWeight: '600' }">
+            Cluster {{ selectedClusterAssignment.clusterId }}
+          </span>
+          <span
+            v-if="selectedClusterAssignment.isCentroid"
+            :style="{
+              fontSize: '11px',
+              fontWeight: 600,
+              padding: '1px 8px',
+              borderRadius: '10px',
+              background: '#3730a322',
+              color: '#3730a3',
+            }"
+          >
+            CENTROID
+          </span>
+          <span
+            v-else-if="selectedClusterAssignment.tmScoreToCentroid !== null"
+            :style="{ color: '#4f46e5', fontSize: '12px' }"
+          >
+            TM-score to centroid {{ selectedClusterAssignment.tmScoreToCentroid.toFixed(3) }}
+          </span>
+        </div>
+
         <div
           v-if="viewerProps"
           :style="{

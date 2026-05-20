@@ -372,10 +372,43 @@ export const platforma = BlockModelV3.create(dataModel)
       valueType: "String",
       axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
     });
+    // Spec R42 — surface the cluster axis when the 3D Structure Clustering
+    // block is upstream. The block emits these on the same scClonotypeKey
+    // axis, so the PFrame driver auto-joins them into per-clonotype rows.
+    // Users can then sort / filter / group by cluster in the table UI.
+    // No-op (empty join) when no clustering block is in the pipeline.
+    const clusterId = ctx.resultPool.findDataWithCompatibleSpec({
+      kind: "PColumn",
+      name: "pl7.app/clusterId",
+      valueType: "String",
+      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
+    });
+    const isCentroid = ctx.resultPool.findDataWithCompatibleSpec({
+      kind: "PColumn",
+      name: "pl7.app/structure/clustering/isCentroid",
+      valueType: "Int",
+      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
+    });
+    const tmDistance = ctx.resultPool.findDataWithCompatibleSpec({
+      kind: "PColumn",
+      name: "pl7.app/structure/clustering/tmDistanceToCentroid",
+      valueType: "Double",
+      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
+    });
+    const tmScore = ctx.resultPool.findDataWithCompatibleSpec({
+      kind: "PColumn",
+      name: "pl7.app/structure/clustering/tmScoreToCentroid",
+      valueType: "Double",
+      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
+    });
     const allCols = [
       ...pCols,
       ...(upstreamCdrh3 as typeof pCols),
       ...(upstreamLabel as typeof pCols),
+      ...(clusterId as typeof pCols),
+      ...(isCentroid as typeof pCols),
+      ...(tmDistance as typeof pCols),
+      ...(tmScore as typeof pCols),
     ];
     return createPlDataTableV2(ctx, allCols, undefined);
   })
