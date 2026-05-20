@@ -255,6 +255,49 @@ const hydrophobicityScaleOptions = [
       </PlAccordionSection>
     </PlSlideModal>
 
+    <!-- Empty-state CTA when no input is configured. Settings auto-opens
+         on first load (see `settingsOpen` ref); this is for the case
+         where the user closed the modal without picking a dataset. -->
+    <div
+      v-if="!app.model.data.pdbRef"
+      :style="{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '48px 24px',
+        marginTop: '24px',
+        background: 'rgba(148, 163, 184, 0.06)',
+        border: '1px dashed rgba(148, 163, 184, 0.4)',
+        borderRadius: '8px',
+        gap: '12px',
+      }"
+    >
+      <div :style="{ fontSize: '15px', fontWeight: 600, color: '#374151' }">
+        No predicted structures selected
+      </div>
+      <p
+        :style="{
+          fontSize: '13px',
+          color: '#6b7280',
+          textAlign: 'center',
+          maxWidth: '480px',
+          margin: '0',
+          lineHeight: '1.5',
+        }"
+      >
+        Pick a dataset from an upstream 3D Structure Prediction block in
+        <strong>Settings</strong> (top-right). The block runs per clonotype and emits motif /
+        cysteine / surface-metric PColumns plus the composite developability score.
+      </p>
+      <PlBtnGhost @click.stop="() => (settingsOpen = true)">
+        Open Settings
+        <template #append>
+          <PlMaskIcon24 name="settings" />
+        </template>
+      </PlBtnGhost>
+    </div>
+
     <!-- Spec R44 — run-summary alert: >10% of clonotypes have any red flag. -->
     <PlAlert
       v-if="showRedAlert && runSummary"
@@ -286,8 +329,9 @@ const hydrophobicityScaleOptions = [
 
     <!-- Spec R51 (table) + R52 / R53 (viewer + detail) — same data,
          different framing. Defaults to the visualisation; switching to
-         the table gives the bulk-overview view per R51. -->
-    <div :style="{ marginTop: '12px', marginBottom: '16px' }">
+         the table gives the bulk-overview view per R51. Hidden until
+         the user picks an upstream dataset (see empty-state CTA above). -->
+    <div v-if="app.model.data.pdbRef" :style="{ marginTop: '12px', marginBottom: '16px' }">
       <div
         :style="{
           display: 'flex',

@@ -296,7 +296,12 @@ const dataModel = new DataModelBuilder()
   })
   .init(() => ({
     pdbRef: undefined,
-    numberingScheme: "",
+    // R14 default scheme — upstream's 3D Structure Prediction block always
+    // produces IMGT-numbered PDBs (the `pl7.app/structure/numbering` domain
+    // we match on already requires `imgt`), so defaulting here saves the
+    // first-run user a dropdown click. Override if you're feeding the block
+    // a custom non-IMGT PDB.
+    numberingScheme: "imgt",
     heavyChainId: "",
     lightChainId: "",
     rsasaBuriedCutoff: 0.075,
