@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { fmtAxisValue, niceIntegerTicks, niceTicks } from "../utils/chart";
 
 /**
  * Spec R54 — histogram of a single metric across all clonotypes, with
@@ -80,43 +81,8 @@ function yForCount(count: number): number {
   return PADDING.top + PLOT_H - (count / maxCount.value) * PLOT_H;
 }
 
-const xTicks = computed<number[]>(() => {
-  const { min, max } = xDomain.value;
-  const targetCount = 5;
-  const rawStep = (max - min) / targetCount;
-  const pow = Math.pow(10, Math.floor(Math.log10(rawStep)));
-  const norm = rawStep / pow;
-  const niceStep = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * pow;
-  const startVal = Math.ceil(min / niceStep) * niceStep;
-  const out: number[] = [];
-  for (let v = startVal; v <= max + niceStep * 0.001; v += niceStep) {
-    out.push(Number(v.toFixed(6)));
-  }
-  return out;
-});
-
-const yTicks = computed<number[]>(() => {
-  // ~4 ticks on a 0..maxCount integer count axis.
-  const m = maxCount.value;
-  const target = 4;
-  const rawStep = m / target;
-  const pow = Math.pow(10, Math.floor(Math.log10(Math.max(rawStep, 1))));
-  const norm = rawStep / pow;
-  const niceStep = Math.max(
-    1,
-    Math.ceil((norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * pow),
-  );
-  const out: number[] = [];
-  for (let v = 0; v <= m; v += niceStep) out.push(v);
-  if (out[out.length - 1] !== m) out.push(m);
-  return out;
-});
-
-function fmtX(v: number): string {
-  if (Math.abs(v) >= 100) return v.toFixed(0);
-  if (Math.abs(v) >= 10) return v.toFixed(1);
-  return v.toFixed(2);
-}
+const xTicks = computed<number[]>(() => niceTicks(xDomain.value.min, xDomain.value.max));
+const yTicks = computed<number[]>(() => niceIntegerTicks(maxCount.value));
 </script>
 
 <template>
@@ -165,7 +131,7 @@ function fmtX(v: number): string {
           text-anchor="middle"
           font-family="system-ui, sans-serif"
         >
-          {{ fmtX(t) }}
+          {{ fmtAxisValue(t) }}
         </text>
       </g>
 
@@ -206,7 +172,7 @@ function fmtX(v: number): string {
           stroke-width="0.5"
         >
           <title>
-            {{ fmtX(b.x0) }} – {{ fmtX(b.x1) }}: {{ b.count }} clonotype{{
+            {{ fmtAxisValue(b.x0) }} – {{ fmtAxisValue(b.x1) }}: {{ b.count }} clonotype{{
               b.count === 1 ? "" : "s"
             }}
           </title>
@@ -237,7 +203,7 @@ function fmtX(v: number): string {
           text-anchor="middle"
           font-family="system-ui, sans-serif"
         >
-          {{ fmtX(t.value) }}
+          {{ fmtAxisValue(t.value) }}
         </text>
       </g>
 

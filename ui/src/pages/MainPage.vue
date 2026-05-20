@@ -2,11 +2,7 @@
 import type { LiabilitiesReport } from "@platforma-open/milabs.3d-structure-based-liabilities.model";
 import type { PlStructureViewerProps } from "@milaboratories/structure-viewer";
 import { PlStructureViewer } from "@milaboratories/structure-viewer";
-import {
-  createPlDataTableStateV2,
-  getRawPlatformaInstance,
-  type PlRef,
-} from "@platforma-sdk/model";
+import { createPlDataTableStateV2, type PlRef } from "@platforma-sdk/model";
 import {
   computedResult,
   PlAccordionSection,
@@ -30,6 +26,9 @@ import { useApp } from "../app";
 import ClonotypeDetailPanel from "../components/ClonotypeDetailPanel.vue";
 import RiskSummaryBar from "../components/RiskSummaryBar.vue";
 import PdbLiabilityMap from "../components/pdb/PdbLiabilityMap.vue";
+import { useClonotypeDetailFetch } from "../composables/useClonotypeDetailFetch";
+import { useClusterAssignments } from "../composables/useClusterAssignments";
+import { useRunSummaryAlerts } from "../composables/useRunSummaryAlerts";
 
 // Spec R12 — Raybould 2019 canonical cutoff. rSASA below this is "buried".
 const BURIED_CUTOFF = 0.075;
@@ -79,21 +78,20 @@ const pdbsMap = computed(() => app.model.outputs.clonotypePdbsMap);
 const jsonsMap = computed(() => app.model.outputs.clonotypeJsonsMap);
 
 const selectedClonotypeKey = ref<string | null>(null);
-const detailReport = ref<LiabilitiesReport | null>(null);
-
-// Spec R42 — when the 3D Structure Clustering block is upstream, the
-// scoresTable picks up `pl7.app/clusterId` + isCentroid + TM-score
-// columns. We fetch them once per scoresTable change into a map keyed
-// by clonotype so the viewer header + dropdown filter can use them
-// without re-walking the PTable on every render.
-type ClusterAssignment = {
-  clusterId: string;
-  isCentroid: boolean;
-  tmDistanceToCentroid: number | null;
-  tmScoreToCentroid: number | null;
-};
-const clusterMap = ref<Record<string, ClusterAssignment>>({});
 const centroidsOnly = ref(false);
+
+const scoresTableOutput = computed(() => app.model.outputs.scoresTable);
+
+// Spec R42 cluster wiring + R53 per-clonotype JSON fetch + R44/R45 alert
+// computation all live as composables — keeps MainPage's script readable
+// and makes the async race-guard logic reusable / testable in isolation.
+const { clusterMap, hasClusterData, selectedClusterAssignment } = useClusterAssignments(
+  scoresTableOutput,
+  selectedClonotypeKey,
+  centroidsOnly,
+);
+const { detailReport } = useClonotypeDetailFetch(selectedClonotypeKey, jsonsMap);
+const { runSummary, showRedAlert, showGatedAlert } = useRunSummaryAlerts(scoresTableOutput);
 
 // Tab between the 3D viewer + detail panel and the per-clonotype
 // scoresTable. Default to the visualisation — the table is the bulk
@@ -149,223 +147,6 @@ const clonotypeOptions = computed(() => {
   });
 });
 
-// Cluster-aware availability flags.
-const hasClusterData = computed(() => Object.keys(clusterMap.value).length > 0);
-const selectedClusterAssignment = computed<ClusterAssignment | undefined>(() =>
-  selectedClonotypeKey.value ? clusterMap.value[selectedClonotypeKey.value] : undefined,
-);
-
-// Fetch the per-clonotype JSON whenever the selected key changes. The
-// captured `expectedKey` guards against fast-switch races.
-watchEffect(async () => {
-  const key = selectedClonotypeKey.value;
-  detailReport.value = null;
-  if (!key) return;
-  const jsonHandle = jsonsMap.value?.find((e) => String(e.key.at(0)) === key)?.value?.handle;
-  if (!jsonHandle) return;
-  const expectedKey = key;
-  try {
-    const bytes = await getRawPlatformaInstance().blobDriver.getContent(jsonHandle);
-    if (selectedClonotypeKey.value !== expectedKey) return;
-    const text = new TextDecoder().decode(bytes);
-    detailReport.value = JSON.parse(text) as LiabilitiesReport;
-  } catch (err) {
-    console.warn("[liabilities] failed to load per-clonotype JSON", err);
-  }
-});
-
-// R42 — populate clusterMap from the scoresTable PTable (cluster columns
-// were auto-joined by the model). Empty when no clustering block is
-// upstream, in which case the header + filter UI just hide themselves.
-watchEffect(async () => {
-  const tableOutput = app.model.outputs.scoresTable;
-  if (!tableOutput?.ok || !tableOutput.value?.fullTableHandle) {
-    clusterMap.value = {};
-    return;
-  }
-  const handle = tableOutput.value.fullTableHandle;
-  const pf = getRawPlatformaInstance().pFrameDriver;
-  const shape = await pf.getShape(handle);
-  if (shape.rows === 0) {
-    clusterMap.value = {};
-    return;
-  }
-  const spec = await pf.getSpec(handle);
-  let keyIdx = -1;
-  let clusterIdIdx = -1;
-  let isCentroidIdx = -1;
-  let tmDistIdx = -1;
-  let tmScoreIdx = -1;
-  for (let i = 0; i < spec.length; i++) {
-    const e = spec[i];
-    if (e?.type === "axis" && e.spec?.name === "pl7.app/vdj/scClonotypeKey") keyIdx = i;
-    else if (e?.type === "column") {
-      const n = e.spec?.name;
-      if (n === "pl7.app/clusterId") clusterIdIdx = i;
-      else if (n === "pl7.app/structure/clustering/isCentroid") isCentroidIdx = i;
-      else if (n === "pl7.app/structure/clustering/tmDistanceToCentroid") tmDistIdx = i;
-      else if (n === "pl7.app/structure/clustering/tmScoreToCentroid") tmScoreIdx = i;
-    }
-  }
-  if (keyIdx === -1 || clusterIdIdx === -1) {
-    clusterMap.value = {};
-    return;
-  }
-  const indices = [keyIdx, clusterIdIdx, isCentroidIdx, tmDistIdx, tmScoreIdx].filter(
-    (i) => i >= 0,
-  );
-  const data = await pf.getData(handle, indices, { offset: 0, length: shape.rows });
-  const posOf = (idx: number) => indices.indexOf(idx);
-  function read(colIdx: number, row: number): string | number | null {
-    if (colIdx === -1) return null;
-    const col = data[posOf(colIdx)];
-    const d = col?.data as unknown;
-    if (Array.isArray(d)) return ((d as unknown[])[row] ?? null) as string | number | null;
-    if (d && typeof d === "object")
-      return ((d as Record<string, unknown>)[String(row)] ?? null) as string | number | null;
-    return null;
-  }
-  const out: Record<string, ClusterAssignment> = {};
-  for (let row = 0; row < shape.rows; row++) {
-    const k = read(keyIdx, row);
-    const cid = read(clusterIdIdx, row);
-    if (k == null || cid == null) continue;
-    const isC = read(isCentroidIdx, row);
-    const tmD = read(tmDistIdx, row);
-    const tmS = read(tmScoreIdx, row);
-    out[String(k)] = {
-      clusterId: String(cid),
-      isCentroid: Number(isC) === 1,
-      tmDistanceToCentroid: tmD == null ? null : Number(tmD),
-      tmScoreToCentroid: tmS == null ? null : Number(tmS),
-    };
-  }
-  clusterMap.value = out;
-});
-
-// When the user toggles "Centroids only" and the current selection isn't
-// a centroid, jump to the centroid of the same cluster so the viewer
-// doesn't go blank.
-watchEffect(() => {
-  if (!centroidsOnly.value) return;
-  const key = selectedClonotypeKey.value;
-  if (!key) return;
-  const cmap = clusterMap.value;
-  const current = cmap[key];
-  if (current?.isCentroid) return;
-  const sameClusterCentroid = Object.entries(cmap).find(
-    ([, a]) => a.clusterId === current?.clusterId && a.isCentroid,
-  );
-  if (sameClusterCentroid) selectedClonotypeKey.value = sameClusterCentroid[0];
-});
-
-// Spec R44 / R45 run-summary alerts.
-// Reads the *Flag columns + confidenceGatedMotifCount from the scores PTable
-// (3 rows on the live dataset, so this is a cheap fetch) and surfaces a
-// banner when:
-//   R44: > 10 % of clonotypes have at least one red metric flag
-//   R45: > 25 % of clonotypes have ≥ 1 confidence-gated motif
-const RED = "red";
-const FLAG_COL_NAMES = new Set([
-  "pl7.app/liabilities/totalCdrLengthFlag",
-  "pl7.app/liabilities/pshFlag",
-  "pl7.app/liabilities/ppcFlag",
-  "pl7.app/liabilities/pncFlag",
-  "pl7.app/liabilities/sfvcspFlag",
-  "pl7.app/liabilities/cdrh3CompactnessFlag",
-]);
-const GATED_COL_NAME = "pl7.app/liabilities/confidenceGatedMotifCount";
-
-type RunSummary = {
-  total: number;
-  redClonotypes: number;
-  gatedClonotypes: number;
-  redFraction: number;
-  gatedFraction: number;
-};
-const runSummary = ref<RunSummary | null>(null);
-
-// Pull *Flag + confidenceGated values from the scoresTable PTable and compute
-// the alert fractions. watchEffect captures the reactive deps on the
-// `tableOutput.value.fullTableHandle` access — anything before the first
-// `await` re-runs the effect when the model output changes.
-watchEffect(async () => {
-  const tableOutput = app.model.outputs.scoresTable;
-  if (!tableOutput?.ok || !tableOutput.value?.fullTableHandle) {
-    runSummary.value = null;
-    return;
-  }
-  const handle = tableOutput.value.fullTableHandle;
-  const pf = getRawPlatformaInstance().pFrameDriver;
-
-  const shape = await pf.getShape(handle);
-  if (shape.rows === 0) {
-    runSummary.value = null;
-    return;
-  }
-  const spec = await pf.getSpec(handle);
-  const flagIndices: number[] = [];
-  let gatedIndex = -1;
-  for (let i = 0; i < spec.length; i++) {
-    const name = spec[i]?.spec?.name;
-    if (!name) continue;
-    if (FLAG_COL_NAMES.has(name)) flagIndices.push(i);
-    if (name === GATED_COL_NAME) gatedIndex = i;
-  }
-  if (flagIndices.length === 0 && gatedIndex === -1) {
-    runSummary.value = null;
-    return;
-  }
-
-  const requestIndices = [...flagIndices, gatedIndex].filter((i) => i >= 0);
-  const data = await pf.getData(handle, requestIndices, { offset: 0, length: shape.rows });
-  const rowCount = shape.rows;
-
-  let redClonotypes = 0;
-  for (let row = 0; row < rowCount; row++) {
-    for (let k = 0; k < flagIndices.length; k++) {
-      const col = data[k];
-      const value = Array.isArray(col?.data) ? col.data[row] : undefined;
-      if (value === RED) {
-        redClonotypes++;
-        break;
-      }
-    }
-  }
-
-  let gatedClonotypes = 0;
-  if (gatedIndex !== -1) {
-    // Long columns come back from pfDriver as a numeric-key wrapped object
-    // carrying BigInts (e.g. `{ 0: 12n, 1: 35n }`). Cast through `unknown`
-    // because PVectorData* is a union of TypedArrays / arrays / wrapped maps.
-    const col = data[flagIndices.length];
-    const get = (i: number): number => {
-      const d = col?.data as unknown;
-      if (Array.isArray(d)) return Number((d as unknown[])[i] ?? 0);
-      if (d && typeof d === "object") {
-        const v = (d as Record<string, unknown>)[String(i)];
-        return v === undefined ? 0 : Number(v);
-      }
-      return 0;
-    };
-    for (let row = 0; row < rowCount; row++) {
-      if (get(row) > 0) gatedClonotypes++;
-    }
-  }
-
-  runSummary.value = {
-    total: rowCount,
-    redClonotypes,
-    gatedClonotypes,
-    redFraction: redClonotypes / rowCount,
-    gatedFraction: gatedClonotypes / rowCount,
-  };
-});
-
-const RED_FLAG_THRESHOLD = 0.1;
-const GATED_THRESHOLD = 0.25;
-const showRedAlert = computed(() => (runSummary.value?.redFraction ?? 0) > RED_FLAG_THRESHOLD);
-const showGatedAlert = computed(() => (runSummary.value?.gatedFraction ?? 0) > GATED_THRESHOLD);
 function pct(value: number): string {
   return `${Math.round(value * 100)}%`;
 }

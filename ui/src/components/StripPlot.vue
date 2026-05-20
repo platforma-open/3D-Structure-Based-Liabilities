@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { fmtAxisValue, niceTicks } from "../utils/chart";
 
 /**
  * Spec R54 — strip plot rendered below ~20 clonotypes where a histogram
@@ -61,27 +62,7 @@ function yFor(idx: number, total: number): number {
   return PADDING.top + (idx / (total - 1)) * PLOT_H;
 }
 
-const ticks = computed<number[]>(() => {
-  const { min, max } = xDomain.value;
-  // ~5 ticks at "nice" round numbers.
-  const targetCount = 5;
-  const rawStep = (max - min) / targetCount;
-  const pow = Math.pow(10, Math.floor(Math.log10(rawStep)));
-  const norm = rawStep / pow;
-  const niceStep = (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * pow;
-  const startVal = Math.ceil(min / niceStep) * niceStep;
-  const out: number[] = [];
-  for (let v = startVal; v <= max + niceStep * 0.001; v += niceStep) {
-    out.push(Number(v.toFixed(6)));
-  }
-  return out;
-});
-
-function fmt(v: number): string {
-  if (Math.abs(v) >= 100) return v.toFixed(0);
-  if (Math.abs(v) >= 10) return v.toFixed(1);
-  return v.toFixed(2);
-}
+const ticks = computed<number[]>(() => niceTicks(xDomain.value.min, xDomain.value.max));
 
 const sortedPoints = computed(() => [...props.points].sort((a, b) => a.value - b.value));
 </script>
@@ -123,7 +104,7 @@ const sortedPoints = computed(() => [...props.points].sort((a, b) => a.value - b
           text-anchor="middle"
           font-family="system-ui, sans-serif"
         >
-          {{ fmt(t) }}
+          {{ fmtAxisValue(t) }}
         </text>
       </g>
 
@@ -150,7 +131,7 @@ const sortedPoints = computed(() => [...props.points].sort((a, b) => a.value - b
           text-anchor="middle"
           font-family="system-ui, sans-serif"
         >
-          {{ fmt(t.value) }}
+          {{ fmtAxisValue(t.value) }}
         </text>
       </g>
 
@@ -166,7 +147,7 @@ const sortedPoints = computed(() => [...props.points].sort((a, b) => a.value - b
             stroke="#1d4ed8"
             stroke-width="1"
           >
-            <title>{{ p.key }}: {{ fmt(p.value) }}</title>
+            <title>{{ p.key }}: {{ fmtAxisValue(p.value) }}</title>
           </circle>
           <text
             :x="xFor(p.value) + 8"

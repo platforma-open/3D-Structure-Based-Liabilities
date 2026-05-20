@@ -208,37 +208,6 @@ function fmtConf(v: number | null): string {
   margin: 0;
 }
 
-.scoreGrid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-}
-
-.scoreCell {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(148, 163, 184, 0.08);
-  padding: 6px 10px;
-  border-radius: 4px;
-}
-
-.scoreLabel {
-  font-size: 11px;
-  color: #6b7280;
-}
-
-.scoreValue {
-  font-weight: 600;
-}
-
-.riskBadge {
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 10px;
-}
-
 .kv {
   width: 100%;
   border-collapse: collapse;
