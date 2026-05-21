@@ -25,7 +25,7 @@
   },
   "peerDependencies": {
     "oxfmt": "*",
-    "oxlint": "*"
+    "oxlint": "1.63.0"
   },
   "packageManager": "pnpm@9.12.0"
 }

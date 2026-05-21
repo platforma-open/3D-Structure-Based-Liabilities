@@ -14,7 +14,8 @@
     "@milaboratories/structure-viewer": "catalog:",
     "@platforma-open/milabs.3d-structure-based-liabilities.model": "workspace:*",
     "@platforma-sdk/model": "catalog:",
-    "@platforma-sdk/ui-vue": "catalog:"
+    "@platforma-sdk/ui-vue": "catalog:",
+    "vue": "catalog:"
   },
   "devDependencies": {
     "@milaboratories/ts-builder": "catalog:",
@@ -23,7 +24,6 @@
   "peerDependencies": {
     "typescript": "*",
     "vite": "*",
-    "vitest": "*",
-    "vue": "*"
+    "vitest": "*"
   }
 }
