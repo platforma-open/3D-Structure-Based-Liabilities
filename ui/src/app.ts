@@ -1,4 +1,4 @@
-import { platforma } from "@platforma-open/milabs.hello-world.model";
+import { platforma } from "@platforma-open/milabs.3d-structure-based-liabilities.model";
 import { defineAppV3 } from "@platforma-sdk/ui-vue";
 import MainPage from "./pages/MainPage.vue";
 

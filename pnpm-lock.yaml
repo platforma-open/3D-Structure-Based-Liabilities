@@ -75,13 +75,13 @@ importers:
 
   block:
     dependencies:
-      '@platforma-open/milabs.hello-world.model':
+      '@platforma-open/milabs.3d-structure-based-liabilities.model':
         specifier: workspace:*
         version: link:../model
-      '@platforma-open/milabs.hello-world.ui':
+      '@platforma-open/milabs.3d-structure-based-liabilities.ui':
         specifier: workspace:*
         version: link:../ui
-      '@platforma-open/milabs.hello-world.workflow':
+      '@platforma-open/milabs.3d-structure-based-liabilities.workflow':
         specifier: workspace:*
         version: link:../workflow
       '@platforma-sdk/model':
@@ -122,11 +122,14 @@ importers:
       '@platforma-sdk/package-builder':
         specifier: 'catalog:'
         version: 3.12.0
+      shx:
+        specifier: 'catalog:'
+        version: 0.4.0
 
   test:
     dependencies:
       this-block:
-        specifier: workspace:@platforma-open/milabs.hello-world@*
+        specifier: workspace:@platforma-open/milabs.3d-structure-based-liabilities@*
         version: link:../block
       typescript:
         specifier: '*'
@@ -141,7 +144,7 @@ importers:
 
   ui:
     dependencies:
-      '@platforma-open/milabs.hello-world.model':
+      '@platforma-open/milabs.3d-structure-based-liabilities.model':
         specifier: workspace:*
         version: link:../model
       '@platforma-sdk/ui-vue':
@@ -169,7 +172,7 @@ importers:
 
   workflow:
     dependencies:
-      '@platforma-open/milabs.hello-world.software':
+      '@platforma-open/milabs.3d-structure-based-liabilities.software':
         specifier: workspace:*
         version: link:../software
       '@platforma-sdk/workflow-tengo':
@@ -1968,8 +1971,8 @@ packages:
   '@tybys/wasm-util@0.10.1':
     resolution: {integrity: sha512-9tTaPJLSiejZKx+Bmog4uSubteqTvFrVrURwkmHixBo0G4seD0zUxp98E1DzUBJxLQ3NPwXrGKDiVjwx/DpPsg==}
 
-  '@types/archiver@6.0.3':
-    resolution: {integrity: sha512-a6wUll6k3zX6qs5KlxIggs1P1JcYJaTCx2gnlr+f0S1yd2DoaEwoIK10HmBaLnZwWneBz+JBm0dwcZu0zECBcQ==}
+  '@types/archiver@6.0.4':
+    resolution: {integrity: sha512-ULdQpARQ3sz9WH4nb98mJDYA0ft2A8C4f4fovvUcFwINa1cgGjY36JCAYuP5YypRq4mco1lJp1/7jEMS2oR0Hg==}
 
   '@types/argparse@1.0.38':
     resolution: {integrity: sha512-ebDJ9b0e702Yr7pWgB0jzm+CX4Srzz8RcXtLJDJB+BSccqMa36uyH/zUsSYao5+BD1ytv3k3rPYCq4mAE1hsXA==}
@@ -6123,7 +6126,7 @@ snapshots:
       '@aws-sdk/lib-storage': 3.859.0(@aws-sdk/client-s3@3.859.0)
       '@milaboratories/resolve-helper': 1.1.3
       '@oclif/core': 4.2.6
-      '@types/archiver': 6.0.3
+      '@types/archiver': 6.0.4
       '@types/node': 24.5.2
       archiver: 7.0.1
       undici: 7.16.0
@@ -6848,7 +6851,7 @@ snapshots:
       tslib: 2.8.1
     optional: true
 
-  '@types/archiver@6.0.3':
+  '@types/archiver@6.0.4':
     dependencies:
       '@types/readdir-glob': 1.1.5
 

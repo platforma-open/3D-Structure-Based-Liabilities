@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milabs.hello-world",
+  "name": "@platforma-open/milabs.3d-structure-based-liabilities",
   "version": "1.0.0",
   "scripts": {
     "build": "shx rm -rf ./block-pack && block-tools pack",
@@ -13,25 +13,25 @@
   ],
   "dependencies": {
     "@platforma-sdk/model": "catalog:",
-    "@platforma-open/milabs.hello-world.workflow": "workspace:*",
-    "@platforma-open/milabs.hello-world.model": "workspace:*",
-    "@platforma-open/milabs.hello-world.ui": "workspace:*"
+    "@platforma-open/milabs.3d-structure-based-liabilities.workflow": "workspace:*",
+    "@platforma-open/milabs.3d-structure-based-liabilities.model": "workspace:*",
+    "@platforma-open/milabs.3d-structure-based-liabilities.ui": "workspace:*"
   },
   "block": {
     "components": {
-      "workflow": "@platforma-open/milabs.hello-world.workflow/dist/tengo/tpl/main.plj.gz",
-      "model": "@platforma-open/milabs.hello-world.model/dist/model.json",
-      "ui": "@platforma-open/milabs.hello-world.ui/dist"
+      "workflow": "@platforma-open/milabs.3d-structure-based-liabilities.workflow/dist/tengo/tpl/main.plj.gz",
+      "model": "@platforma-open/milabs.3d-structure-based-liabilities.model/dist/model.json",
+      "ui": "@platforma-open/milabs.3d-structure-based-liabilities.ui/dist"
     },
     "meta": {
       "title": "3D-Structure-Based-Liabilities",
       "logo": "file:../logos/block-logo.png",
-      "url": "https://github.com/platforma-open/milabs.hello-world",
+      "url": "https://github.com/platforma-open/3D-Structure-Based-Liabilities",
       "support": "mailto:support@milaboratories.com",
       "description": "Identifying potential liabilities in therapeutic antibody candidates using 3D structure analysis. Takes a protein structure in PDB format through preprocessing and liability detection to flag developability risks.",
       "longDescription": "file:../docs/description.md",
       "changelog": "file:../CHANGELOG.md",
-      "tags": ["dev"],
+      "tags": ["antibody", "developability", "structure-analysis", "liabilities"],
       "organization": {
         "name": "MiLaboratories Inc",
         "url": "https://milaboratories.com/",

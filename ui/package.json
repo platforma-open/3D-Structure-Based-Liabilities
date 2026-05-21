@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milabs.hello-world.ui",
+  "name": "@platforma-open/milabs.3d-structure-based-liabilities.ui",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "check": "ts-builder check --target browser"
   },
   "dependencies": {
-    "@platforma-open/milabs.hello-world.model": "workspace:*",
+    "@platforma-open/milabs.3d-structure-based-liabilities.model": "workspace:*",
     "@platforma-sdk/ui-vue": "catalog:"
   },
   "devDependencies": {

@@ -16,7 +16,7 @@ jobs:
       - init
     uses: milaboratory/github-ci/.github/workflows/block-mark-stable.yaml@v4
     with:
-      app-name: 'Block: hello-world - Mark Stable'
+      app-name: 'Block: 3D Structure-Based Liabilities - Mark Stable'
       node-version: '20.x'
       npmrc-config: |
         {

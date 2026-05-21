@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milabs.hello-world.workflow",
+  "name": "@platforma-open/milabs.3d-structure-based-liabilities.workflow",
   "version": "1.0.0",
   "description": "Block Workflow",
   "type": "module",
@@ -9,7 +9,7 @@
     "format": "/usr/bin/env emacs --script ./format.el"
   },
   "dependencies": {
-    "@platforma-open/milabs.hello-world.software": "workspace:*",
+    "@platforma-open/milabs.3d-structure-based-liabilities.software": "workspace:*",
     "@platforma-sdk/workflow-tengo": "catalog:"
   },
   "devDependencies": {
