@@ -333,22 +333,14 @@ cysColumnSpecs := {
 cysColumnIds := ["cysClass", "chainRole", "bondingState", "rsasa", "sidechainRsasa", "sasa", "sidechainSasa", "partnerChainId", "partnerResSeq", "partnerIcode"]
 
 // ──────────────── Scores PFrame ────────────────
-// processColumn's xsv-import-pt requires at least one declared axis even
-// though the upstream `pl7.app/vdj/scClonotypeKey` axis is auto-prepended.
-// We keep `pl7.app/structure/id` as a "static"-valued placeholder so the
-// xsv settings have a non-empty axes list; the final PColumn axes end up
-// as [scClonotypeKey, structureId="static"]. Marked optional so AG-Grid
-// hides it by default.
-scoresAxesSpec := [
-	{
-		name: "pl7.app/structure/id",
-		type: "String",
-		annotations: {
-			"pl7.app/label": "Structure",
-			"pl7.app/table/visibility": "optional"
-		}
-	}
-]
+// The xsv axes list is empty here — processColumn auto-prepends the
+// upstream PDB column's axes (`[sampleId, scClonotypeKey]`) to every
+// output, which already uniquely keys each row. xsv-import-pt + pfconv
+// accept an empty `axes` array on the parquet path (schema is built
+// from `columns` only), so we drop the historical `structureId="static"`
+// placeholder column that otherwise rendered as a redundant "Structure"
+// row-axis cell with the same constant value on every row.
+scoresAxesSpec := []
 
 // Default visibility + orderPriority per spec R51:
 //   Default visible: mode, structuralDevelopabilityRisk, structuralIntegrityRisk,
@@ -625,15 +617,12 @@ buildCysXsvSettings := func(blockId) {
 	}
 }
 
-// Scores frame: parquet carries a `structureId="static"` column the
-// python writer emits for the xsv.importFile "at least one axis"
-// requirement (see `scoresAxesSpec` comment above). Final PColumn axes:
-// [scClonotypeKey, structureId="static"].
+// Scores frame: empty axes; processColumn prepends `[sampleId,
+// scClonotypeKey]` so each per-clonotype row is uniquely keyed without
+// us declaring anything xsv-side.
 buildScoresXsvSettings := func(blockId) {
 	return {
-		axes: [
-			{ column: "structureId", spec: scoresAxesSpec[0] }
-		],
+		axes: [],
 		columns: buildXsvColumns(scoresColumnIds, scoresColumnSpecs, blockId),
 		storageFormat: "Parquet"
 	}

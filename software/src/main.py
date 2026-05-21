@@ -134,15 +134,14 @@ _CYS_COLUMNS = [
     ColumnSchema(id="partnerIcode", type="String"),
 ]
 
-# Per-structure scalar PFrame (spec R38). One row per structure. The
-# `structureId` axis is a placeholder until upstream provides a clonotype
-# key via PrimaryRef (R1-R6). R23 summary counts, R38 motif/score scalars,
-# R24-R30 surface metrics, R36 low-conf fractions, R39 threshold flags
-# all live here. Workflow side annotates `*Flag` columns with
-# `pl7.app/isScore: "true"` (R40); raw metrics ship as plain features.
-_SCORES_AXES = [
-    AxisSchema(id="structureId", type="String"),
-]
+# Per-structure scalar PFrame (spec R38). One row per structure. No
+# block-side axes — `pframes.processColumn` prepends the upstream PDB
+# column's `[sampleId, scClonotypeKey]` axes to every emitted PColumn,
+# which is what keys each row. R23 summary counts, R38 motif/score
+# scalars, R24-R30 surface metrics, R36 low-conf fractions, R39
+# threshold flags all live here. Workflow side annotates `*Flag` columns
+# with `pl7.app/isScore: "true"` (R40); raw metrics ship as plain features.
+_SCORES_AXES: list[AxisSchema] = []
 _SCORES_COLUMNS = [
     # Spec R7 mode
     ColumnSchema(id="mode", type="String"),
@@ -183,9 +182,6 @@ _SCORES_COLUMNS = [
     ColumnSchema(id="cdrh3CompactnessFlag", type="String"),
 ]
 
-# Placeholder axis value for the scores PColumn — replaced by the upstream
-# clonotype key once a PrimaryRef-emitting structure-prediction block lands.
-_PLACEHOLDER_STRUCTURE_ID = "static"
 # Spec R39 — sentinel used when a flag isn't applicable to the current mode.
 _FLAG_SENTINEL = "-"
 
@@ -232,10 +228,6 @@ def _build_scores_row(
     missing_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_missing")
 
     return {
-        # Placeholder axis until upstream provides a clonotype key via
-        # PrimaryRef (R1-R6). The workflow swaps this column out for the
-        # real scClonotypeKey axis on the PrimaryRef path.
-        "structureId": _PLACEHOLDER_STRUCTURE_ID,
         "mode": mode,
         # R23 summary counts.
         "extraCysCount": extra_cys,
