@@ -1,49 +1,57 @@
 """Spec R39 threshold flags + R41/R41a composite scoring and risk classifiers.
 
-Thresholds are pinned per spec line 142 (Raybould 2019 Table 2 for Fv) and
-spec line 147 (Gordon 2025 / TNP source for VHH). Composite scoring follows
-R41's mirror of `compute_developability_score` in the sequence-liabilities
-block: fixability_weight × region_weight × exposure for motifs, plus
-per-mode flag bumps (red=8, amber=3, green=0), plus the Cys contributions
-(8 × exposed_extra + 20 × broken_canonical + 20 × missing_canonical).
+Thresholds live in `data/thresholds.json` per spec line 142 (`R39`) so the
+calibration source + cohortSize travel with the values. Loaded once at
+import time; runtime threshold checks read from the parsed dict.
+Composite scoring (R41) mirrors `compute_developability_score` in the
+sequence-liabilities block: fixability_weight × region_weight × exposure
+for motifs, plus per-mode flag bumps (red=8, amber=3, green=0), plus the
+Cys contributions (8 × exposed_extra + 20 × broken_canonical + 20 ×
+missing_canonical).
+
+VHH PSH/PPC/PNC/totalCdrLength thresholds are deliberately omitted from
+the JSON — they need M1 calibration against the TNP source paper; the
+code below falls back to Fv values for those four metrics until then.
 """
 
+import json
+from pathlib import Path
 from typing import Optional
 
+_THRESHOLDS_PATH = Path(__file__).parent / "data" / "thresholds.json"
 
-# R39 Fv thresholds (Raybould 2019 Table 2). Bidirectional metrics return
-# "green" / "amber" / "red"; cohortSize is 242 for traceability.
-#
-# `direction`: "high_bad" — values above amber band are red (most metrics).
-#              "low_bad"  — values below amber band are red (SFvCSP).
-_FV_THRESHOLDS = {
-    "totalCdrLength": {"direction": "high_bad", "amber": (54, 60)},
-    # PSH bidirectional: red <83.84 OR >173.85; amber 83.84-100.71 OR 156.20-173.85; green 100.71-156.20
-    "psh": {
-        "bidirectional": True,
-        "green": (100.71, 156.20),
-        "amber_lo": (83.84, 100.71),
-        "amber_hi": (156.20, 173.85),
-    },
-    "ppc": {"direction": "high_bad", "amber": (1.25, 3.16)},
-    "pnc": {"direction": "high_bad", "amber": (1.84, 3.50)},
-    # SFvCSP: more-positive product = better-matched chains. Red <-20.40,
-    # amber -20.40..-6.30, green >-6.30.
-    "sfvcsp": {"direction": "low_bad", "amber": (-20.40, -6.30)},
-}
 
-# R39 VHH thresholds. Spec gives only CDRH3 compactness in full ("green
-# 0.82–1.57, amber 0.56–0.82 OR 1.57–1.61, red <0.56 OR >1.61"); the other
-# four metrics are pinned at M1 from TNP source. Until M1, default to Fv
-# thresholds for the other four — best available proxy.
-_VHH_THRESHOLDS = {
-    "cdrh3Compactness": {
-        "bidirectional": True,
-        "green": (0.82, 1.57),
-        "amber_lo": (0.56, 0.82),
-        "amber_hi": (1.57, 1.61),
-    },
-}
+def _load_thresholds() -> tuple[dict, dict]:
+    """Load Fv + VHH threshold dicts from `data/thresholds.json`. Returns
+    `(fv, vhh)` keyed by metric name with the same shape the runtime
+    flaggers consume (`bidirectional` + `green`/`amber_lo`/`amber_hi` for
+    bidirectional metrics; `direction` + `amber` for one-sided)."""
+    raw = json.loads(_THRESHOLDS_PATH.read_text())
+    return raw["fv"]["thresholds"], raw["vhh"]["thresholds"]
+
+
+# Loaded at import. Tuples are produced from the JSON arrays so downstream
+# code can treat them as fixed-arity bands (unchanged from the previous
+# inline-constants version).
+_FV_THRESHOLDS_RAW, _VHH_THRESHOLDS_RAW = _load_thresholds()
+
+
+def _coerce_band_tuples(thresholds: dict) -> dict:
+    """JSON gives us `[lo, hi]` arrays; the rest of the file works on
+    `(lo, hi)` tuples for consistency with the previous inline definitions
+    and easier unpacking."""
+    out = {}
+    for metric, spec in thresholds.items():
+        coerced = dict(spec)
+        for key in ("amber", "green", "amber_lo", "amber_hi"):
+            if key in coerced and isinstance(coerced[key], list):
+                coerced[key] = tuple(coerced[key])
+        out[metric] = coerced
+    return out
+
+
+_FV_THRESHOLDS = _coerce_band_tuples(_FV_THRESHOLDS_RAW)
+_VHH_THRESHOLDS = _coerce_band_tuples(_VHH_THRESHOLDS_RAW)
 
 
 def _flag_one_sided(value: float, spec: dict) -> str:

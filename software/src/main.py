@@ -447,18 +447,29 @@ def main() -> None:
     mode = "TAP" if n_chains == 2 else "TNP"
 
     # Defensive checks (spec R21 SSBOND cross-check + R33 hallmark tetrad).
+    # The hallmark check needs `mode` so it can warn when the four hallmark
+    # residues disagree with chain-count-derived TAP/TNP classification.
     diagnostics = {
         "ssbondCrossCheck": cross_check_ssbonds(parsed.ssbonds, cys_hits),
         "hallmarkTetrad": check_hallmark_tetrad(
-            parsed, args.numbering_scheme, heavy_chain_id
+            parsed, args.numbering_scheme, heavy_chain_id, chain_count_mode=mode
         ),
     }
+
+    # Spec R35 — gated motifs (`confidenceGated == "yes"`) ship in a
+    # dedicated `uncertainLiabilities[]` view so callers that want only
+    # the high-confidence calls can read `motifs[]` without filtering.
+    # The motifs PColumn / table still carry every hit for traceability;
+    # the split is JSON-side only.
+    confident_motifs = [h for h in motif_hits if h.confidenceGated != "yes"]
+    uncertain_motifs = [h for h in motif_hits if h.confidenceGated == "yes"]
 
     report = {
         "numberingScheme": args.numbering_scheme,
         "hydrophobicityScale": args.hydrophobicity_scale,
         "mode": mode,
-        "motifs": [asdict(h) for h in motif_hits],
+        "motifs": [asdict(h) for h in confident_motifs],
+        "uncertainLiabilities": [asdict(h) for h in uncertain_motifs],
         "cysteines": [asdict(h) for h in cys_hits],
         "chains": chains,
         "scores": {

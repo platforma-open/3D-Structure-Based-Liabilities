@@ -1,0 +1,43 @@
+{
+  "_comment": "Spec R39 amber/red threshold bands per Raybould 2019 Table 2 (Fv mode) and Gordon 2025 (VHH mode CDRH3 compactness). cohortSize is the calibration-cohort size from the source paper; preserved here so downstream users can weigh the threshold's statistical confidence. VHH PSH/PPC/PNC/totalCdrLength thresholds are deliberately omitted — they need M1 calibration from the TNP source paper; the scoring code falls back to Fv values until then.",
+  "fv": {
+    "cohortSize": 242,
+    "citation": "Raybould et al., PNAS 2019, vol. 116 no. 10, 4025-4030 (Table 2)",
+    "thresholds": {
+      "totalCdrLength": {
+        "direction": "high_bad",
+        "amber": [54, 60]
+      },
+      "psh": {
+        "bidirectional": true,
+        "green": [100.71, 156.20],
+        "amber_lo": [83.84, 100.71],
+        "amber_hi": [156.20, 173.85]
+      },
+      "ppc": {
+        "direction": "high_bad",
+        "amber": [1.25, 3.16]
+      },
+      "pnc": {
+        "direction": "high_bad",
+        "amber": [1.84, 3.50]
+      },
+      "sfvcsp": {
+        "direction": "low_bad",
+        "amber": [-20.40, -6.30]
+      }
+    }
+  },
+  "vhh": {
+    "cohortSize": 36,
+    "citation": "Gordon et al., bioRxiv 2025, doi:10.1101/2025.08.11.669635 (TNP)",
+    "thresholds": {
+      "cdrh3Compactness": {
+        "bidirectional": true,
+        "green": [0.82, 1.57],
+        "amber_lo": [0.56, 0.82],
+        "amber_hi": [1.57, 1.61]
+      }
+    }
+  }
+}

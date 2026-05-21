@@ -55,11 +55,13 @@ wf.body(func(args) {
 	// reads back via `inputs.<name>`. Empty-string fallback for optional
 	// args keeps the body's `is_undefined` guard simple (the empty string
 	// distinguishes "user left it blank" from missing input).
+	// Spec R12 — rSASA buried cutoff is hardcoded to 0.075 by the python
+	// (canonical Raybould 2019 value). No workflow override; not in
+	// `bodyExtra`.
 	bodyExtra := {
 		numberingScheme: smart.createJsonResource(is_undefined(args.numberingScheme) ? "" : args.numberingScheme),
 		heavyChainId: smart.createJsonResource(is_undefined(args.heavyChainId) ? "" : args.heavyChainId),
 		lightChainId: smart.createJsonResource(is_undefined(args.lightChainId) ? "" : args.lightChainId),
-		rsasaBuriedCutoff: smart.createJsonResource(args.rsasaBuriedCutoff),
 		frConfThresh: smart.createJsonResource(args.frConfThresh),
 		cdrConfThresh: smart.createJsonResource(args.cdrConfThresh),
 		hydrophobicityScale: smart.createJsonResource(is_undefined(args.hydrophobicityScale) ? "" : args.hydrophobicityScale)

@@ -34,6 +34,17 @@ const motifsByType = computed<Record<string, MotifHit[]>>(() => {
   return out;
 });
 
+// Spec R35 — gated motifs render in their own section so the user can
+// see what was confidence-suppressed without it polluting the confident-
+// call list above.
+const uncertainByType = computed<Record<string, MotifHit[]>>(() => {
+  const out: Record<string, MotifHit[]> = {};
+  for (const m of props.report?.uncertainLiabilities ?? []) {
+    (out[m.type] ??= []).push(m);
+  }
+  return out;
+});
+
 const cysteines = computed(() => props.report?.cysteines ?? []);
 
 const flags = computed<Record<string, string>>(() => {
@@ -140,6 +151,33 @@ function fmtConf(v: number | null): string {
               <td :class="$style.motifScore">
                 <span v-if="h.confidenceGated === 'yes'" :class="$style.gated">gated</span>
                 <span v-else>{{ h.weightedScore.toFixed(2) }}</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section v-if="Object.keys(uncertainByType).length > 0" :class="$style.section">
+      <h3 :class="$style.h3">
+        Uncertain liabilities
+        <span :class="$style.muted">
+          × {{ report?.uncertainLiabilities?.length ?? 0 }} (R35 — gated by B-factor)
+        </span>
+      </h3>
+      <div v-for="(hits, type) in uncertainByType" :key="type" :class="$style.motifGroup">
+        <div :class="$style.motifGroupHead">
+          {{ type }} <span :class="$style.muted">× {{ hits.length }}</span>
+        </div>
+        <table :class="$style.motifTable">
+          <tbody>
+            <tr v-for="h in hits" :key="`${h.chainId}-${h.resSeq}-${h.iCode}-${h.type}`">
+              <td :class="$style.motifSite">{{ h.chainId }}/{{ h.resSeq }}{{ h.iCode }}</td>
+              <td :class="$style.motifRegion">{{ h.region ?? "—" }}</td>
+              <td :class="$style.motifRsasa">rSASA {{ pctRsasa(h.rsasa) }}</td>
+              <td :class="$style.motifConf">B {{ fmtConf(h.confidence) }}</td>
+              <td :class="$style.motifScore">
+                <span :class="$style.gated">gated</span>
               </td>
             </tr>
           </tbody>

@@ -84,10 +84,19 @@ export type CysteineHit = {
  * extra used by the UI residue map until per-residue PColumn outputs land. */
 export type LiabilitiesReport = {
   numberingScheme: "imgt" | "chothia" | "kabat" | null;
-  /** Spec R7 — auto-detected from chain count. "complex" for 3+ chains
-   * (the spec rejects but we keep going for dev fixtures like 1N8Z). */
+  /** Spec R7 — strict chain-count classification. TAP for paired Fv (2
+   * chains), TNP for VHH single chain (≤180 residues). Earlier runs
+   * could also carry "complex" / "empty" before R7 was enforced; the
+   * type keeps those as legacy values so old reports still parse. */
   mode?: "TAP" | "TNP" | "complex" | "empty";
+  /** Spec R35 — confident motif calls (those not gated by the R34
+   * B-factor confidence check). Gated calls live in `uncertainLiabilities`. */
   motifs: MotifHit[];
+  /** Spec R35 — motif calls whose chemically-relevant residue had a
+   * B-factor above the region-aware confidence threshold. Reported for
+   * traceability but excluded from `motifStructuralRiskScore` and the
+   * composite developability score. Empty array when nothing was gated. */
+  uncertainLiabilities?: MotifHit[];
   /** Spec R23 — per-cysteine entries with structural state classification. */
   cysteines?: CysteineHit[];
   chains: ChainSummary[];
@@ -206,14 +215,11 @@ type BlockDataV8 = BlockDataV7 & {
   hydrophobicityScale: HydrophobicityScale;
 };
 
-/** Current shape (v9) — strips the legacy single-PDB path's `pdb`
- * field, the three persisted-but-unused PlAgDataTable v-model states
- * (`tableState` / `cysTableState` / `scoresTableState`), and the six
+/** v9 — strips the legacy single-PDB path's `pdb` field, the three
+ * persisted-but-unused PlAgDataTable v-model states, and the six
  * GraphMakerState fields left over from the GraphMaker→SVG histogram
- * migration. Tables now use UI-local state refs and the histograms are
- * hand-rolled SVG so none of these blobs need to round-trip through
- * persistence. */
-export type BlockData = Omit<
+ * migration. */
+type BlockDataV9 = Omit<
   BlockDataV8,
   | "pdb"
   | "tableState"
@@ -226,6 +232,13 @@ export type BlockData = Omit<
   | "graphStateCdrh3CompactnessV2"
   | "graphStateDevScoreV2"
 >;
+
+/** Current shape (v10) — drops `rsasaBuriedCutoff` per spec R12 which
+ * says the 0.075 Raybould cutoff is hardcoded in the workflow, not a
+ * user-tunable knob. The python software still accepts
+ * `--rsasa-buried-cutoff` (CLI default 0.075) so the binary stays
+ * scriptable, but the block-side UI no longer exposes it. */
+export type BlockData = Omit<BlockDataV9, "rsasaBuriedCutoff">;
 
 const initialGraphState = (title: string, fillColor: string): GraphMakerState => ({
   title,
@@ -280,7 +293,7 @@ const dataModel = new DataModelBuilder()
     ...v7,
     hydrophobicityScale: "kd",
   }))
-  .migrate<BlockData>("v9", (v8) => {
+  .migrate<BlockDataV9>("v9", (v8) => {
     // Strip the persisted-but-unused fields. Destructuring discards them
     // from the object literal returned to downstream code; the runtime
     // payload effectively shrinks for every block instance that lands
@@ -300,6 +313,13 @@ const dataModel = new DataModelBuilder()
     } = v8;
     return rest;
   })
+  .migrate<BlockData>("v10", (v9) => {
+    // Spec R12 — drop the user-tunable rSASA cutoff; the python defaults
+    // to 0.075 (the canonical Raybould 2019 value) and the workflow no
+    // longer overrides it.
+    const { rsasaBuriedCutoff: _r, ...rest } = v9;
+    return rest;
+  })
   .init(() => ({
     pdbRef: undefined,
     // R14 default scheme — upstream's 3D Structure Prediction block always
@@ -310,7 +330,6 @@ const dataModel = new DataModelBuilder()
     numberingScheme: "imgt",
     heavyChainId: "",
     lightChainId: "",
-    rsasaBuriedCutoff: 0.075,
     frConfThresh: 4.0,
     cdrConfThresh: 6.0,
     hydrophobicityScale: "kd",
@@ -329,7 +348,6 @@ export const platforma = BlockModelV3.create(dataModel)
       numberingScheme: data.numberingScheme,
       heavyChainId: data.heavyChainId,
       lightChainId: data.lightChainId,
-      rsasaBuriedCutoff: data.rsasaBuriedCutoff,
       frConfThresh: data.frConfThresh,
       cdrConfThresh: data.cdrConfThresh,
       hydrophobicityScale: data.hydrophobicityScale,
@@ -623,7 +641,7 @@ export const platforma = BlockModelV3.create(dataModel)
       a.hydrophobicityScale && a.hydrophobicityScale !== "kd"
         ? `, hScale=${a.hydrophobicityScale}`
         : "";
-    return `${scheme}, ${chainPart}, rSASA<${a.rsasaBuriedCutoff}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å${scaleSuffix}`;
+    return `${scheme}, ${chainPart}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å${scaleSuffix}`;
   })
   .done();
 

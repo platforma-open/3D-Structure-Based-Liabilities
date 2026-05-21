@@ -7,15 +7,48 @@ geometry may find bonds the header missed (e.g. an ImmuneBuilder PDB with no
 SSBOND section).
 
 Hallmark tetrad re-check (spec R33): read the residues at the four hallmark
-positions on the heavy chain and report them. The spec just wants the values
-logged so a downstream consumer can compare against the upstream block's
-classification; we don't enforce a canonical residue set because the
-IgG-vs-VHH distinction at those positions is informational, not deterministic.
+positions on the heavy chain and compare against the canonical IgG and VHH
+residue sets (Vincke et al. 2009 / Gordon 2025). When the implied identity
+(majority match) disagrees with the chain-count mode (R7), emit a warning so
+the user can investigate engineered or chimeric constructs.
 """
 
+import sys
 from typing import Optional
 
 from numbering import HALLMARK_TETRAD
+
+# Canonical hallmark-tetrad residue sets at Kabat 37 / 44 / 45 / 47
+# (≡ IMGT 42 / 49 / 50 / 52). Vincke et al. 2009 / Pardon et al. 2014:
+# VHH-specific residues are F / E / R / G; canonical IgG is V / G / L / W.
+# Each set is a tuple of accepted single-letter codes per position so
+# common variants (e.g. Y instead of F at position 1 in some camelid
+# lineages) don't trip a false-positive mismatch warning.
+_HALLMARK_IGG = (("V",), ("G",), ("L",), ("W",))
+_HALLMARK_VHH = (("F", "Y"), ("E", "Q"), ("R", "K"), ("G", "F"))
+
+# Three-letter → one-letter map; mirrors the same lookup used in motifs.py
+# and metrics.py. Kept local to avoid cross-module imports for what is
+# essentially a constant.
+_AA_THREE_TO_ONE = {
+    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
+    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
+    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
+    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
+}
+
+
+def _match_score(observed_one_letter: list[Optional[str]], canonical: tuple) -> int:
+    """Count how many of the four hallmark positions match the canonical
+    set (any of the accepted variants per position). None observations
+    don't contribute either way."""
+    score = 0
+    for i, obs in enumerate(observed_one_letter):
+        if obs is None:
+            continue
+        if obs in canonical[i]:
+            score += 1
+    return score
 
 
 def _norm_icode(s: Optional[str]) -> str:
@@ -93,16 +126,30 @@ def cross_check_ssbonds(ssbonds, cys_hits) -> dict:
     }
 
 
-def check_hallmark_tetrad(parsed, numbering_scheme: Optional[str], heavy_chain_id: Optional[str]) -> Optional[dict]:
-    """Read the four hallmark-tetrad residues on the heavy chain and report.
+def check_hallmark_tetrad(
+    parsed,
+    numbering_scheme: Optional[str],
+    heavy_chain_id: Optional[str],
+    chain_count_mode: Optional[str] = None,
+) -> Optional[dict]:
+    """Read the four hallmark-tetrad residues on the heavy chain and compare
+    against the canonical IgG and VHH residue sets (Vincke 2009 / Gordon
+    2025). Spec R33.
 
     Returns None when scheme or heavy chain isn't set. Otherwise:
       {
         "scheme": "imgt" | "chothia" | "kabat",
         "chain": "<heavy chain id>",
-        "positions": [{"position": int, "resName": str|None}, ...],
-        "missing": [int, ...]   # positions absent from the chain
+        "positions": [{"position": int, "resName": str|None, "oneLetter": str|None}, ...],
+        "missing": [int, ...],
+        "impliedMode": "TAP" | "TNP" | "ambiguous",
+        "impliedScore": {"igg": int, "vhh": int},
+        "mismatch": bool          # impliedMode != chain_count_mode (when supplied)
       }
+
+    When `chain_count_mode` is provided and the hallmark-implied mode
+    disagrees, emit a warning to stderr so the user notices engineered or
+    chimeric constructs that don't look like clean IgG or VHH.
     """
     if not numbering_scheme or not heavy_chain_id:
         return None
@@ -115,14 +162,49 @@ def check_hallmark_tetrad(parsed, numbering_scheme: Optional[str], heavy_chain_i
 
     rows = []
     missing = []
+    one_letters: list[Optional[str]] = []
     for p in positions:
         name = by_pos.get(p)
-        rows.append({"position": p, "resName": name})
+        one = _AA_THREE_TO_ONE.get(name) if name else None
+        rows.append({"position": p, "resName": name, "oneLetter": one})
+        one_letters.append(one)
         if name is None:
             missing.append(p)
+
+    igg_score = _match_score(one_letters, _HALLMARK_IGG)
+    vhh_score = _match_score(one_letters, _HALLMARK_VHH)
+    # Need at least 3/4 hits to claim a clean identity; ties / sub-3 scores
+    # stay "ambiguous" so we don't warn on partial data.
+    if igg_score >= 3 and igg_score > vhh_score:
+        implied = "TAP"
+    elif vhh_score >= 3 and vhh_score > igg_score:
+        implied = "TNP"
+    else:
+        implied = "ambiguous"
+
+    mismatch = (
+        chain_count_mode is not None
+        and implied != "ambiguous"
+        and implied != chain_count_mode
+    )
+    if mismatch:
+        observed = ", ".join(
+            f"{p}={o or '—'}" for p, o in zip(positions, one_letters)
+        )
+        print(
+            f"WARN (spec R33): hallmark-tetrad residues at {observed} "
+            f"imply {implied} but chain count says {chain_count_mode}. "
+            f"Likely an engineered or chimeric construct; surface metrics "
+            f"may be miscalibrated.",
+            file=sys.stderr,
+        )
+
     return {
         "scheme": scheme,
         "chain": heavy_chain_id,
         "positions": rows,
         "missing": missing,
+        "impliedMode": implied,
+        "impliedScore": {"igg": igg_score, "vhh": vhh_score},
+        "mismatch": mismatch,
     }

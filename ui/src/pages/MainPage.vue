@@ -197,13 +197,6 @@ const modalTitle = computed(() => {
           }"
         >
           <PlNumberField
-            v-model="app.model.data.rsasaBuriedCutoff"
-            label="rSASA buried cutoff (R12)"
-            :minValue="0"
-            :maxValue="1"
-            :step="0.005"
-          />
-          <PlNumberField
             v-model="app.model.data.frConfThresh"
             label="FR confidence threshold (Å, R34)"
             :minValue="1"
@@ -219,9 +212,10 @@ const modalTitle = computed(() => {
           />
         </div>
         <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }">
-          Defaults (0.075 / 4.0 / 6.0) are calibrated for ImmuneBuilder-predicted PDBs (R34). Raise
-          the confidence thresholds when running on experimental crystal structures whose B-factors
-          are Å² temperature factors rather than predicted error.
+          Defaults (4.0 / 6.0) are calibrated for ImmuneBuilder-predicted PDBs (R34). Raise the
+          confidence thresholds when running on experimental crystal structures whose B-factors are
+          Å² temperature factors rather than predicted error. rSASA cutoff is hardcoded at 0.075 per
+          spec R12 (Raybould 2019 canonical).
         </p>
         <div :style="{ marginBottom: '8px' }">
           <PlDropdown
