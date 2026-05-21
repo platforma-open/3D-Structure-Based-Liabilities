@@ -134,14 +134,15 @@ _CYS_COLUMNS = [
     ColumnSchema(id="partnerIcode", type="String"),
 ]
 
-# Per-structure scalar PFrame (spec R38). One row per structure. No
-# block-side axes — `pframes.processColumn` prepends the upstream PDB
-# column's `[sampleId, scClonotypeKey]` axes to every emitted PColumn,
-# which is what keys each row. R23 summary counts, R38 motif/score
-# scalars, R24-R30 surface metrics, R36 low-conf fractions, R39
-# threshold flags all live here. Workflow side annotates `*Flag` columns
-# with `pl7.app/isScore: "true"` (R40); raw metrics ship as plain features.
-_SCORES_AXES: list[AxisSchema] = []
+# Per-structure scalar PFrame (spec R38). One row per structure. The
+# `structureId` placeholder axis carries a constant `"static"` value —
+# `pt.saveFrameDirect` asserts `len(axes) > 0` even though
+# `pframes.processColumn` prepends `[sampleId, scClonotypeKey]` to every
+# emitted PColumn. The workflow's `scoresAxesSpec` marks this axis
+# `visibility: hidden` so the PlAgDataTable doesn't render it.
+_SCORES_AXES = [
+    AxisSchema(id="structureId", type="String"),
+]
 _SCORES_COLUMNS = [
     # Spec R7 mode
     ColumnSchema(id="mode", type="String"),
@@ -182,6 +183,9 @@ _SCORES_COLUMNS = [
     ColumnSchema(id="cdrh3CompactnessFlag", type="String"),
 ]
 
+# Constant value for the `structureId` placeholder axis (see `_SCORES_AXES`
+# comment). Visible in the parquet but hidden in the PlAgDataTable view.
+_PLACEHOLDER_STRUCTURE_ID = "static"
 # Spec R39 — sentinel used when a flag isn't applicable to the current mode.
 _FLAG_SENTINEL = "-"
 
@@ -228,6 +232,10 @@ def _build_scores_row(
     missing_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_missing")
 
     return {
+        # Placeholder axis value; the workflow's `scoresAxesSpec` hides
+        # this axis from the PlAgDataTable view. Required because
+        # `pt.saveFrameDirect` asserts at least one axis.
+        "structureId": _PLACEHOLDER_STRUCTURE_ID,
         "mode": mode,
         # R23 summary counts.
         "extraCysCount": extra_cys,

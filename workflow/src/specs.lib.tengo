@@ -333,14 +333,24 @@ cysColumnSpecs := {
 cysColumnIds := ["cysClass", "chainRole", "bondingState", "rsasa", "sidechainRsasa", "sasa", "sidechainSasa", "partnerChainId", "partnerResSeq", "partnerIcode"]
 
 // ──────────────── Scores PFrame ────────────────
-// The xsv axes list is empty here — processColumn auto-prepends the
-// upstream PDB column's axes (`[sampleId, scClonotypeKey]`) to every
-// output, which already uniquely keys each row. xsv-import-pt + pfconv
-// accept an empty `axes` array on the parquet path (schema is built
-// from `columns` only), so we drop the historical `structureId="static"`
-// placeholder column that otherwise rendered as a redundant "Structure"
-// row-axis cell with the same constant value on every row.
-scoresAxesSpec := []
+// `pt.saveFrameDirect` hard-requires `len(axes) > 0` (assertion at
+// `@platforma-sdk/workflow-tengo:pt.util:40`), even when processColumn
+// already prepends the upstream PDB column's `[sampleId, scClonotypeKey]`
+// to every output. We keep a constant-valued `structureId="static"`
+// placeholder column to satisfy that assertion, and mark its axis with
+// `pl7.app/table/visibility: "hidden"` so `selectDisplayableIndices`
+// in `table-source-v2.ts:377` filters it out of the rendered table —
+// no redundant "Structure" cell on every row.
+scoresAxesSpec := [
+	{
+		name: "pl7.app/structure/id",
+		type: "String",
+		annotations: {
+			"pl7.app/label": "Structure",
+			"pl7.app/table/visibility": "hidden"
+		}
+	}
+]
 
 // Default visibility + orderPriority per spec R51:
 //   Default visible: mode, structuralDevelopabilityRisk, structuralIntegrityRisk,
@@ -617,12 +627,18 @@ buildCysXsvSettings := func(blockId) {
 	}
 }
 
-// Scores frame: empty axes; processColumn prepends `[sampleId,
-// scClonotypeKey]` so each per-clonotype row is uniquely keyed without
-// us declaring anything xsv-side.
+// Scores frame: parquet carries a constant `structureId="static"`
+// column the python writer emits to satisfy `pt.saveFrameDirect`'s
+// "at least one axis" assertion. Final PColumn axes (after
+// processColumn prepends the input axes):
+//   [sampleId, scClonotypeKey, structureId="static"]
+// The structureId axis is annotated `visibility: hidden` so the table
+// view doesn't render it (see `scoresAxesSpec` comment above).
 buildScoresXsvSettings := func(blockId) {
 	return {
-		axes: [],
+		axes: [
+			{ column: "structureId", spec: scoresAxesSpec[0] }
+		],
 		columns: buildXsvColumns(scoresColumnIds, scoresColumnSpecs, blockId),
 		storageFormat: "Parquet"
 	}
