@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { PlStructureViewerProps } from "@milaboratories/structure-viewer";
 import { PlStructureViewer } from "@milaboratories/structure-viewer";
-import type { PTableKey } from "@platforma-sdk/model";
-import { createPlDataTableStateV2 } from "@platforma-sdk/model";
+import type { PlRef, PTableKey } from "@platforma-sdk/model";
+import { createPlDataTableStateV2, createPrimaryRef } from "@platforma-sdk/model";
 import {
   PlAccordionSection,
   PlAgDataTableV2,
@@ -77,7 +77,19 @@ const { runSummary, showRedAlert, showGatedAlert } = useRunSummaryAlerts(scoresT
 // override + chain mapping override + Advanced thresholds + hydrophobicity
 // scale). Auto-opens on first load when no input is configured so new
 // users land on the input form instead of an empty page.
-const settingsOpen = ref(!app.model.data.pdbRef);
+const settingsOpen = ref(!app.model.data.primaryRef?.column);
+
+// Spec R1 — `PrimaryRef` is a frozen `{__isPrimaryRef, column, filter?}`
+// envelope. `PlDropdownRef` deals in plain `PlRef`, so we expose the
+// inner `column` to the dropdown and rebuild the envelope on every
+// change via `createPrimaryRef`. The filter slot (R47) stays
+// `undefined` until subset selection is wired.
+const primaryRefColumn = computed<PlRef | undefined>({
+  get: () => app.model.data.primaryRef?.column,
+  set: (value) => {
+    app.model.data.primaryRef = value ? createPrimaryRef(value) : undefined;
+  },
+});
 
 // Row-click handler — fired by `PlAgDataTableV2`'s `@cell-button-clicked`
 // when the user hits the open button on the clonotype-axis cell. The key
@@ -149,7 +161,7 @@ const modalTitle = computed(() => {
       <template #title>Settings</template>
 
       <PlDropdownRef
-        v-model="app.model.data.pdbRef"
+        v-model="primaryRefColumn"
         :options="app.model.outputs.pdbOptions ?? []"
         label="Predicted structures (from 3D Structure Prediction)"
         clearable
@@ -238,7 +250,7 @@ const modalTitle = computed(() => {
          on first load (see `settingsOpen` ref); this is for the case
          where the user closed the modal without picking a dataset. -->
     <div
-      v-if="!app.model.data.pdbRef"
+      v-if="!app.model.data.primaryRef?.column"
       :style="{
         display: 'flex',
         flexDirection: 'column',
@@ -314,7 +326,7 @@ const modalTitle = computed(() => {
          are hidden behind AG-Grid's "Columns" panel. The open button on
          the clonotype-axis cell fires `@cell-button-clicked`, which
          seeds the row's PDB handle into `viewer` and pops the modal. -->
-    <div v-if="app.model.data.pdbRef" :style="{ marginTop: '12px', height: '720px' }">
+    <div v-if="app.model.data.primaryRef?.column" :style="{ marginTop: '12px', height: '720px' }">
       <PlAgDataTableV2
         v-model="scoresLocalState"
         :settings="scoresTableSettings"

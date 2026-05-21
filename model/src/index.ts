@@ -7,12 +7,14 @@ import type {
   PFrameHandle,
   PlDataTableStateV2,
   PlRef,
+  PrimaryRef,
 } from "@platforma-sdk/model";
 import {
   BlockModelV3,
   createPFrameForGraphs,
   createPlDataTableStateV2,
   createPlDataTableV2,
+  createPrimaryRef,
   DataModelBuilder,
   getAxisId,
   parseResourceMap,
@@ -233,12 +235,21 @@ type BlockDataV9 = Omit<
   | "graphStateDevScoreV2"
 >;
 
-/** Current shape (v10) — drops `rsasaBuriedCutoff` per spec R12 which
- * says the 0.075 Raybould cutoff is hardcoded in the workflow, not a
- * user-tunable knob. The python software still accepts
- * `--rsasa-buried-cutoff` (CLI default 0.075) so the binary stays
- * scriptable, but the block-side UI no longer exposes it. */
-export type BlockData = Omit<BlockDataV9, "rsasaBuriedCutoff">;
+/** v10 — drops `rsasaBuriedCutoff` per spec R12 (Raybould 0.075 is
+ * hardcoded in the workflow now). */
+type BlockDataV10 = Omit<BlockDataV9, "rsasaBuriedCutoff">;
+
+/** Current shape (v11) — replaces the bare `pdbRef: PlRef` field with
+ * a `primaryRef: PrimaryRef` envelope per spec R1. The envelope is the
+ * standard `{column, filter?}` shape exported from `@platforma-sdk/model`
+ * (the type re-exports from `@milaboratories/pl-model-common`); the
+ * optional `filter` slot reduces the clonotype set per R1's second
+ * clause — wiring that filter end-to-end is R47, deferred to a later
+ * slice. Switching to the envelope here just gets the type right; the
+ * UI dropdown keeps writing only the `column` field. */
+export type BlockData = Omit<BlockDataV10, "pdbRef"> & {
+  primaryRef?: PrimaryRef;
+};
 
 const initialGraphState = (title: string, fillColor: string): GraphMakerState => ({
   title,
@@ -313,15 +324,28 @@ const dataModel = new DataModelBuilder()
     } = v8;
     return rest;
   })
-  .migrate<BlockData>("v10", (v9) => {
+  .migrate<BlockDataV10>("v10", (v9) => {
     // Spec R12 — drop the user-tunable rSASA cutoff; the python defaults
     // to 0.075 (the canonical Raybould 2019 value) and the workflow no
     // longer overrides it.
     const { rsasaBuriedCutoff: _r, ...rest } = v9;
     return rest;
   })
+  .migrate<BlockData>("v11", (v10) => {
+    // Spec R1 — wire shape moves from bare `pdbRef: PlRef` to the
+    // `PrimaryRef` envelope `{column: PlRef, filter?: PlRef}` so the
+    // block accepts a properly typed primary input. Existing
+    // installations have a PlRef in `pdbRef`; we wrap it via
+    // `createPrimaryRef` (filter stays undefined for now, R47 fills
+    // it in later).
+    const { pdbRef, ...rest } = v10;
+    return {
+      ...rest,
+      primaryRef: pdbRef ? createPrimaryRef(pdbRef) : undefined,
+    };
+  })
   .init(() => ({
-    pdbRef: undefined,
+    primaryRef: undefined,
     // R14 default scheme — upstream's 3D Structure Prediction block always
     // produces IMGT-numbered PDBs (the `pl7.app/structure/numbering` domain
     // we match on already requires `imgt`), so defaulting here saves the
@@ -337,14 +361,17 @@ const dataModel = new DataModelBuilder()
 
 export const platforma = BlockModelV3.create(dataModel)
   .args((data) => {
-    // Spec R1-R6 — the user picks a predicted-structures dataset from the
-    // dropdown; the workflow's wf.prepare resolves it into per-clonotype
-    // PDBs and iterates via `pframes.processColumn`.
-    if (!data.pdbRef) {
+    // Spec R1 — primary input is a `PrimaryRef` envelope; the workflow's
+    // `wf.prepare` resolves `primaryRef.column` (the PlRef inside the
+    // envelope) into per-clonotype PDBs and iterates via
+    // `pframes.processColumn`. The envelope's optional `filter` slot
+    // (clonotype subset, R47) is not yet wired through — primaryRef
+    // is constructed with no filter today.
+    if (!data.primaryRef?.column) {
       throw new Error("Pick a predicted structures dataset");
     }
     return {
-      pdbRef: data.pdbRef,
+      primaryRef: data.primaryRef,
       numberingScheme: data.numberingScheme,
       heavyChainId: data.heavyChainId,
       lightChainId: data.lightChainId,
@@ -562,11 +589,13 @@ export const platforma = BlockModelV3.create(dataModel)
   // pairs; UI consumes via `entry.value.handle` (a RemoteBlobHandle) and
   // hands it to PlStructureViewer.
   .output("clonotypePdbsMap", (ctx) => {
-    // Resolve through the user-picked PlRef rather than fuzzy-matching the
-    // result pool. `findDataWithCompatibleSpec` was returning empty here
-    // even with name + valueType + axes + domain all aligned, so we use
-    // the canonical ref-based path — same as how the workflow accesses it.
-    const ref = ctx.args?.pdbRef ?? ctx.data?.pdbRef;
+    // Resolve through the user-picked PlRef inside the PrimaryRef
+    // envelope rather than fuzzy-matching the result pool. The PlRef
+    // lives at `primaryRef.column` (spec R1); `findDataWithCompatibleSpec`
+    // was returning empty here even with name + valueType + axes + domain
+    // all aligned, so we use the canonical ref-based path — same as how
+    // the workflow accesses it.
+    const ref = ctx.args?.primaryRef?.column ?? ctx.data?.primaryRef?.column;
     if (!ref) return undefined;
     const pdbCol = ctx.resultPool.getPColumnByRef(ref);
     if (!pdbCol) return undefined;
@@ -600,8 +629,9 @@ export const platforma = BlockModelV3.create(dataModel)
   // UI uses this to attach PlAgDataTable's `show-cell-button-for-axis-id`
   // so the viewer-trigger button renders on the clonotype-key column.
   .output("clonotypeAxisId", (ctx): AxisId | undefined => {
-    // Resolve through the user-picked PlRef, then read its spec.
-    const ref = ctx.args?.pdbRef ?? ctx.data?.pdbRef;
+    // Resolve through the user-picked PlRef inside the PrimaryRef envelope
+    // (spec R1), then read its spec.
+    const ref = ctx.args?.primaryRef?.column ?? ctx.data?.primaryRef?.column;
     if (!ref) return undefined;
     const pdbSpec = ctx.resultPool.getPColumnSpecByRef(ref);
     if (!pdbSpec) return undefined;

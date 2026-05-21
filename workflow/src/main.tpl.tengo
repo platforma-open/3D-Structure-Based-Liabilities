@@ -2,14 +2,17 @@
 //
 // 3D Structure-Based Liabilities — workflow entry point.
 //
-// PrimaryRef path only (Spec R1–R6). `args.pdbRef` resolves a
-// `pl7.app/structure/pdb` PColumn from the result pool — typically
-// emitted by the 3D Structure Prediction block. `pframes.processColumn`
-// iterates per clonotype: for each row in the upstream ResourceMap, fire
-// the `process-pdb` body template with that clonotype's PDB as input.
-// Output PFrames carry the `pl7.app/vdj/scClonotypeKey` axis automatically
-// (processColumn prepends input axes). R43 trace step is attached via
-// processColumn's `traceSteps` option.
+// PrimaryRef path only (Spec R1). `args.primaryRef` is the standard
+// `{column: PlRef, filter?: PlRef}` envelope — we resolve the inner
+// `column` PlRef to a `pl7.app/structure/pdb` PColumn from the result
+// pool (typically emitted by the 3D Structure Prediction block).
+// `pframes.processColumn` iterates per clonotype: for each row in the
+// upstream ResourceMap, fire the `process-pdb` body template with that
+// clonotype's PDB as input. Output PFrames carry the
+// `pl7.app/vdj/scClonotypeKey` axis automatically (processColumn
+// prepends input axes). R43 trace step is attached via processColumn's
+// `traceSteps` option. `primaryRef.filter` (R47 subset selection) is
+// not yet wired — every clonotype in the column is processed.
 
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 assets := import("@platforma-sdk/workflow-tengo:assets")
@@ -35,7 +38,7 @@ traceStep := {
 // PColumns via wf.resolve.
 wf.prepare(func(args) {
 	return {
-		resolvedPdb: wf.resolve(args.pdbRef, { errIfMissing: true })
+		resolvedPdb: wf.resolve(args.primaryRef.column, { errIfMissing: true })
 	}
 })
 
