@@ -14,6 +14,7 @@ import {
   createPlDataTableStateV2,
   createPlDataTableV2,
   DataModelBuilder,
+  getAxisId,
   parseResourceMap,
 } from "@platforma-sdk/model";
 
@@ -581,14 +582,16 @@ export const platforma = BlockModelV3.create(dataModel)
     if (!ref) return undefined;
     const pdbSpec = ctx.resultPool.getPColumnSpecByRef(ref);
     if (!pdbSpec) return undefined;
-    const spec = pdbSpec as unknown as { axesSpec: AxisId[] };
     // The upstream PDB column carries [sampleId, scClonotypeKey] — match
     // the clonotype axis by name rather than index, since `[0]` is
     // sampleId here and the cell button must hang off the clonotype axis.
-    const found = spec.axesSpec.find(
-      (a) => (a as unknown as { name: string }).name === "pl7.app/vdj/scClonotypeKey",
-    );
-    return found;
+    const found = pdbSpec.axesSpec.find((a) => a.name === "pl7.app/vdj/scClonotypeKey");
+    if (!found) return undefined;
+    // Return a stripped AxisId — `PlAgDataTableV2` does an `isJsonEqual`
+    // against its own column's axisId (run through `getAxisId`, dropping
+    // `annotations` etc). Returning the raw `AxisSpec` with extra fields
+    // silently breaks the deep-equal check → no open button renders.
+    return getAxisId(found);
   })
   .sections(() => [
     { type: "link", href: "/", label: "Main" },
