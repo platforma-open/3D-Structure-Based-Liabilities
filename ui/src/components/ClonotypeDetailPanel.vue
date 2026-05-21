@@ -53,8 +53,10 @@ function fmtConf(v: number | null): string {
 <template>
   <div :class="$style.panel">
     <header :class="$style.header">
-      <div :class="$style.title">{{ clonotypeLabel ?? clonotypeKey }}</div>
-      <div v-if="clonotypeLabel" :class="$style.subtitle">{{ clonotypeKey }}</div>
+      <div :class="$style.title">{{ clonotypeLabel || clonotypeKey }}</div>
+      <div v-if="clonotypeLabel && clonotypeLabel !== clonotypeKey" :class="$style.subtitle">
+        {{ clonotypeKey }}
+      </div>
     </header>
 
     <section

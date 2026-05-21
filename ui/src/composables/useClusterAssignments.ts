@@ -23,14 +23,15 @@ type ScoresTableOutput = { ok?: boolean; value?: { fullTableHandle?: unknown } }
  * assignment map whenever it changes. Returns the live map plus a couple
  * of derived computeds the UI uses.
  *
- * `selectedClonotypeKey` and `centroidsOnly` are passed in (rather than
- * created inside) because they're owned by MainPage's selection state —
- * we want the same refs the dropdown writes to.
+ * `selectedClonotypeKey` is passed in (rather than created inside) so the
+ * cluster badge in the slideover stays bound to the row the user opened.
+ * Filtering by cluster / centroid is now done via PlAgDataTable's own
+ * column filters on the main table — the in-page "Centroids only" toggle
+ * that used to auto-jump the selection is gone.
  */
 export function useClusterAssignments(
   scoresTable: ComputedRef<ScoresTableOutput>,
   selectedClonotypeKey: Ref<string | null>,
-  centroidsOnly: Ref<boolean>,
 ) {
   const clusterMap = ref<Record<string, ClusterAssignment>>({});
 
@@ -108,22 +109,6 @@ export function useClusterAssignments(
       };
     }
     clusterMap.value = out;
-  });
-
-  // When "Centroids only" is toggled on and the current selection isn't a
-  // centroid, jump to the centroid of the same cluster so the viewer
-  // doesn't show a hidden row.
-  watchEffect(() => {
-    if (!centroidsOnly.value) return;
-    const key = selectedClonotypeKey.value;
-    if (!key) return;
-    const cmap = clusterMap.value;
-    const current = cmap[key];
-    if (current?.isCentroid) return;
-    const sameClusterCentroid = Object.entries(cmap).find(
-      ([, a]) => a.clusterId === current?.clusterId && a.isCentroid,
-    );
-    if (sameClusterCentroid) selectedClonotypeKey.value = sameClusterCentroid[0];
   });
 
   const hasClusterData = computed(() => Object.keys(clusterMap.value).length > 0);
