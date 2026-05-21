@@ -11,7 +11,7 @@ const app = useApp();
 // pages cause a stale-state cascade where AG-Grid sticks in placeholder).
 const motifsTableSettings = usePlDataTableSettingsV2({
   model: () => app.model.outputs.motifsTable,
-  sourceId: () => "motifs-v3",
+  sourceId: () => "motifs-v4",
 });
 const motifsLocalState = ref(createPlDataTableStateV2());
 

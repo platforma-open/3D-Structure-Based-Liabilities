@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -98,6 +99,10 @@ _MOTIF_AXES = [
 _MOTIF_COLUMNS = [
     ColumnSchema(id="resName", type="String"),
     ColumnSchema(id="region", type="String"),
+    # Spec R18 — absolute SASA in Å² for the chemically-relevant residue,
+    # paired with rSASA. Some downstream consumers compare against TAP-style
+    # reports that quote raw SASA, so we ship both.
+    ColumnSchema(id="sasa", type="Double"),
     ColumnSchema(id="rsasa", type="Double"),
     ColumnSchema(id="exposureFactor", type="Double"),
     ColumnSchema(id="confidence", type="Double"),
@@ -314,6 +319,32 @@ def main() -> None:
 
     text = args.pdb.read_text()
     parsed = parse_pdb(text)
+
+    # Spec R7 — chain-count gating. Fail fast before we run FreeSASA on
+    # input shapes the block doesn't accept; the failure surfaces back
+    # through the workflow's per-row processColumn output so other
+    # clonotypes in the batch keep going. Single-chain >180 residues is
+    # the canonical "looks like an scFv linker-joined construct" guard
+    # (scFv produces malformed surface metrics under ImmuneBuilder's
+    # paired-Fv prediction model).
+    n_chains = len(parsed.chain_order)
+    if n_chains == 0:
+        raise ValueError(
+            "PDB contains no ATOM records — nothing to analyze (spec R7)"
+        )
+    if n_chains == 1:
+        chain_len = len(parsed.residues_by_chain[parsed.chain_order[0]])
+        if chain_len > 180:
+            raise ValueError(
+                f"Single-chain PDB has {chain_len} residues (>180); "
+                f"rejected as suspected scFv (spec R7)"
+            )
+    if n_chains >= 3:
+        raise ValueError(
+            f"PDB has {n_chains} chains; this block accepts 1 (VHH/TNP) "
+            f"or 2 (paired Fv/TAP) chains only (spec R7)"
+        )
+
     sasa_lookup = compute_sasa(args.pdb)
 
     chains = []
@@ -334,6 +365,28 @@ def main() -> None:
                 }
             )
         chains.append({"id": chain_id, "residues": residues})
+
+    # Spec R10 — region tagging needs *some* numbering source. Preferred
+    # path is `REMARK 99 PLATFORMA CDR*` records from upstream (`parsed
+    # .platforma_cdrs`); fallback is the scheme-aware fixed ranges in
+    # `numbering.py:SCHEME_CDR_RANGES` keyed on the user-supplied scheme.
+    # If neither is present we fail — without region tagging motif
+    # scoring loses its R19 region weights and surface metrics can't
+    # define their CDR vicinity, so a silent run would emit garbage.
+    has_remark_cdrs = bool(parsed.platforma_cdrs)
+    has_scheme = bool(args.numbering_scheme)
+    if not has_remark_cdrs and not has_scheme:
+        raise ValueError(
+            "No numbering source available: PDB has no REMARK 99 PLATFORMA "
+            "CDR records and no --numbering-scheme was provided. Region "
+            "tagging requires one of the two (spec R10)."
+        )
+    if not has_remark_cdrs and has_scheme:
+        print(
+            f"WARN (spec R10): no REMARK 99 PLATFORMA CDR records; falling "
+            f"back to scheme-aware fixed ranges for '{args.numbering_scheme}'.",
+            file=sys.stderr,
+        )
 
     # Spec R9 — REMARK 99 chain identity is authoritative. When the PDB
     # carries `REMARK 99 PLATFORMA CDR<role><idx> <chain><start>-<chain><end>`
@@ -389,10 +442,9 @@ def main() -> None:
         motif_hits, cys_hits, surface_metrics, args.rsasa_buried_cutoff
     )
 
-    # Spec R37 shape. Mode auto-detected from chain count (R7): we don't
-    # error on 3+ chains here (the spec says reject), only mark "complex"
-    # so dev structures like 1N8Z (Fab + antigen) still produce outputs.
-    mode = {0: "empty", 1: "TNP", 2: "TAP"}.get(len(parsed.chain_order), "complex")
+    # Spec R37 shape. Mode is settled by the chain-count gate above (R7):
+    # only 1 (TNP) or 2 (TAP) chains reach this point.
+    mode = "TAP" if n_chains == 2 else "TNP"
 
     # Defensive checks (spec R21 SSBOND cross-check + R33 hallmark tetrad).
     diagnostics = {
@@ -438,6 +490,7 @@ def main() -> None:
             "type": h.type,
             "resName": h.resName,
             "region": h.region or _REGION_UNKNOWN,
+            "sasa": h.sasa,
             "rsasa": h.rsasa,
             "exposureFactor": h.exposureFactor,
             "confidence": h.confidence,

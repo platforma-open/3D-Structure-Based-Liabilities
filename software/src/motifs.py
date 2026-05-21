@@ -82,6 +82,11 @@ class MotifHit:
     iCode: str
     resName: str
     region: str | None
+    # R18: absolute SASA (Å²) for the chemically-relevant residue, paired
+    # with rSASA. Spec mandates both even though rSASA × Ala-X-Ala ref
+    # recovers it — keeping the raw value makes downstream analytics
+    # comparable to TAP-style reports without a back-conversion step.
+    sasa: float | None
     rsasa: float
     exposed: bool
     exposureFactor: float
@@ -145,6 +150,7 @@ def _score_motif_hit(
     chain_id: str,
     residue,
     region: Optional[str],
+    sasa: Optional[float],
     rsasa: float,
     risk: str,
     fixability: str,
@@ -180,6 +186,7 @@ def _score_motif_hit(
         iCode=residue.i_code,
         resName=residue.res_name,
         region=region,
+        sasa=sasa,
         rsasa=rsasa,
         exposed=True,
         exposureFactor=exposure_factor,
@@ -239,7 +246,8 @@ def detect_motifs(
                     # 1-letter translation that fed the regex match).
                     continue
                 key = (chain_id, f"{residue.res_seq}{residue.i_code}".strip())
-                rsasa = sasa_lookup.get(key, {}).get("rsasa")
+                sasa_info = sasa_lookup.get(key, {})
+                rsasa = sasa_info.get("rsasa")
                 if rsasa is None or rsasa < rsasa_buried_cutoff:
                     continue
                 region = region_for(
@@ -250,6 +258,7 @@ def detect_motifs(
                     chain_id=chain_id,
                     residue=residue,
                     region=region,
+                    sasa=sasa_info.get("sasa"),
                     rsasa=rsasa,
                     risk=risk,
                     fixability=fixability,

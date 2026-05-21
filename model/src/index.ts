@@ -34,6 +34,11 @@ export type MotifHit = {
   iCode: string;
   resName: string;
   region: string | null;
+  /** Spec R18 — absolute SASA (Å²) for the chemically-relevant residue,
+   * paired with rSASA. Null when SASA computation didn't yield a value
+   * (non-standard residue / parser drop). Older runs from before the R18
+   * fix don't ship the field — keep optional so reports still parse. */
+  sasa?: number | null;
   rsasa: number;
   exposed: boolean;
   exposureFactor: number;

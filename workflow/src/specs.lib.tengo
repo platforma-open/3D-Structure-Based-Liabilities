@@ -150,6 +150,19 @@ motifColumnSpecs := {
 			"pl7.app/table/orderPriority": "950"
 		}
 	},
+	// R18 — absolute SASA (Å²) for the chemically-relevant residue.
+	// Optional in the table (rSASA covers the common case) but shipped
+	// as a PColumn so downstream blocks that want raw SASA don't have to
+	// back-convert via Ala-X-Ala refs.
+	sasa: {
+		valueType: "Double",
+		name: "pl7.app/structure/sasa",
+		annotations: {
+			"pl7.app/label": "SASA (Å²)",
+			"pl7.app/format": ".2f",
+			"pl7.app/table/visibility": "optional"
+		}
+	},
 	exposureFactor: {
 		valueType: "Double",
 		name: "pl7.app/liabilities/exposureFactor",
@@ -210,7 +223,7 @@ motifColumnSpecs := {
 	}
 }
 
-motifColumnIds := ["resName", "region", "rsasa", "exposureFactor", "confidence", "confidenceGated", "weightedScore", "sequenceRiskClass", "fixability"]
+motifColumnIds := ["resName", "region", "sasa", "rsasa", "exposureFactor", "confidence", "confidenceGated", "weightedScore", "sequenceRiskClass", "fixability"]
 
 // ──────────────── Cysteines PFrame ────────────────
 
