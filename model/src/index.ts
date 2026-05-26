@@ -238,16 +238,19 @@ type BlockDataV9 = Omit<
  * hardcoded in the workflow now). */
 type BlockDataV10 = Omit<BlockDataV9, "rsasaBuriedCutoff">;
 
-/** Current shape (v11) , replaces the bare `pdbRef: PlRef` field with
- * a `primaryRef: PrimaryRef` envelope per spec R1. The envelope is the
- * standard `{column, filter?}` shape exported from `@platforma-sdk/model`
- * (the type re-exports from `@milaboratories/pl-model-common`); the
- * optional `filter` slot reduces the clonotype set per R1's second
- * clause , wiring that filter end-to-end is R47, deferred to a later
- * slice. Switching to the envelope here just gets the type right; the
- * UI dropdown keeps writing only the `column` field. */
-export type BlockData = Omit<BlockDataV10, "pdbRef"> & {
+/** v11 , replaces the bare `pdbRef: PlRef` field with a `primaryRef:
+ * PrimaryRef` envelope per spec R1. */
+type BlockDataV11 = Omit<BlockDataV10, "pdbRef"> & {
   primaryRef?: PrimaryRef;
+};
+
+/** Current shape (v12) , adds the dataset-level `detectedMode` per the
+ * refreshed spec (BlockData definition lines 222-231). Resolved by a UI
+ * watcher after the first successful run from the per-clonotype
+ * `pl7.app/liabilities/mode` column (uniform by R7); read by R51 (column
+ * selection), R54 (mode-specific histogram), R55 (subtitle prefix). */
+export type BlockData = BlockDataV11 & {
+  detectedMode?: "TAP" | "TNP";
 };
 
 const initialGraphState = (title: string, fillColor: string): GraphMakerState => ({
@@ -330,7 +333,7 @@ const dataModel = new DataModelBuilder()
     const { rsasaBuriedCutoff: _r, ...rest } = v9;
     return rest;
   })
-  .migrate<BlockData>("v11", (v10) => {
+  .migrate<BlockDataV11>("v11", (v10) => {
     // Spec R1 , wire shape moves from bare `pdbRef: PlRef` to the
     // `PrimaryRef` envelope `{column: PlRef, filter?: PlRef}` so the
     // block accepts a properly typed primary input. Existing
@@ -343,6 +346,14 @@ const dataModel = new DataModelBuilder()
       primaryRef: pdbRef ? createPrimaryRef(pdbRef) : undefined,
     };
   })
+  .migrate<BlockData>("v12", (v11) => ({
+    // Spec BlockData definition (lines 222-231): dataset-level
+    // detectedMode resolved by the UI after the first successful run.
+    // Undefined until then, so the migration just adds the field as
+    // undefined; the UI watcher fills it once scoresTable is ready.
+    ...v11,
+    detectedMode: undefined,
+  }))
   .init(() => ({
     primaryRef: undefined,
     // R14 default scheme , upstream's 3D Structure Prediction block always

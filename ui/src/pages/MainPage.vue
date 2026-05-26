@@ -17,13 +17,14 @@ import {
   PlTextField,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useApp } from "../app";
 
 import ClonotypeDetailPanel from "../components/ClonotypeDetailPanel.vue";
 import RiskSummaryBar from "../components/RiskSummaryBar.vue";
 import { useClonotypeDetailFetch } from "../composables/useClonotypeDetailFetch";
 import { useClonotypeLabels } from "../composables/useClonotypeLabels";
+import { useDetectedMode } from "../composables/useDetectedMode";
 import { useClusterAssignments } from "../composables/useClusterAssignments";
 import { useRunSummaryAlerts } from "../composables/useRunSummaryAlerts";
 
@@ -66,6 +67,18 @@ const clonotypeLabelsPf = computed(() => {
   return t && t.ok ? t.value.fullPframeHandle : undefined;
 });
 const { resolveLabel } = useClonotypeLabels(clonotypeLabelsPf, clonotypeAxisId);
+
+// Dataset-level mode (uniform per R7). Spec BlockData definition places
+// detectedMode on `BlockData.detectedMode`; the model can't read PColumn
+// data synchronously in an output callback, so the UI resolves it from
+// the per-clonotype `pl7.app/liabilities/mode` column and writes back
+// into BlockData on change. R51, R54, R55 read from `app.model.data.detectedMode`.
+const { mode: resolvedMode } = useDetectedMode(clonotypeLabelsPf);
+watch(resolvedMode, (next) => {
+  if (next && next !== app.model.data.detectedMode) {
+    app.model.data.detectedMode = next;
+  }
+});
 
 const selectedClonotypeKey = ref<string | null>(null);
 const viewer = ref<PlStructureViewerProps>();
@@ -341,6 +354,7 @@ const modalTitle = computed(() => {
         not-ready-text="Run on a predicted-structures dataset to see per-clonotype scores"
         no-rows-text="No scored clonotypes"
         @cell-button-clicked="openViewerForRow"
+        @row-double-clicked="openViewerForRow"
       />
     </div>
 
@@ -421,7 +435,7 @@ const modalTitle = computed(() => {
         >
           <PlStructureViewer v-bind="viewer" />
         </div>
-        <div :style="{ flex: '0 0 400px', minWidth: '380px', maxWidth: '440px' }">
+        <div :style="{ flex: '0 0 520px', minWidth: '480px', maxWidth: '620px' }">
           <ClonotypeDetailPanel
             v-if="selectedClonotypeKey"
             :report="detailReport"
