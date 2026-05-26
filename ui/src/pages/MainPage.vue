@@ -436,8 +436,9 @@ const modalTitle = computed(() => {
           <!-- Spec R52: open the viewer colored by predicted-error
                confidence. Structure-viewer's `uncertainty` theme maps to
                the spec's `by-confidence` (see milaboratory/visualizations#88
-               + #89). -->
-          <PlStructureViewer v-bind="viewer" color-scheme="uncertainty" />
+               + #89). `initialColorScheme` seeds the theme at mount; the
+               slideover remounts on each open so each open starts fresh. -->
+          <PlStructureViewer v-bind="viewer" initial-color-scheme="uncertainty" />
         </div>
         <div :style="{ flex: '0 0 520px', minWidth: '480px', maxWidth: '620px' }">
           <ClonotypeDetailPanel
