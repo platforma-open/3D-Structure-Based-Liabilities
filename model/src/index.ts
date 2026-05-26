@@ -546,17 +546,28 @@ export const platforma = BlockModelV3.create(dataModel)
     // silently breaks the deep-equal check → no open button renders.
     return getAxisId(found);
   })
-  .sections(() => [
-    { type: "link", href: "/", label: "Main" },
-    { type: "link", href: "/motifs", label: "Motifs" },
-    { type: "link", href: "/cysteines", label: "Cysteine state" },
-    { type: "link", href: "/histogram-psh", label: "PSH distribution" },
-    { type: "link", href: "/histogram-ppc", label: "PPC distribution" },
-    { type: "link", href: "/histogram-pnc", label: "PNC distribution" },
-    { type: "link", href: "/histogram-sfvcsp", label: "SFvCSP distribution (Fv)" },
-    { type: "link", href: "/histogram-cdrh3-compactness", label: "CDRH3 compactness (VHH)" },
-    { type: "link", href: "/histogram-developability", label: "Developability score" },
-  ])
+  .sections((ctx) => {
+    const mode = ctx.data?.detectedMode;
+    // Spec R54 mode-specific slot. Before the first successful run the
+    // mode is undefined and the slot label is generic; once resolved it
+    // names the active metric so the sidebar reads as the slot's content.
+    const modeSpecificLabel =
+      mode === "TNP"
+        ? "CDRH3 compactness (VHH)"
+        : mode === "TAP"
+          ? "SFvCSP (Fv)"
+          : "Mode-specific distribution";
+    return [
+      { type: "link", href: "/", label: "Main" },
+      { type: "link", href: "/motifs", label: "Motifs" },
+      { type: "link", href: "/cysteines", label: "Cysteine state" },
+      { type: "link", href: "/histogram-psh", label: "PSH distribution" },
+      { type: "link", href: "/histogram-ppc", label: "PPC distribution" },
+      { type: "link", href: "/histogram-pnc", label: "PNC distribution" },
+      { type: "link", href: "/histogram-mode-specific", label: modeSpecificLabel },
+      { type: "link", href: "/histogram-developability", label: "Developability score" },
+    ];
+  })
   .title(() => "3D Structure-Based Liabilities")
   // Spec R55 , active-parameter summary at the block header. Mode prefix
   // comes from BlockData.detectedMode; before the first successful run it
