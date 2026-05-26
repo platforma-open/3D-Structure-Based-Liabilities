@@ -640,17 +640,17 @@ buildCysXsvSettings := func(blockId) {
 	}
 }
 
-// Scores frame: parquet carries a constant `structureId="static"`
-// column the python writer emits to satisfy `pt.saveFrameDirect`'s
-// "at least one axis" assertion. Final PColumn axes (after
-// processColumn prepends the input axes):
-//   [sampleId, scClonotypeKey, structureId="static"]
-// The structureId axis is annotated `visibility: hidden` so the table
-// view doesn't render it (see `scoresAxesSpec` comment above).
-buildScoresXsvSettings := func(blockId) {
+// Scores frame, single-shot path. Python emits a TSV with `sampleId`
+// and `clonotypeKey` as the first two columns; `xsv.importFile` maps
+// them to the upstream PDB column's axes (`pl7.app/sampleId` and
+// `pl7.app/vdj/scClonotypeKey`, per R2). The axis specs are inherited
+// from the resolved PDB column at workflow time, so this helper takes
+// them as an argument instead of declaring them locally.
+buildScoresXsvSettings := func(blockId, sampleIdAxisSpec, scClonotypeAxisSpec) {
 	return {
 		axes: [
-			{ column: "structureId", spec: scoresAxesSpec[0] }
+			{ column: "sampleId", spec: sampleIdAxisSpec },
+			{ column: "clonotypeKey", spec: scClonotypeAxisSpec }
 		],
 		columns: buildXsvColumns(scoresColumnIds, scoresColumnSpecs, blockId),
 		storageFormat: "Parquet"

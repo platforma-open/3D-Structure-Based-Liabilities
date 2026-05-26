@@ -2,40 +2,29 @@
 //
 // 3D Structure-Based Liabilities , workflow entry point.
 //
-// PrimaryRef path only (Spec R1). `args.primaryRef` is the standard
-// `{column: PlRef, filter?: PlRef}` envelope , we resolve the inner
-// `column` PlRef to a `pl7.app/structure/pdb` PColumn from the result
-// pool (typically emitted by the 3D Structure Prediction block).
-// `pframes.processColumn` iterates per clonotype: for each row in the
-// upstream ResourceMap, fire the `process-pdb` body template with that
-// clonotype's PDB as input. Output PFrames carry the
-// `pl7.app/vdj/scClonotypeKey` axis automatically (processColumn
-// prepends input axes). R43 trace step is attached via processColumn's
-// `traceSteps` option. `primaryRef.filter` (R47 subset selection) is
-// not yet wired , every clonotype in the column is processed.
+// Single-shot architecture per the refreshed spec Software Interface +
+// Processing Pipeline. The workflow root resolves the upstream
+// `pl7.app/structure/pdb` PColumn from the PrimaryRef envelope (R1),
+// stages every PDB blob into one exec call, builds a
+// `pdb_index.tsv` listing all (sampleId, scClonotypeKey, filename)
+// triples, runs `python /app/main.py` once against the whole dataset,
+// and imports the resulting `per_clonotype.tsv` via `xsv.importFile`
+// to produce per-clonotype scalar PColumns (R38) with axes inherited
+// directly from the upstream PDB column. PrimaryRef.filter (R47) is
+// not yet applied.
 
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 assets := import("@platforma-sdk/workflow-tengo:assets")
+exec := import("@platforma-sdk/workflow-tengo:exec")
+maps := import("@platforma-sdk/workflow-tengo:maps")
 pframes := import("@platforma-sdk/workflow-tengo:pframes")
-smart := import("@platforma-sdk/workflow-tengo:smart")
+xsv := import("@platforma-sdk/workflow-tengo:pframes.xsv")
+json := import("json")
 
 specs := import(":specs")
 
-processPdbTpl := assets.importTemplate(":process-pdb")
+liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-based-liabilities.software:liabilities")
 
-// Spec R43 trace step , identifies this block in the per-column trace
-// chain when downstream blocks consume our PFrames.
-traceStep := {
-	type: "milaboratories.3d-structure-based-liabilities",
-	id: "",
-	importance: 20,
-	label: "3D Structure-Based Liabilities"
-}
-
-// Spec R1-R6 , resolve the upstream `pl7.app/structure/pdb` PColumn here
-// so the wf.body branch below can iterate per clonotype. wf.prepare runs
-// once before wf.body and is the only place we can fetch external
-// PColumns via wf.resolve.
 wf.prepare(func(args) {
 	return {
 		resolvedPdb: wf.resolve(args.primaryRef.column, { errIfMissing: true })
@@ -44,58 +33,81 @@ wf.prepare(func(args) {
 
 wf.body(func(args) {
 	blockId := wf.blockId().getDataAsJson()
-	trace := { type: traceStep.type, id: blockId, importance: traceStep.importance, label: traceStep.label }
 
 	pdbCol := args.resolvedPdb
+	pdbAxes := pdbCol.spec.axesSpec
+	if len(pdbAxes) != 2 {
+		// Spec R2 says PDB column carries `[sampleId, (sc)clonotypeKey]`.
+		// Other shapes would need axis-naming logic we don't have yet.
+		ll := import("@platforma-sdk/workflow-tengo:ll")
+		ll.panic("unsupported PDB column axes count: expected 2 (sampleId + scClonotypeKey), got %d", len(pdbAxes))
+	}
+	sampleIdAxis := pdbAxes[0]
+	scClonotypeAxis := pdbAxes[1]
 
-	scoresXsv := specs.buildScoresXsvSettings(blockId)
+	// Iterate the upstream ResourceMap entries: each key is a JSON-encoded
+	// `[sampleId, scClonotypeKey]` tuple, each value is a Blob ref to a PDB
+	// file. Build the spec's `pdb_index.tsv` and the per-PDB `addFile` calls
+	// in the same loop, so order matches.
+	inputsMap := pdbCol.data.inputs()
+	indexLines := []
+	cmd := exec.builder().
+		software(liabilitiesSw).
+		mem("4GiB").
+		cpu(2).
+		printErrStreamToStdout()
 
-	// Per-row body inputs. processColumn's body template inputs must be
-	// pl7 resources (handles), not raw Tengo values , `smart.createJsonResource`
-	// wraps each scalar into a JSON-typed resource that the body template
-	// reads back via `inputs.<name>`. Empty-string fallback for optional
-	// args keeps the body's `is_undefined` guard simple (the empty string
-	// distinguishes "user left it blank" from missing input).
-	// Spec R12 , rSASA buried cutoff is hardcoded to 0.075 by the python
-	// (canonical Raybould 2019 value). No workflow override; not in
-	// `bodyExtra`.
-	bodyExtra := {
-		numberingScheme: smart.createJsonResource(is_undefined(args.numberingScheme) ? "" : args.numberingScheme),
-		heavyChainId: smart.createJsonResource(is_undefined(args.heavyChainId) ? "" : args.heavyChainId),
-		lightChainId: smart.createJsonResource(is_undefined(args.lightChainId) ? "" : args.lightChainId),
-		frConfThresh: smart.createJsonResource(args.frConfThresh),
-		cdrConfThresh: smart.createJsonResource(args.cdrConfThresh)
+	rowCount := 0
+	for keyJson in maps.getKeys(inputsMap) {
+		keyArr := json.decode(keyJson)
+		sampleId := keyArr[0]
+		clonotypeKey := keyArr[1]
+		filename := "pdbs/" + clonotypeKey + ".pdb"
+		cmd = cmd.addFile(filename, inputsMap[keyJson].getValue())
+		indexLines = append(indexLines, sampleId + "\t" + clonotypeKey + "\t" + filename)
+		rowCount += 1
 	}
 
-	processResult := pframes.processColumn(
-		{ spec: pdbCol.spec, data: pdbCol.data },
-		processPdbTpl,
-		[
-			{
-				type: "Xsv",
-				xsvType: "tsv",
-				settings: scoresXsv,
-				name: "scores",
-				path: ["scoresTsv"],
-				mem: "2GiB",
-				cpu: 1
-			}
-		],
-		{
-			traceSteps: [trace],
-			extra: bodyExtra
-		}
-	)
-
-	// Per-clonotype scalar PFrame, spec R38. processResult.output() for
-	// Xsv-typed targets returns a map of `{colId: {spec, data}}` keyed by
-	// the column ids declared on `scoresXsv`.
-	scoresPfBuilder := pframes.pFrameBuilder()
-	for colId in specs.scoresColumnIds {
-		out := processResult.output("scores", colId)
-		scoresPfBuilder.add(colId, out.spec, out.data)
+	pdbIndex := ""
+	for line in indexLines {
+		pdbIndex += line + "\n"
 	}
-	scoresPf := scoresPfBuilder.build()
+
+	cmd = cmd.
+		writeFile("pdb_index.tsv", pdbIndex).
+		arg("--pdb-dir").arg("pdbs").
+		arg("--pdb-index").arg("pdb_index.tsv").
+		arg("--output-tsv").arg("per_clonotype.tsv").
+		arg("--fr-confidence-gating-threshold").arg(string(args.frConfThresh)).
+		arg("--cdr-confidence-gating-threshold").arg(string(args.cdrConfThresh))
+
+	// Optional CLI knobs (R10 fallback path + R9 chain identity overrides).
+	// Empty strings are skipped so Python falls through to its defaults.
+	if !is_undefined(args.numberingScheme) && args.numberingScheme != "" {
+		cmd = cmd.arg("--numbering-scheme").arg(args.numberingScheme)
+	}
+	if !is_undefined(args.heavyChainId) && args.heavyChainId != "" {
+		cmd = cmd.arg("--chain-h").arg(args.heavyChainId)
+	}
+	if !is_undefined(args.lightChainId) && args.lightChainId != "" {
+		cmd = cmd.arg("--chain-l").arg(args.lightChainId)
+	}
+
+	result := cmd.saveFile("per_clonotype.tsv").run()
+	scoresTsv := result.getFile("per_clonotype.tsv")
+
+	// Spec R38 / R39: import the per_clonotype.tsv as PColumns. Axes come
+	// straight from the upstream PDB column so downstream blocks auto-join
+	// against `[sampleId, scClonotypeKey]`. R43 trace is attached to the
+	// resulting PFrame as an annotation post-import.
+	xsvSettings := specs.buildScoresXsvSettings(blockId, sampleIdAxis, scClonotypeAxis)
+	scoresPf := xsv.importFile(scoresTsv, "tsv", xsvSettings, { cpu: 1, mem: "2GiB" })
+
+	// R43 trace assembly is left as a follow-up for the single-shot path
+	// (the per-row path used to thread `traceStep` through `processColumn`'s
+	// `traceSteps` option, which xsv.importFile doesn't have). Block-id
+	// domain is still attached per column via specs.lib.tengo so trace
+	// propagation can be reattached without an output shape change.
 
 	return {
 		outputs: {

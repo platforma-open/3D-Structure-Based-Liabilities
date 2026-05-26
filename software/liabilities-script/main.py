@@ -92,19 +92,15 @@ def chown_to_host(path: Path) -> None:
 
 
 _FLAG_SENTINEL = "-"
-# Placeholder axis value carried in the TSV so the workflow's per-row
-# `pframes.processColumn` Xsv import always has at least one axis column.
-# Hidden in the UI table via `scoresAxesSpec`'s visibility annotation.
-_PLACEHOLDER_STRUCTURE_ID = "static"
 
-# Spec R38 / R39 - per-clonotype scalar columns. `clonotypeKey` is first
-# so the TSV reads as the spec's batched output. `structureId` is the
-# placeholder axis the workflow's xsv import maps to (workaround for
-# per-row processColumn requiring at least one declared axis); the
-# value is constant.
+# Spec R38 / R39 - per-clonotype scalar columns. `sampleId` + `clonotypeKey`
+# come first so they map directly to the PDB column's [sampleId, scClonotypeKey]
+# axes (R2) when the workflow imports the TSV via `xsv.importFile`. Spec's
+# Software Interface example shows only `clonotypeKey`; adding `sampleId`
+# is the necessary extension to preserve the R2 anchor.
 _TSV_COLUMNS = [
+    "sampleId",
     "clonotypeKey",
-    "structureId",
     "mode",
     "numberingWarning",
     "structuralDevelopabilityRisk",
@@ -296,8 +292,13 @@ def main() -> None:
     ap.add_argument("--pdb-dir", required=True, type=Path,
                     help="Directory holding the PDB files referenced by --pdb-index.")
     ap.add_argument("--pdb-index", required=True, type=Path,
-                    help="TSV with two columns (clonotypeKey, pdb_filename); "
-                         "filenames are resolved relative to --pdb-dir.")
+                    help="TSV with three columns (sampleId, scClonotypeKey, "
+                         "pdb_filename); filenames are resolved relative to "
+                         "--pdb-dir. The sampleId column is the spec R2 axis "
+                         "extension; the per-clonotype output TSV preserves "
+                         "both axes so xsv.importFile builds PColumns under "
+                         "the same [sampleId, scClonotypeKey] anchor as the "
+                         "upstream PDB column.")
     ap.add_argument("--output-tsv", required=True, type=Path,
                     help="Output TSV path. One row per clonotype.")
     ap.add_argument("--rsasa-buried-cutoff", type=float, default=0.075,
@@ -326,7 +327,7 @@ def main() -> None:
         raise SystemExit(f"--pdb-index does not exist: {args.pdb_index}")
 
     with args.pdb_index.open() as fh:
-        index_rows = [tuple(line.rstrip("\n").split("\t", 1)) for line in fh if line.strip()]
+        index_rows = [tuple(line.rstrip("\n").split("\t")) for line in fh if line.strip()]
     if not index_rows:
         raise SystemExit(f"--pdb-index is empty: {args.pdb_index}")
 
@@ -335,11 +336,12 @@ def main() -> None:
     writer.writerow(_TSV_COLUMNS)
 
     for entry in index_rows:
-        if len(entry) != 2:
+        if len(entry) != 3:
             raise SystemExit(
-                f"--pdb-index row malformed (expected clonotypeKey<TAB>filename): {entry}"
+                "--pdb-index row malformed (expected "
+                f"sampleId<TAB>scClonotypeKey<TAB>filename): {entry}"
             )
-        clonotype_key, pdb_filename = entry
+        sample_id, clonotype_key, pdb_filename = entry
         pdb_path = args.pdb_dir / pdb_filename
         if not pdb_path.is_file():
             raise SystemExit(
@@ -357,12 +359,12 @@ def main() -> None:
             )
         except ValueError as e:
             print(
-                f"WARN (clonotype {clonotype_key}): {e}; skipping row",
+                f"WARN ({sample_id}/{clonotype_key}): {e}; skipping row",
                 file=sys.stderr,
             )
             continue
+        row["sampleId"] = sample_id
         row["clonotypeKey"] = clonotype_key
-        row["structureId"] = _PLACEHOLDER_STRUCTURE_ID
         writer.writerow([_tsv_value(row.get(c)) for c in _TSV_COLUMNS])
 
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
