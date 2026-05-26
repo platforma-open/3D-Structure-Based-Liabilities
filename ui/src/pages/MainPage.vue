@@ -20,9 +20,6 @@ import {
 import { computed, ref, watch } from "vue";
 import { useApp } from "../app";
 
-import ClonotypeDetailPanel from "../components/ClonotypeDetailPanel.vue";
-import RiskSummaryBar from "../components/RiskSummaryBar.vue";
-import { useClonotypeDetailFetch } from "../composables/useClonotypeDetailFetch";
 import { useClonotypeLabels } from "../composables/useClonotypeLabels";
 import { useDetectedMode } from "../composables/useDetectedMode";
 import { useClusterAssignments } from "../composables/useClusterAssignments";
@@ -53,7 +50,6 @@ const scoresLocalState = ref(createPlDataTableStateV2());
 // are still blocked on `@milaboratories/structure-viewer` ≥ 0.3.0
 // publish , PlStructureViewer renders Mol*'s default preset for now.
 const pdbsMap = computed(() => app.model.outputs.clonotypePdbsMap);
-const jsonsMap = computed(() => app.model.outputs.clonotypeJsonsMap);
 const clonotypeAxisId = computed(() => app.model.outputs.clonotypeAxisId);
 
 // F2 , pretty clonotype labels from the upstream `pl7.app/label` column.
@@ -89,7 +85,6 @@ const { clusterMap, selectedClusterAssignment } = useClusterAssignments(
   scoresTableOutput,
   selectedClonotypeKey,
 );
-const { detailReport } = useClonotypeDetailFetch(selectedClonotypeKey, jsonsMap);
 const { runSummary, showRedAlert, showGatedAlert } = useRunSummaryAlerts(scoresTableOutput);
 
 // Settings slide-over (predicted structures dropdown + numbering scheme
@@ -345,11 +340,6 @@ const modalTitle = computed(() => {
     >
       <template #title>{{ modalTitle }}</template>
 
-      <RiskSummaryBar v-if="viewer" :report="detailReport" />
-
-      <!-- R42 cluster info badge , renders only when the 3D Structure
-           Clustering block is upstream and the selected clonotype has
-           an assignment in clusterMap. -->
       <div
         v-if="viewer && selectedClusterAssignment"
         :style="{
@@ -392,32 +382,15 @@ const modalTitle = computed(() => {
       <div
         v-if="viewer"
         :style="{
+          height: '720px',
           display: 'flex',
-          alignItems: 'flex-start',
+          padding: '12px',
           border: '1px solid #e5e7eb',
           borderRadius: '6px',
           background: '#fff',
         }"
       >
-        <div
-          :style="{
-            flex: '1 1 auto',
-            minWidth: '0',
-            height: '720px',
-            display: 'flex',
-            padding: '12px 12px 8px',
-          }"
-        >
-          <PlStructureViewer v-bind="viewer" initial-color-scheme="uncertainty" />
-        </div>
-        <div :style="{ flex: '0 0 520px', minWidth: '480px', maxWidth: '620px' }">
-          <ClonotypeDetailPanel
-            v-if="selectedClonotypeKey"
-            :report="detailReport"
-            :clonotype-key="selectedClonotypeKey"
-            :clonotype-label="resolveLabel(selectedClonotypeKey)"
-          />
-        </div>
+        <PlStructureViewer v-bind="viewer" initial-color-scheme="uncertainty" />
       </div>
     </PlSlideModal>
   </PlBlockPage>

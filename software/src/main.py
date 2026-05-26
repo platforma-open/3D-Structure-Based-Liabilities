@@ -283,7 +283,6 @@ def _build_scores_row(
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--pdb", required=True, type=Path)
-    ap.add_argument("--output", required=True, type=Path)
     ap.add_argument("--motifs-pframe-dir", required=True, type=Path,
                     help="Directory to populate with parquet + .datainfo files "
                          "for the motifs PFrame (consumed by pt.import-dir).")
@@ -338,25 +337,6 @@ def main() -> None:
         )
 
     sasa_lookup = compute_sasa(args.pdb)
-
-    chains = []
-    for chain_id in parsed.chain_order:
-        residues = []
-        for r in parsed.residues_by_chain[chain_id]:
-            res_key = (chain_id, f"{r.res_seq}{r.i_code}".strip())
-            sasa_info = sasa_lookup.get(res_key, {})
-            residues.append(
-                {
-                    "resSeq": r.res_seq,
-                    "iCode": r.i_code,
-                    "resName": r.res_name,
-                    "sasa": sasa_info.get("sasa"),
-                    "rsasa": sasa_info.get("rsasa"),
-                    "sideChainSasa": sasa_info.get("sideChainSasa"),
-                    "sideChainRsasa": sasa_info.get("sideChainRsasa"),
-                }
-            )
-        chains.append({"id": chain_id, "residues": residues})
 
     # Spec R10 — region tagging needs *some* numbering source. Preferred
     # path is `REMARK 99 PLATFORMA CDR*` records from upstream (`parsed
@@ -447,38 +427,12 @@ def main() -> None:
         ),
     }
 
-    # Spec R35 — gated motifs (`confidenceGated == "yes"`) ship in a
-    # dedicated `uncertainLiabilities[]` view so callers that want only
-    # the high-confidence calls can read `motifs[]` without filtering.
-    # The motifs PColumn / table still carry every hit for traceability;
-    # the split is JSON-side only.
-    confident_motifs = [h for h in motif_hits if h.confidenceGated != "yes"]
-    uncertain_motifs = [h for h in motif_hits if h.confidenceGated == "yes"]
-
-    report = {
-        "numberingScheme": args.numbering_scheme,
-        "mode": mode,
-        "motifs": [asdict(h) for h in confident_motifs],
-        "uncertainLiabilities": [asdict(h) for h in uncertain_motifs],
-        "cysteines": [asdict(h) for h in cys_hits],
-        "chains": chains,
-        "scores": {
-            "motifStructuralRiskScore": motif_structural_risk_score,
-            "confidenceGatedMotifCount": sum(
-                1 for h in motif_hits if h.confidenceGated == "yes"
-            ),
-            "surfacedMotifCount": len(motif_hits),
-            "structuralDevelopabilityScore": developability["structuralDevelopabilityScore"],
-            "structuralDevelopabilityRisk": developability["structuralDevelopabilityRisk"],
-            "structuralIntegrityRisk": developability["structuralIntegrityRisk"],
-        },
-        "surfaceMetrics": surface_metrics,
-        "thresholdFlags": developability["flags"],
-        "developabilityComponents": developability["components"],
-        "diagnostics": diagnostics,
-    }
-    args.output.write_text(json.dumps(report, indent=2))
-    chown_to_host(args.output)
+    # Diagnostics (R21 SSBOND cross-check, R33 hallmark tetrad) are kept
+    # for stderr-side logging callers but no longer surfaced via a JSON
+    # report; the per-residue drill-down stack (R37 / R53) was removed
+    # from the refreshed spec as out-of-scope. Hold a reference so the
+    # variable is not dead code; future stderr emission can reuse it.
+    _ = diagnostics
 
     # PFrame for the spec R38 path. One row per motif hit; axes match
     # _MOTIF_AXES. iCode swapped to sentinel "-" so PColumn axes never see

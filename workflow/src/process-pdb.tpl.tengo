@@ -2,15 +2,13 @@
 //
 // process-pdb , per-row body template for `pframes.processColumn` over the
 // upstream `pl7.app/structure/pdb` ResourceMap (Spec R1-R6). One invocation
-// runs the liabilities software on one PDB and exposes four files:
+// runs the liabilities software on one PDB and exposes three parquet files
+// that the orchestrator (main.tpl.tengo) imports as PColumns:
 //
-//   - liabilities.json                , R37 per-clonotype JSON report
 //   - motifs_pf/partition_0.parquet   , R38 motifs parquet (axes-tagged)
 //   - cysteines_pf/partition_0.parquet , R38 cysteines parquet
 //   - scores_pf/partition_0.parquet   , R38 per-structure scalar parquet
 //
-// The orchestrator (main.tpl.tengo) converts these into PColumns via target
-// outputs of type Resource (liabilitiesJson) and Xsv parquet (motifs/cys/scores).
 // `pframes.processColumn` prepends the input column's axes
 // (`[sampleId, scClonotypeKey]`) to each output PColumn automatically. The
 // scores frame still declares a placeholder `structureId="static"` axis
@@ -28,7 +26,6 @@ pConstants := import("@platforma-sdk/workflow-tengo:pframes.constants")
 liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-based-liabilities.software:liabilities")
 
 self.defineOutputs(
-	"liabilitiesJson",
 	"motifsParquet",
 	"cysParquet",
 	"scoresParquet"
@@ -47,7 +44,6 @@ self.body(func(inputs) {
 		printErrStreamToStdout().
 		addFile("input.pdb", pdbFile).
 		arg("--pdb").arg("input.pdb").
-		arg("--output").arg("liabilities.json").
 		arg("--motifs-pframe-dir").arg("motifs_pf").
 		arg("--cysteines-pframe-dir").arg("cysteines_pf").
 		arg("--scores-pframe-dir").arg("scores_pf")
@@ -89,14 +85,12 @@ self.body(func(inputs) {
 	}
 
 	result := cmd.
-		saveFile("liabilities.json").
 		saveFile("motifs_pf/partition_0.parquet").
 		saveFile("cysteines_pf/partition_0.parquet").
 		saveFile("scores_pf/partition_0.parquet").
 		run()
 
 	return {
-		liabilitiesJson: result.getFile("liabilities.json"),
 		motifsParquet: result.getFile("motifs_pf/partition_0.parquet"),
 		cysParquet: result.getFile("cysteines_pf/partition_0.parquet"),
 		scoresParquet: result.getFile("scores_pf/partition_0.parquet")

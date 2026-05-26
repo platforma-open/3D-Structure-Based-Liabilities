@@ -74,21 +74,6 @@ wf.body(func(args) {
 		processPdbTpl,
 		[
 			{
-				type: "Resource",
-				name: "liabilitiesJson",
-				spec: {
-					kind: "PColumn",
-					name: "pl7.app/liabilities/perClonotypeReport",
-					domain: { "pl7.app/blockId": blockId },
-					valueType: "File",
-					axesSpec: [],
-					annotations: {
-						"pl7.app/label": "Liabilities JSON report",
-						"pl7.app/table/visibility": "hidden"
-					}
-				}
-			},
-			{
 				type: "Xsv",
 				xsvType: "parquet",
 				settings: motifsXsv,
@@ -145,26 +130,16 @@ wf.body(func(args) {
 	}
 	scoresPf := scoresPfBuilder.build()
 
-	// Per-clonotype File ResourceMap (axes: [scClonotypeKey], valueType: File).
-	// Consumed by the UI's R53 detail panel , clicking a clonotype fetches
-	// its matching report blob and renders motifs / cysteines / metrics.
-	jsonsOut := processResult.output("liabilitiesJson")
-	jsonsPfBuilder := pframes.pFrameBuilder()
-	jsonsPfBuilder.add("liabilitiesJson", jsonsOut.spec, jsonsOut.data)
-	jsonsPf := jsonsPfBuilder.build()
-
 	return {
 		outputs: {
 			motifsData: pframes.exportFrame(motifsPf),
 			cysData: pframes.exportFrame(cysPf),
-			scoresData: pframes.exportFrame(scoresPf),
-			liabilitiesJsonsData: pframes.exportFrame(jsonsPf)
+			scoresData: pframes.exportFrame(scoresPf)
 		},
 		exports: {
 			motifs: motifsPf,
 			cysteines: cysPf,
-			scores: scoresPf,
-			liabilitiesJsons: jsonsPf
+			scores: scoresPf
 		}
 	}
 })
