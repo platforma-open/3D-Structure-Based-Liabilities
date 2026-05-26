@@ -66,8 +66,7 @@ wf.body(func(args) {
 		heavyChainId: smart.createJsonResource(is_undefined(args.heavyChainId) ? "" : args.heavyChainId),
 		lightChainId: smart.createJsonResource(is_undefined(args.lightChainId) ? "" : args.lightChainId),
 		frConfThresh: smart.createJsonResource(args.frConfThresh),
-		cdrConfThresh: smart.createJsonResource(args.cdrConfThresh),
-		hydrophobicityScale: smart.createJsonResource(is_undefined(args.hydrophobicityScale) ? "" : args.hydrophobicityScale)
+		cdrConfThresh: smart.createJsonResource(args.cdrConfThresh)
 	}
 
 	processResult := pframes.processColumn(

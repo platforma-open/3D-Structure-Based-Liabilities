@@ -144,12 +144,6 @@ export type LiabilitiesReport = {
 /** Spec R14 / R10 , numbering schemes supported for region tagging. */
 export type NumberingScheme = "imgt" | "chothia" | "kabat";
 
-/** Spec R48 , hydrophobicity scale used by PSH. KD = Kyte-Doolittle (the
- * Raybould 2019 default), WW = Wimley-White interface, Hessa = Hessa
- * biological hydrophobicity, EM = Eisenberg-McLachlan consensus, BM =
- * Black-Mould normalized scale. */
-export type HydrophobicityScale = "kd" | "ww" | "hessa" | "em" | "bm";
-
 /** Original shape; preserved so existing block instances migrate. */
 type BlockDataV1 = {
   pdb: ImportFileHandle | undefined;
@@ -211,9 +205,12 @@ type BlockDataV7 = BlockDataV6 & {
   graphStateDevScoreV2: GraphMakerState;
 };
 
-/** v8 , adds R48 hydrophobicity scale selector. */
+/** v8 , adds R48 hydrophobicity scale selector. Removed in v13 when
+ * the spec refresh fixed Hydrophobicity to KD (R48 removed from the
+ * requirements list, spec Concept line: "Hydrophobicity is KD
+ * min-max-normalized to [1.0, 2.0]"). */
 type BlockDataV8 = BlockDataV7 & {
-  hydrophobicityScale: HydrophobicityScale;
+  hydrophobicityScale: "kd" | "ww" | "hessa" | "em" | "bm";
 };
 
 /** v9 , strips the legacy single-PDB path's `pdb` field, the three
@@ -244,14 +241,19 @@ type BlockDataV11 = Omit<BlockDataV10, "pdbRef"> & {
   primaryRef?: PrimaryRef;
 };
 
-/** Current shape (v12) , adds the dataset-level `detectedMode` per the
- * refreshed spec (BlockData definition lines 222-231). Resolved by a UI
- * watcher after the first successful run from the per-clonotype
- * `pl7.app/liabilities/mode` column (uniform by R7); read by R51 (column
- * selection), R54 (mode-specific histogram), R55 (subtitle prefix). */
-export type BlockData = BlockDataV11 & {
+/** v12 , adds the dataset-level `detectedMode` per the refreshed spec
+ * (BlockData definition lines 222-231). Resolved by a UI watcher after
+ * the first successful run from the per-clonotype `pl7.app/liabilities/mode`
+ * column (uniform by R7); read by R51 (column selection), R54
+ * (mode-specific histogram), R55 (subtitle prefix). */
+type BlockDataV12 = BlockDataV11 & {
   detectedMode?: "TAP" | "TNP";
 };
+
+/** Current shape (v13) , drops `hydrophobicityScale` per the refreshed
+ * spec. R48 (5-scale selector) is gone from the requirements; the spec
+ * Concept locks Hydrophobicity to KD min-max-normalized to [1.0, 2.0]. */
+export type BlockData = Omit<BlockDataV12, "hydrophobicityScale">;
 
 const initialGraphState = (title: string, fillColor: string): GraphMakerState => ({
   title,
@@ -346,7 +348,7 @@ const dataModel = new DataModelBuilder()
       primaryRef: pdbRef ? createPrimaryRef(pdbRef) : undefined,
     };
   })
-  .migrate<BlockData>("v12", (v11) => ({
+  .migrate<BlockDataV12>("v12", (v11) => ({
     // Spec BlockData definition (lines 222-231): dataset-level
     // detectedMode resolved by the UI after the first successful run.
     // Undefined until then, so the migration just adds the field as
@@ -354,6 +356,12 @@ const dataModel = new DataModelBuilder()
     ...v11,
     detectedMode: undefined,
   }))
+  .migrate<BlockData>("v13", (v12) => {
+    // R48 dropped from the refreshed spec; existing instances may carry
+    // the legacy field. Strip it so the model shape matches the new spec.
+    const { hydrophobicityScale: _drop, ...rest } = v12;
+    return rest;
+  })
   .init(() => ({
     primaryRef: undefined,
     // R14 default scheme , upstream's 3D Structure Prediction block always
@@ -366,7 +374,6 @@ const dataModel = new DataModelBuilder()
     lightChainId: "",
     frConfThresh: 4.0,
     cdrConfThresh: 6.0,
-    hydrophobicityScale: "kd",
   }));
 
 export const platforma = BlockModelV3.create(dataModel)
@@ -387,7 +394,6 @@ export const platforma = BlockModelV3.create(dataModel)
       lightChainId: data.lightChainId,
       frConfThresh: data.frConfThresh,
       cdrConfThresh: data.cdrConfThresh,
-      hydrophobicityScale: data.hydrophobicityScale,
     };
   })
   // Spec R1-R6 , surface `pl7.app/structure/pdb` PColumns from the result
@@ -685,11 +691,7 @@ export const platforma = BlockModelV3.create(dataModel)
     if (a.heavyChainId) chains.push(`H=${a.heavyChainId}`);
     if (a.lightChainId) chains.push(`L=${a.lightChainId}`);
     const chainPart = chains.length ? chains.join("/") : "chains auto-detect";
-    const scaleSuffix =
-      a.hydrophobicityScale && a.hydrophobicityScale !== "kd"
-        ? `, hScale=${a.hydrophobicityScale}`
-        : "";
-    return `${scheme}, ${chainPart}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å${scaleSuffix}`;
+    return `${scheme}, ${chainPart}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å`;
   })
   .done();
 

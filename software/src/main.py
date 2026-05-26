@@ -307,14 +307,6 @@ def main() -> None:
                     help="Framework-region confidence gating threshold (Å). Spec R34 default 4.0.")
     ap.add_argument("--cdr-conf-thresh", type=float, default=6.0,
                     help="CDR confidence gating threshold (Å). Spec R34 default 6.0.")
-    # R48: hydrophobicity scale selector for PSH. KD is the Raybould 2019
-    # default; the others are the spec's calibration set (Raybould refs 31–35,
-    # plus Black-Mould for the Gordon TNP comparison).
-    ap.add_argument("--hydrophobicity-scale",
-                    choices=["kd", "ww", "hessa", "em", "bm"], default="kd",
-                    help="Hydrophobicity scale used by PSH (R48). "
-                         "kd=Kyte-Doolittle, ww=Wimley-White, hessa=Hessa, "
-                         "em=Eisenberg-McLachlan, bm=Black-Mould.")
     args = ap.parse_args()
 
     text = args.pdb.read_text()
@@ -433,7 +425,6 @@ def main() -> None:
         rsasa_buried_cutoff=args.rsasa_buried_cutoff,
         fr_conf_thresh=args.fr_conf_thresh,
         cdr_conf_thresh=args.cdr_conf_thresh,
-        hydrophobicity_scale=args.hydrophobicity_scale,
     )
 
     # Spec R39 / R41 / R41a: threshold flags + composite developability
@@ -466,7 +457,6 @@ def main() -> None:
 
     report = {
         "numberingScheme": args.numbering_scheme,
-        "hydrophobicityScale": args.hydrophobicity_scale,
         "mode": mode,
         "motifs": [asdict(h) for h in confident_motifs],
         "uncertainLiabilities": [asdict(h) for h in uncertain_motifs],

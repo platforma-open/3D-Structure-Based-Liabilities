@@ -62,8 +62,7 @@ self.body(func(inputs) {
 	stringOptArgs := [
 		["numberingScheme", "--numbering-scheme"],
 		["heavyChainId", "--chain-h"],
-		["lightChainId", "--chain-l"],
-		["hydrophobicityScale", "--hydrophobicity-scale"]    // R48
+		["lightChainId", "--chain-l"]
 	]
 	for entry in stringOptArgs {
 		key := entry[0]

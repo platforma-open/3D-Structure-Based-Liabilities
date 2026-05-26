@@ -146,17 +146,6 @@ const numberingSchemeOptions = [
   { value: "kabat", label: "Kabat" },
 ];
 
-// R48 , selectable hydrophobicity scales for PSH. KD is the Raybould 2019
-// default; the rest are the spec's calibration set (Raybould refs 31-35
-// plus Black-Mould for the Gordon TNP comparison).
-const hydrophobicityScaleOptions = [
-  { value: "kd", label: "Kyte-Doolittle (default)" },
-  { value: "ww", label: "Wimley-White (interface)" },
-  { value: "hessa", label: "Hessa (biological)" },
-  { value: "em", label: "Eisenberg-McLachlan (consensus)" },
-  { value: "bm", label: "Black-Mould (normalized)" },
-];
-
 const modalTitle = computed(() => {
   const k = selectedClonotypeKey.value;
   if (!k) return "Clonotype detail";
@@ -247,20 +236,6 @@ const modalTitle = computed(() => {
           confidence thresholds when running on experimental crystal structures whose B-factors are
           Å² temperature factors rather than predicted error. rSASA cutoff is hardcoded at 0.075 per
           spec R12 (Raybould 2019 canonical).
-        </p>
-        <div :style="{ marginBottom: '8px' }">
-          <PlDropdown
-            v-model="app.model.data.hydrophobicityScale"
-            :options="hydrophobicityScaleOptions"
-            label="Hydrophobicity scale (R48)"
-          />
-        </div>
-        <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }">
-          PSH weights each residue by its hydrophobicity (R25). Kyte-Doolittle is Raybould 2019's
-          choice; switching scales lets you cross-check PSH and reproduce the spec's R48 sensitivity
-          analysis. All scales are min-max normalized to [1.0, 2.0] so PSH magnitudes stay in the
-          same ballpark, but relative ordering between residues changes , expect different
-          red/amber/green calls near the threshold.
         </p>
       </PlAccordionSection>
     </PlSlideModal>
