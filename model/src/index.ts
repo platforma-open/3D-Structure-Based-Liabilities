@@ -558,16 +558,18 @@ export const platforma = BlockModelV3.create(dataModel)
     { type: "link", href: "/histogram-developability", label: "Developability score" },
   ])
   .title(() => "3D Structure-Based Liabilities")
-  // Spec R55 , active-parameter summary visible at the block header.
+  // Spec R55 , active-parameter summary at the block header. Mode prefix
+  // comes from BlockData.detectedMode; before the first successful run it
+  // is omitted (the field is undefined and we just show the cutoffs).
+  // Format: "TAP, rSASA<0.075, confidence-gated FR>4 Å / CDR>6 Å".
   .subtitle((ctx) => {
     if (!ctx.args) return "";
     const a = ctx.args;
-    const scheme = a.numberingScheme || "scheme unset";
-    const chains: string[] = [];
-    if (a.heavyChainId) chains.push(`H=${a.heavyChainId}`);
-    if (a.lightChainId) chains.push(`L=${a.lightChainId}`);
-    const chainPart = chains.length ? chains.join("/") : "chains auto-detect";
-    return `${scheme}, ${chainPart}, conf-gated FR>${a.frConfThresh} Å / CDR>${a.cdrConfThresh} Å`;
+    const mode = ctx.data?.detectedMode;
+    const fr = Number.isInteger(a.frConfThresh) ? a.frConfThresh : a.frConfThresh.toFixed(1);
+    const cdr = Number.isInteger(a.cdrConfThresh) ? a.cdrConfThresh : a.cdrConfThresh.toFixed(1);
+    const tail = `rSASA<0.075, confidence-gated FR>${fr} Å / CDR>${cdr} Å`;
+    return mode ? `${mode}, ${tail}` : tail;
   })
   .done();
 
