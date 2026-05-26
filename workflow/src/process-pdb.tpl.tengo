@@ -2,19 +2,13 @@
 //
 // process-pdb , per-row body template for `pframes.processColumn` over the
 // upstream `pl7.app/structure/pdb` ResourceMap (Spec R1-R6). One invocation
-// runs the liabilities software on one PDB and exposes three parquet files
-// that the orchestrator (main.tpl.tengo) imports as PColumns:
+// runs the liabilities software on one PDB and exposes the spec's batched
+// CLI (`--pdb-dir`, `--pdb-index`, `--output-tsv`); the workflow feeds it a
+// single-row pdb_index.tsv so per-row parallelism comes for free via
+// processColumn while the binary contract matches spec verbatim.
 //
-//   - motifs_pf/partition_0.parquet   , R38 motifs parquet (axes-tagged)
-//   - cysteines_pf/partition_0.parquet , R38 cysteines parquet
-//   - scores_pf/partition_0.parquet   , R38 per-structure scalar parquet
-//
-// `pframes.processColumn` prepends the input column's axes
-// (`[sampleId, scClonotypeKey]`) to each output PColumn automatically. The
-// scores frame still declares a placeholder `structureId="static"` axis
-// (`pt.saveFrameDirect` requires `len(axes) > 0`); the workflow's
-// `scoresAxesSpec` marks it `visibility: hidden` so the table view
-// doesn't render it as a redundant cell on every row.
+// Output is a one-row per_clonotype.tsv with the R38 scalar columns + R39
+// flags; main.tpl.tengo imports it via the processColumn Xsv tsv target.
 
 self := import("@platforma-sdk/workflow-tengo:tpl")
 ll := import("@platforma-sdk/workflow-tengo:ll")
@@ -25,11 +19,7 @@ pConstants := import("@platforma-sdk/workflow-tengo:pframes.constants")
 
 liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-based-liabilities.software:liabilities")
 
-self.defineOutputs(
-	"motifsParquet",
-	"cysParquet",
-	"scoresParquet"
-)
+self.defineOutputs("scoresTsv")
 
 self.body(func(inputs) {
 	pdbFile := inputs[pConstants.VALUE_FIELD_NAME]
@@ -37,24 +27,29 @@ self.body(func(inputs) {
 		ll.panic("process-pdb: expected __value__ to be a file reference, got: %v", pdbFile)
 	}
 
+	// Single-row pdb_index.tsv per spec Software Interface. The clonotype
+	// key is opaque here (processColumn iterates by key but doesn't surface
+	// the key to the body); using a fixed placeholder is fine because the
+	// workflow re-attaches the real `[sampleId, scClonotypeKey]` axes to
+	// every emitted PColumn automatically.
+	pdbIndex := "clonotypeKey\tinput.pdb\n"
+
 	cmd := exec.builder().
 		software(liabilitiesSw).
 		mem("2GiB").
 		cpu(1).
 		printErrStreamToStdout().
 		addFile("input.pdb", pdbFile).
-		arg("--pdb").arg("input.pdb").
-		arg("--motifs-pframe-dir").arg("motifs_pf").
-		arg("--cysteines-pframe-dir").arg("cysteines_pf").
-		arg("--scores-pframe-dir").arg("scores_pf")
+		writeFile("pdb_index.tsv", pdbIndex).
+		arg("--pdb-dir").arg(".").
+		arg("--pdb-index").arg("pdb_index.tsv").
+		arg("--output-tsv").arg("per_clonotype.tsv")
 
-	// Optional CLI knobs , appended to `cmd` only when the corresponding
-	// `bodyExtra` field was set by main.tpl.tengo. Each row is
-	//   [<inputs key>, <CLI flag>]
+	// Optional CLI knobs , appended only when the corresponding `bodyExtra`
+	// field was set by main.tpl.tengo. Each row is [<inputs key>, <CLI flag>].
 	// Empty strings (default for string args when the user left the
 	// setting blank) skip the flag so the python falls through to its
-	// spec-calibrated default. Numeric args (rsasa / fr / cdr) are always
-	// emitted when present because every numeric value is meaningful.
+	// spec-calibrated default.
 	stringOptArgs := [
 		["numberingScheme", "--numbering-scheme"],
 		["heavyChainId", "--chain-h"],
@@ -68,12 +63,10 @@ self.body(func(inputs) {
 			cmd = cmd.arg(flag).arg(v)
 		}
 	}
-	// R12 , rSASA buried cutoff is the python default (0.075); not
-	// forwarded from the workflow since the spec mandates it as a
-	// workflow-side constant.
+	// R34 region-aware confidence-gating thresholds. Always forwarded.
 	numericOptArgs := [
-		["frConfThresh", "--fr-conf-thresh"],             // R34
-		["cdrConfThresh", "--cdr-conf-thresh"]            // R34
+		["frConfThresh", "--fr-confidence-gating-threshold"],
+		["cdrConfThresh", "--cdr-confidence-gating-threshold"]
 	]
 	for entry in numericOptArgs {
 		key := entry[0]
@@ -85,14 +78,10 @@ self.body(func(inputs) {
 	}
 
 	result := cmd.
-		saveFile("motifs_pf/partition_0.parquet").
-		saveFile("cysteines_pf/partition_0.parquet").
-		saveFile("scores_pf/partition_0.parquet").
+		saveFile("per_clonotype.tsv").
 		run()
 
 	return {
-		motifsParquet: result.getFile("motifs_pf/partition_0.parquet"),
-		cysParquet: result.getFile("cysteines_pf/partition_0.parquet"),
-		scoresParquet: result.getFile("scores_pf/partition_0.parquet")
+		scoresTsv: result.getFile("per_clonotype.tsv")
 	}
 })

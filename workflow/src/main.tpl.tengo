@@ -48,8 +48,6 @@ wf.body(func(args) {
 
 	pdbCol := args.resolvedPdb
 
-	motifsXsv := specs.buildMotifsXsvSettings(blockId)
-	cysXsv := specs.buildCysXsvSettings(blockId)
 	scoresXsv := specs.buildScoresXsvSettings(blockId)
 
 	// Per-row body inputs. processColumn's body template inputs must be
@@ -75,28 +73,10 @@ wf.body(func(args) {
 		[
 			{
 				type: "Xsv",
-				xsvType: "parquet",
-				settings: motifsXsv,
-				name: "motifs",
-				path: ["motifsParquet"],
-				mem: "2GiB",
-				cpu: 1
-			},
-			{
-				type: "Xsv",
-				xsvType: "parquet",
-				settings: cysXsv,
-				name: "cysteines",
-				path: ["cysParquet"],
-				mem: "2GiB",
-				cpu: 1
-			},
-			{
-				type: "Xsv",
-				xsvType: "parquet",
+				xsvType: "tsv",
 				settings: scoresXsv,
 				name: "scores",
-				path: ["scoresParquet"],
+				path: ["scoresTsv"],
 				mem: "2GiB",
 				cpu: 1
 			}
@@ -107,22 +87,9 @@ wf.body(func(args) {
 		}
 	)
 
-	// Build PFrames from processColumn outputs. processResult.output()
-	// for Xsv-typed targets returns a map of `{colId: {spec, data}}`.
-	motifsPfBuilder := pframes.pFrameBuilder()
-	for colId in specs.motifColumnIds {
-		out := processResult.output("motifs", colId)
-		motifsPfBuilder.add(colId, out.spec, out.data)
-	}
-	motifsPf := motifsPfBuilder.build()
-
-	cysPfBuilder := pframes.pFrameBuilder()
-	for colId in specs.cysColumnIds {
-		out := processResult.output("cysteines", colId)
-		cysPfBuilder.add(colId, out.spec, out.data)
-	}
-	cysPf := cysPfBuilder.build()
-
+	// Per-clonotype scalar PFrame, spec R38. processResult.output() for
+	// Xsv-typed targets returns a map of `{colId: {spec, data}}` keyed by
+	// the column ids declared on `scoresXsv`.
 	scoresPfBuilder := pframes.pFrameBuilder()
 	for colId in specs.scoresColumnIds {
 		out := processResult.output("scores", colId)
@@ -132,13 +99,9 @@ wf.body(func(args) {
 
 	return {
 		outputs: {
-			motifsData: pframes.exportFrame(motifsPf),
-			cysData: pframes.exportFrame(cysPf),
 			scoresData: pframes.exportFrame(scoresPf)
 		},
 		exports: {
-			motifs: motifsPf,
-			cysteines: cysPf,
 			scores: scoresPf
 		}
 	}

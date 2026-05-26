@@ -25,7 +25,7 @@
           },
           "cmd": [
             "python",
-            "/app/main.py"
+            "/app/run_liabilities.py"
           ]
         }
       }

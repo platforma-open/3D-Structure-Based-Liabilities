@@ -286,20 +286,6 @@ export const platforma = BlockModelV3.create(dataModel)
       },
     ]),
   )
-  // Pass `undefined` for tableState (instead of ctx.data.tableState) so
-  // grid state writes via the UI's v-model don't trigger model re-runs ,
-  // that feedback loop kept AG-Grid in placeholder state on multi-table
-  // pages. UI binds v-model to local refs to preserve state per-session.
-  .outputWithStatus("motifsTable", (ctx) => {
-    const pCols = ctx.outputs?.resolve("motifsData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    return createPlDataTableV2(ctx, pCols, undefined);
-  })
-  .outputWithStatus("cysTable", (ctx) => {
-    const pCols = ctx.outputs?.resolve("cysData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    return createPlDataTableV2(ctx, pCols, undefined);
-  })
   // Spec R51 , per-clonotype scalar metrics table. PColumns come from the
   // PrimaryRef-path `scoresData` PFrame (axes: [scClonotypeKey]). Hidden
   // on the legacy single-PDB path (`scoresData` not emitted; resolve
@@ -559,8 +545,6 @@ export const platforma = BlockModelV3.create(dataModel)
           : "Mode-specific distribution";
     return [
       { type: "link", href: "/", label: "Main" },
-      { type: "link", href: "/motifs", label: "Motifs" },
-      { type: "link", href: "/cysteines", label: "Cysteine state" },
       { type: "link", href: "/histogram-psh", label: "PSH distribution" },
       { type: "link", href: "/histogram-ppc", label: "PPC distribution" },
       { type: "link", href: "/histogram-pnc", label: "PNC distribution" },
