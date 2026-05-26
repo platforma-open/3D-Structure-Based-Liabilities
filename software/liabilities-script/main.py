@@ -93,13 +93,12 @@ def chown_to_host(path: Path) -> None:
 
 _FLAG_SENTINEL = "-"
 
-# Spec R38 / R39 - per-clonotype scalar columns. `sampleId` + `clonotypeKey`
-# come first so they map directly to the PDB column's [sampleId, scClonotypeKey]
-# axes (R2) when the workflow imports the TSV via `xsv.importFile`. Spec's
-# Software Interface example shows only `clonotypeKey`; adding `sampleId`
-# is the necessary extension to preserve the R2 anchor.
+# Spec R38 / R39 - per-clonotype scalar columns. `clonotypeKey` is first
+# (matches the spec's Software Interface TSV header); the workflow's
+# `xsv.importFile` maps it to the upstream PDB column's scClonotypeKey
+# axis. R2's `sampleId` axis is not present in the deployed upstream
+# PDB column shape, so the output TSV stays single-keyed.
 _TSV_COLUMNS = [
-    "sampleId",
     "clonotypeKey",
     "mode",
     "numberingWarning",
@@ -292,13 +291,8 @@ def main() -> None:
     ap.add_argument("--pdb-dir", required=True, type=Path,
                     help="Directory holding the PDB files referenced by --pdb-index.")
     ap.add_argument("--pdb-index", required=True, type=Path,
-                    help="TSV with three columns (sampleId, scClonotypeKey, "
-                         "pdb_filename); filenames are resolved relative to "
-                         "--pdb-dir. The sampleId column is the spec R2 axis "
-                         "extension; the per-clonotype output TSV preserves "
-                         "both axes so xsv.importFile builds PColumns under "
-                         "the same [sampleId, scClonotypeKey] anchor as the "
-                         "upstream PDB column.")
+                    help="TSV with two columns (clonotypeKey, pdb_filename); "
+                         "filenames are resolved relative to --pdb-dir.")
     ap.add_argument("--output-tsv", required=True, type=Path,
                     help="Output TSV path. One row per clonotype.")
     ap.add_argument("--rsasa-buried-cutoff", type=float, default=0.075,
@@ -336,12 +330,12 @@ def main() -> None:
     writer.writerow(_TSV_COLUMNS)
 
     for entry in index_rows:
-        if len(entry) != 3:
+        if len(entry) != 2:
             raise SystemExit(
                 "--pdb-index row malformed (expected "
-                f"sampleId<TAB>scClonotypeKey<TAB>filename): {entry}"
+                f"clonotypeKey<TAB>filename): {entry}"
             )
-        sample_id, clonotype_key, pdb_filename = entry
+        clonotype_key, pdb_filename = entry
         pdb_path = args.pdb_dir / pdb_filename
         if not pdb_path.is_file():
             raise SystemExit(
@@ -359,11 +353,10 @@ def main() -> None:
             )
         except ValueError as e:
             print(
-                f"WARN ({sample_id}/{clonotype_key}): {e}; skipping row",
+                f"WARN ({clonotype_key}): {e}; skipping row",
                 file=sys.stderr,
             )
             continue
-        row["sampleId"] = sample_id
         row["clonotypeKey"] = clonotype_key
         writer.writerow([_tsv_value(row.get(c)) for c in _TSV_COLUMNS])
 

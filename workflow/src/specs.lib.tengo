@@ -640,16 +640,14 @@ buildCysXsvSettings := func(blockId) {
 	}
 }
 
-// Scores frame, single-shot path. Python emits a TSV with `sampleId`
-// and `clonotypeKey` as the first two columns; `xsv.importFile` maps
-// them to the upstream PDB column's axes (`pl7.app/sampleId` and
-// `pl7.app/vdj/scClonotypeKey`, per R2). The axis specs are inherited
-// from the resolved PDB column at workflow time, so this helper takes
-// them as an argument instead of declaring them locally.
-buildScoresXsvSettings := func(blockId, sampleIdAxisSpec, scClonotypeAxisSpec) {
+// Scores frame, single-shot path. Python emits a TSV with `clonotypeKey`
+// as the first column; `xsv.importFile` maps it to the upstream PDB
+// column's `scClonotypeKey` axis. The axis spec is inherited from the
+// resolved PDB column at workflow time, so this helper takes it as an
+// argument instead of declaring it locally.
+buildScoresXsvSettings := func(blockId, scClonotypeAxisSpec) {
 	return {
 		axes: [
-			{ column: "sampleId", spec: sampleIdAxisSpec },
 			{ column: "clonotypeKey", spec: scClonotypeAxisSpec }
 		],
 		columns: buildXsvColumns(scoresColumnIds, scoresColumnSpecs, blockId),

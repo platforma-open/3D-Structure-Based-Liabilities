@@ -36,19 +36,16 @@ wf.body(func(args) {
 
 	pdbCol := args.resolvedPdb
 	pdbAxes := pdbCol.spec.axesSpec
-	if len(pdbAxes) != 2 {
-		// Spec R2 says PDB column carries `[sampleId, (sc)clonotypeKey]`.
-		// Other shapes would need axis-naming logic we don't have yet.
+	if len(pdbAxes) != 1 {
 		ll := import("@platforma-sdk/workflow-tengo:ll")
-		ll.panic("unsupported PDB column axes count: expected 2 (sampleId + scClonotypeKey), got %d", len(pdbAxes))
+		ll.panic("unsupported PDB column axes count: expected 1 (scClonotypeKey), got %d", len(pdbAxes))
 	}
-	sampleIdAxis := pdbAxes[0]
-	scClonotypeAxis := pdbAxes[1]
+	scClonotypeAxis := pdbAxes[0]
 
 	// Iterate the upstream ResourceMap entries: each key is a JSON-encoded
-	// `[sampleId, scClonotypeKey]` tuple, each value is a Blob ref to a PDB
-	// file. Build the spec's `pdb_index.tsv` and the per-PDB `addFile` calls
-	// in the same loop, so order matches.
+	// 1-element `[scClonotypeKey]` array, each value is a Blob ref to a PDB
+	// file. Build the spec's `pdb_index.tsv` (clonotypeKey \t pdb_filename)
+	// and the per-PDB `addFile` calls in the same loop.
 	inputsMap := pdbCol.data.inputs()
 	indexLines := []
 	cmd := exec.builder().
@@ -60,11 +57,10 @@ wf.body(func(args) {
 	rowCount := 0
 	for keyJson in maps.getKeys(inputsMap) {
 		keyArr := json.decode(keyJson)
-		sampleId := keyArr[0]
-		clonotypeKey := keyArr[1]
+		clonotypeKey := keyArr[0]
 		filename := "pdbs/" + clonotypeKey + ".pdb"
 		cmd = cmd.addFile(filename, inputsMap[keyJson].getValue())
-		indexLines = append(indexLines, sampleId + "\t" + clonotypeKey + "\t" + filename)
+		indexLines = append(indexLines, clonotypeKey + "\t" + filename)
 		rowCount += 1
 	}
 
@@ -100,7 +96,7 @@ wf.body(func(args) {
 	// straight from the upstream PDB column so downstream blocks auto-join
 	// against `[sampleId, scClonotypeKey]`. R43 trace is attached to the
 	// resulting PFrame as an annotation post-import.
-	xsvSettings := specs.buildScoresXsvSettings(blockId, sampleIdAxis, scClonotypeAxis)
+	xsvSettings := specs.buildScoresXsvSettings(blockId, scClonotypeAxis)
 	scoresPf := xsv.importFile(scoresTsv, "tsv", xsvSettings, { cpu: 1, mem: "2GiB" })
 
 	// R43 trace assembly is left as a follow-up for the single-shot path
