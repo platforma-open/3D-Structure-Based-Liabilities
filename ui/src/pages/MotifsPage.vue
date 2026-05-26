@@ -6,7 +6,7 @@ import { useApp } from "../app";
 
 const app = useApp();
 
-// Spec R51 motif drill-down — one row per surfaced motif hit. Lives on
+// Spec R51 motif drill-down , one row per surfaced motif hit. Lives on
 // its own page so a single PlAgDataTableV2 mounts at a time (multi-table
 // pages cause a stale-state cascade where AG-Grid sticks in placeholder).
 const motifsTableSettings = usePlDataTableSettingsV2({
@@ -15,7 +15,7 @@ const motifsTableSettings = usePlDataTableSettingsV2({
 });
 const motifsLocalState = ref(createPlDataTableStateV2());
 
-// Spec R12 — Raybould 2019 canonical cutoff. rSASA below this is "buried".
+// Spec R12 , Raybould 2019 canonical cutoff. rSASA below this is "buried".
 const BURIED_CUTOFF = 0.075;
 </script>
 

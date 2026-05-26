@@ -6,7 +6,7 @@ import type {
 import { computed } from "vue";
 
 /**
- * Spec R53 — per-clonotype detail panel. Renders an expanded liability
+ * Spec R53 , per-clonotype detail panel. Renders an expanded liability
  * list grouped by motif type, the cysteine state summary, surface metrics
  * with flag colors, and the composite developability score, all read from
  * the per-clonotype `liabilities.json` report. Lives next to the Mol*
@@ -34,7 +34,7 @@ const motifsByType = computed<Record<string, MotifHit[]>>(() => {
   return out;
 });
 
-// Spec R35 — gated motifs render in their own section so the user can
+// Spec R35 , gated motifs render in their own section so the user can
 // see what was confidence-suppressed without it polluting the confident-
 // call list above.
 const uncertainByType = computed<Record<string, MotifHit[]>>(() => {
@@ -53,11 +53,11 @@ const flags = computed<Record<string, string>>(() => {
 });
 
 function pctRsasa(v: number | undefined | null): string {
-  return v == null ? "—" : `${Math.round(v * 100)}%`;
+  return v == null ? "-" : `${Math.round(v * 100)}%`;
 }
 
 function fmtConf(v: number | null): string {
-  return v == null ? "—" : `${v.toFixed(2)} Å`;
+  return v == null ? "-" : `${v.toFixed(2)} Å`;
 }
 </script>
 
@@ -120,12 +120,19 @@ function fmtConf(v: number | null): string {
             v-show="m.v !== undefined && m.v !== null"
           >
             <td :class="$style.kvKey">{{ m.label }}</td>
-            <td :class="$style.kvValue">{{ m.v ?? "—" }}</td>
+            <td
+              :class="$style.kvValue"
+              :style="
+                m.flag && m.flag !== '-' ? { color: FLAG_COLOR[m.flag], fontWeight: 600 } : {}
+              "
+            >
+              {{ m.v ?? "-" }}
+            </td>
             <td>
               <span
-                v-if="m.flag && m.flag !== '-'"
+                v-if="m.flag === 'red'"
                 :class="$style.flagBadge"
-                :style="{ background: FLAG_COLOR[m.flag] + '33', color: FLAG_COLOR[m.flag] }"
+                :style="{ background: FLAG_COLOR.red + '33', color: FLAG_COLOR.red }"
               >
                 {{ m.flag }}
               </span>
@@ -145,7 +152,7 @@ function fmtConf(v: number | null): string {
           <tbody>
             <tr v-for="h in hits" :key="`${h.chainId}-${h.resSeq}-${h.iCode}-${h.type}`">
               <td :class="$style.motifSite">{{ h.chainId }}/{{ h.resSeq }}{{ h.iCode }}</td>
-              <td :class="$style.motifRegion">{{ h.region ?? "—" }}</td>
+              <td :class="$style.motifRegion">{{ h.region ?? "-" }}</td>
               <td :class="$style.motifRsasa">rSASA {{ pctRsasa(h.rsasa) }}</td>
               <td :class="$style.motifConf">B {{ fmtConf(h.confidence) }}</td>
               <td :class="$style.motifScore">
@@ -162,7 +169,7 @@ function fmtConf(v: number | null): string {
       <h3 :class="$style.h3">
         Uncertain liabilities
         <span :class="$style.muted">
-          × {{ report?.uncertainLiabilities?.length ?? 0 }} (R35 — gated by B-factor)
+          × {{ report?.uncertainLiabilities?.length ?? 0 }} (R35 , gated by B-factor)
         </span>
       </h3>
       <div v-for="(hits, type) in uncertainByType" :key="type" :class="$style.motifGroup">
@@ -173,7 +180,7 @@ function fmtConf(v: number | null): string {
           <tbody>
             <tr v-for="h in hits" :key="`${h.chainId}-${h.resSeq}-${h.iCode}-${h.type}`">
               <td :class="$style.motifSite">{{ h.chainId }}/{{ h.resSeq }}{{ h.iCode }}</td>
-              <td :class="$style.motifRegion">{{ h.region ?? "—" }}</td>
+              <td :class="$style.motifRegion">{{ h.region ?? "-" }}</td>
               <td :class="$style.motifRsasa">rSASA {{ pctRsasa(h.rsasa) }}</td>
               <td :class="$style.motifConf">B {{ fmtConf(h.confidence) }}</td>
               <td :class="$style.motifScore">

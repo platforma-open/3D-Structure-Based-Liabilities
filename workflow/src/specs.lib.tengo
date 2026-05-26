@@ -11,7 +11,7 @@
 ll := import("@platforma-sdk/workflow-tengo:ll")
 json := import("json")
 
-// Spec R39 / R54 — Raybould 2019 + Gordon 2025 amber/red threshold values.
+// Spec R39 / R54 , Raybould 2019 + Gordon 2025 amber/red threshold values.
 // Encoded as `pl7.app/graph/thresholds` annotations on the metric columns so
 // GraphMaker can draw them as dashed lines on histograms / scatter plots.
 // Today the histogram code path in `@milaboratories/graph-maker` doesn't yet
@@ -150,7 +150,7 @@ motifColumnSpecs := {
 			"pl7.app/table/orderPriority": "950"
 		}
 	},
-	// R18 — absolute SASA (Å²) for the chemically-relevant residue.
+	// R18 , absolute SASA (Å²) for the chemically-relevant residue.
 	// Optional in the table (rSASA covers the common case) but shipped
 	// as a PColumn so downstream blocks that want raw SASA don't have to
 	// back-convert via Ala-X-Ala refs.
@@ -352,7 +352,7 @@ cysColumnIds := ["cysClass", "chainRole", "bondingState", "rsasa", "sidechainRsa
 // to every output. We keep a constant-valued `structureId="static"`
 // placeholder column to satisfy that assertion, and mark its axis with
 // `pl7.app/table/visibility: "hidden"` so `selectDisplayableIndices`
-// in `table-source-v2.ts:377` filters it out of the rendered table —
+// in `table-source-v2.ts:377` filters it out of the rendered table ,
 // no redundant "Structure" cell on every row.
 scoresAxesSpec := [
 	{
@@ -475,7 +475,7 @@ scoresColumnSpecs := {
 			"pl7.app/table/orderPriority": "1040"
 		}
 	},
-	// R24/R29 — total CDR length. Long-valued (residue count), so it can't
+	// R24/R29 , total CDR length. Long-valued (residue count), so it can't
 	// use metricColumnSpec which is Double-only.
 	totalCdrLength: {
 		valueType: "Long",
@@ -487,11 +487,11 @@ scoresColumnSpecs := {
 			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/totalCdrLength", [54, 60])
 		}
 	},
-	// R25 PSH — surface-hydrophobicity patch score; Raybould 2019 Table 2.
+	// R25 PSH , surface-hydrophobicity patch score; Raybould 2019 Table 2.
 	psh: metricColumnSpec(
 		"pl7.app/liabilities/psh", "PSH", ".2f", "860",
 		[83.84, 100.71, 156.20, 173.85]),
-	// R25 — diagnostic Long count of distinct patches discovered (not score).
+	// R25 , diagnostic Long count of distinct patches discovered (not score).
 	pshPatchCount: {
 		valueType: "Long",
 		name: "pl7.app/liabilities/pshPatchCount",
@@ -501,16 +501,16 @@ scoresColumnSpecs := {
 			"pl7.app/table/orderPriority": "850"
 		}
 	},
-	// R26 PPC / PNC — positive / negative patch scores.
+	// R26 PPC / PNC , positive / negative patch scores.
 	ppc: metricColumnSpec(
 		"pl7.app/liabilities/ppc", "PPC", ".2f", "840", [1.25, 3.16]),
 	pnc: metricColumnSpec(
 		"pl7.app/liabilities/pnc", "PNC", ".2f", "830", [1.84, 3.50]),
-	// R28 SFvCSP — paired-Fv only. Lower = worse (asymmetric charges →
+	// R28 SFvCSP , paired-Fv only. Lower = worse (asymmetric charges →
 	// viscosity).
 	sfvcsp: metricColumnSpec(
 		"pl7.app/liabilities/sfvcsp", "SFvCSP", ".2f", "820", [-20.40, -6.30]),
-	// R30 CDRH3 compactness — VHH only. Bidirectional risk.
+	// R30 CDRH3 compactness , VHH only. Bidirectional risk.
 	cdrh3Compactness: metricColumnSpec(
 		"pl7.app/liabilities/cdrh3Compactness", "CDRH3 compactness", ".3f", "810",
 		[0.56, 0.82, 1.57, 1.61]),
@@ -577,7 +577,7 @@ scoresColumnIds := [
 //   - `columns` maps parquet column names → PColumn specs.
 // Parquet columns not listed here are silently dropped by pfconv.
 // processColumn prepends `pl7.app/vdj/scClonotypeKey` from the input
-// column to every output PColumn (Spec R1-R6 — the real per-clonotype axis).
+// column to every output PColumn (Spec R1-R6 , the real per-clonotype axis).
 
 // Maps parquet column name → axis spec, for the motif/cys axes.
 motifAxisParquetMapping := [

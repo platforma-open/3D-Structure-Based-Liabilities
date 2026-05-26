@@ -1,9 +1,9 @@
 // vim: filetype=go
 //
-// 3D Structure-Based Liabilities — workflow entry point.
+// 3D Structure-Based Liabilities , workflow entry point.
 //
 // PrimaryRef path only (Spec R1). `args.primaryRef` is the standard
-// `{column: PlRef, filter?: PlRef}` envelope — we resolve the inner
+// `{column: PlRef, filter?: PlRef}` envelope , we resolve the inner
 // `column` PlRef to a `pl7.app/structure/pdb` PColumn from the result
 // pool (typically emitted by the 3D Structure Prediction block).
 // `pframes.processColumn` iterates per clonotype: for each row in the
@@ -12,7 +12,7 @@
 // `pl7.app/vdj/scClonotypeKey` axis automatically (processColumn
 // prepends input axes). R43 trace step is attached via processColumn's
 // `traceSteps` option. `primaryRef.filter` (R47 subset selection) is
-// not yet wired — every clonotype in the column is processed.
+// not yet wired , every clonotype in the column is processed.
 
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 assets := import("@platforma-sdk/workflow-tengo:assets")
@@ -23,7 +23,7 @@ specs := import(":specs")
 
 processPdbTpl := assets.importTemplate(":process-pdb")
 
-// Spec R43 trace step — identifies this block in the per-column trace
+// Spec R43 trace step , identifies this block in the per-column trace
 // chain when downstream blocks consume our PFrames.
 traceStep := {
 	type: "milaboratories.3d-structure-based-liabilities",
@@ -32,7 +32,7 @@ traceStep := {
 	label: "3D Structure-Based Liabilities"
 }
 
-// Spec R1-R6 — resolve the upstream `pl7.app/structure/pdb` PColumn here
+// Spec R1-R6 , resolve the upstream `pl7.app/structure/pdb` PColumn here
 // so the wf.body branch below can iterate per clonotype. wf.prepare runs
 // once before wf.body and is the only place we can fetch external
 // PColumns via wf.resolve.
@@ -53,12 +53,12 @@ wf.body(func(args) {
 	scoresXsv := specs.buildScoresXsvSettings(blockId)
 
 	// Per-row body inputs. processColumn's body template inputs must be
-	// pl7 resources (handles), not raw Tengo values — `smart.createJsonResource`
+	// pl7 resources (handles), not raw Tengo values , `smart.createJsonResource`
 	// wraps each scalar into a JSON-typed resource that the body template
 	// reads back via `inputs.<name>`. Empty-string fallback for optional
 	// args keeps the body's `is_undefined` guard simple (the empty string
 	// distinguishes "user left it blank" from missing input).
-	// Spec R12 — rSASA buried cutoff is hardcoded to 0.075 by the python
+	// Spec R12 , rSASA buried cutoff is hardcoded to 0.075 by the python
 	// (canonical Raybould 2019 value). No workflow override; not in
 	// `bodyExtra`.
 	bodyExtra := {
@@ -147,7 +147,7 @@ wf.body(func(args) {
 	scoresPf := scoresPfBuilder.build()
 
 	// Per-clonotype File ResourceMap (axes: [scClonotypeKey], valueType: File).
-	// Consumed by the UI's R53 detail panel — clicking a clonotype fetches
+	// Consumed by the UI's R53 detail panel , clicking a clonotype fetches
 	// its matching report blob and renders motifs / cysteines / metrics.
 	jsonsOut := processResult.output("liabilitiesJson")
 	jsonsPfBuilder := pframes.pFrameBuilder()

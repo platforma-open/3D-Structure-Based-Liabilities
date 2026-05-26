@@ -1,13 +1,13 @@
 // vim: filetype=go
 //
-// process-pdb — per-row body template for `pframes.processColumn` over the
+// process-pdb , per-row body template for `pframes.processColumn` over the
 // upstream `pl7.app/structure/pdb` ResourceMap (Spec R1-R6). One invocation
 // runs the liabilities software on one PDB and exposes four files:
 //
-//   - liabilities.json                — R37 per-clonotype JSON report
-//   - motifs_pf/partition_0.parquet   — R38 motifs parquet (axes-tagged)
-//   - cysteines_pf/partition_0.parquet — R38 cysteines parquet
-//   - scores_pf/partition_0.parquet   — R38 per-structure scalar parquet
+//   - liabilities.json                , R37 per-clonotype JSON report
+//   - motifs_pf/partition_0.parquet   , R38 motifs parquet (axes-tagged)
+//   - cysteines_pf/partition_0.parquet , R38 cysteines parquet
+//   - scores_pf/partition_0.parquet   , R38 per-structure scalar parquet
 //
 // The orchestrator (main.tpl.tengo) converts these into PColumns via target
 // outputs of type Resource (liabilitiesJson) and Xsv parquet (motifs/cys/scores).
@@ -52,7 +52,7 @@ self.body(func(inputs) {
 		arg("--cysteines-pframe-dir").arg("cysteines_pf").
 		arg("--scores-pframe-dir").arg("scores_pf")
 
-	// Optional CLI knobs — appended to `cmd` only when the corresponding
+	// Optional CLI knobs , appended to `cmd` only when the corresponding
 	// `bodyExtra` field was set by main.tpl.tengo. Each row is
 	//   [<inputs key>, <CLI flag>]
 	// Empty strings (default for string args when the user left the
@@ -73,7 +73,7 @@ self.body(func(inputs) {
 			cmd = cmd.arg(flag).arg(v)
 		}
 	}
-	// R12 — rSASA buried cutoff is the python default (0.075); not
+	// R12 , rSASA buried cutoff is the python default (0.075); not
 	// forwarded from the workflow since the spec mandates it as a
 	// workflow-side constant.
 	numericOptArgs := [

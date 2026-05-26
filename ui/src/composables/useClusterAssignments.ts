@@ -3,7 +3,7 @@ import { computed, ref, watchEffect, type ComputedRef, type Ref } from "vue";
 import { readCell, readNumber, readString } from "./ptableCell";
 
 /**
- * Spec R42 — per-clonotype cluster assignment row, lifted out of the
+ * Spec R42 , per-clonotype cluster assignment row, lifted out of the
  * scoresTable PTable. Populated only when the 3D Structure Clustering
  * block is upstream (it auto-joins these columns on the scClonotypeKey
  * axis); otherwise the map stays empty and the UI hides cluster bits.
@@ -15,7 +15,7 @@ export type ClusterAssignment = {
   tmScoreToCentroid: number | null;
 };
 
-/** Output value shape of `outputs.scoresTable` — `OutputWithStatus<PlDataTableV2>`. */
+/** Output value shape of `outputs.scoresTable` , `OutputWithStatus<PlDataTableV2>`. */
 type ScoresTableOutput = { ok?: boolean; value?: { fullTableHandle?: unknown } } | undefined;
 
 /**
@@ -26,7 +26,7 @@ type ScoresTableOutput = { ok?: boolean; value?: { fullTableHandle?: unknown } }
  * `selectedClonotypeKey` is passed in (rather than created inside) so the
  * cluster badge in the slideover stays bound to the row the user opened.
  * Filtering by cluster / centroid is now done via PlAgDataTable's own
- * column filters on the main table — the in-page "Centroids only" toggle
+ * column filters on the main table , the in-page "Centroids only" toggle
  * that used to auto-jump the selection is gone.
  */
 export function useClusterAssignments(

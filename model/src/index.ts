@@ -11,7 +11,6 @@ import type {
 } from "@platforma-sdk/model";
 import {
   BlockModelV3,
-  createPFrameForGraphs,
   createPlDataTableStateV2,
   createPlDataTableV2,
   createPrimaryRef,
@@ -28,7 +27,7 @@ export type Fixability =
   | "structural"
   | "disqualifying";
 
-/** Spec R37 — entry in the unified motifs[] array. */
+/** Spec R37 , entry in the unified motifs[] array. */
 export type MotifHit = {
   type: string;
   chainId: string;
@@ -36,17 +35,17 @@ export type MotifHit = {
   iCode: string;
   resName: string;
   region: string | null;
-  /** Spec R18 — absolute SASA (Å²) for the chemically-relevant residue,
+  /** Spec R18 , absolute SASA (Å²) for the chemically-relevant residue,
    * paired with rSASA. Null when SASA computation didn't yield a value
    * (non-standard residue / parser drop). Older runs from before the R18
-   * fix don't ship the field — keep optional so reports still parse. */
+   * fix don't ship the field , keep optional so reports still parse. */
   sasa?: number | null;
   rsasa: number;
   exposed: boolean;
   exposureFactor: number;
-  /** Spec R34 — residue's mean B-factor (Å). Null when no atoms carry it. */
+  /** Spec R34 , residue's mean B-factor (Å). Null when no atoms carry it. */
   confidence: number | null;
-  /** Spec R35 — "yes"/"no". Gated motifs are kept for traceability but
+  /** Spec R35 , "yes"/"no". Gated motifs are kept for traceability but
    * excluded from `motifStructuralRiskScore`. */
   confidenceGated: "yes" | "no";
   weightedScore: number;
@@ -64,7 +63,7 @@ export type ChainSummary = {
   }[];
 };
 
-/** Spec R23 — per-cysteine entry in the report's `cysteines[]` array. */
+/** Spec R23 , per-cysteine entry in the report's `cysteines[]` array. */
 export type CysteineHit = {
   chainId: string;
   resSeq: number;
@@ -81,25 +80,25 @@ export type CysteineHit = {
   partnerIcode: string | null;
 };
 
-/** Spec R37 — per-clonotype JSON report. The cysteines array is consumed via
+/** Spec R37 , per-clonotype JSON report. The cysteines array is consumed via
  * the `cysTable` PColumn output, not from this JSON. `chains` is a transient
  * extra used by the UI residue map until per-residue PColumn outputs land. */
 export type LiabilitiesReport = {
   numberingScheme: "imgt" | "chothia" | "kabat" | null;
-  /** Spec R7 — strict chain-count classification. TAP for paired Fv (2
+  /** Spec R7 , strict chain-count classification. TAP for paired Fv (2
    * chains), TNP for VHH single chain (≤180 residues). Earlier runs
    * could also carry "complex" / "empty" before R7 was enforced; the
    * type keeps those as legacy values so old reports still parse. */
   mode?: "TAP" | "TNP" | "complex" | "empty";
-  /** Spec R35 — confident motif calls (those not gated by the R34
+  /** Spec R35 , confident motif calls (those not gated by the R34
    * B-factor confidence check). Gated calls live in `uncertainLiabilities`. */
   motifs: MotifHit[];
-  /** Spec R35 — motif calls whose chemically-relevant residue had a
+  /** Spec R35 , motif calls whose chemically-relevant residue had a
    * B-factor above the region-aware confidence threshold. Reported for
    * traceability but excluded from `motifStructuralRiskScore` and the
    * composite developability score. Empty array when nothing was gated. */
   uncertainLiabilities?: MotifHit[];
-  /** Spec R23 — per-cysteine entries with structural state classification. */
+  /** Spec R23 , per-cysteine entries with structural state classification. */
   cysteines?: CysteineHit[];
   chains: ChainSummary[];
   /** Spec R39 per-metric flags. Three-band: "green" | "amber" | "red"
@@ -117,7 +116,7 @@ export type LiabilitiesReport = {
     /** R41a hard-to-fix items: Present | None. */
     structuralIntegrityRisk: "Present" | "None";
   };
-  /** Spec R24–R33 surface developability metrics. Empty when no scheme +
+  /** Spec R24-R33 surface developability metrics. Empty when no scheme +
    * chain mapping is set. Mode dispatches the field set: Fv has
    * `sfvcsp`; VHH has `cdrh3Compactness`. R36 adds a per-metric
    * `<metric>LowConfidenceResidueFraction` Double (null when the input
@@ -142,10 +141,10 @@ export type LiabilitiesReport = {
       };
 };
 
-/** Spec R14 / R10 — numbering schemes supported for region tagging. */
+/** Spec R14 / R10 , numbering schemes supported for region tagging. */
 export type NumberingScheme = "imgt" | "chothia" | "kabat";
 
-/** Spec R48 — hydrophobicity scale used by PSH. KD = Kyte-Doolittle (the
+/** Spec R48 , hydrophobicity scale used by PSH. KD = Kyte-Doolittle (the
  * Raybould 2019 default), WW = Wimley-White interface, Hessa = Hessa
  * biological hydrophobicity, EM = Eisenberg-McLachlan consensus, BM =
  * Black-Mould normalized scale. */
@@ -172,7 +171,7 @@ type BlockDataV3 = BlockDataV2 & {
   lightChainId: string;
 };
 
-/** v4 — adds R49 advanced thresholds (FR/CDR confidence gating + R12
+/** v4 , adds R49 advanced thresholds (FR/CDR confidence gating + R12
  * buried/exposed rSASA cutoff). Defaults match the spec's calibrated
  * values for ImmuneBuilder. */
 type BlockDataV4 = BlockDataV3 & {
@@ -181,8 +180,8 @@ type BlockDataV4 = BlockDataV3 & {
   cdrConfThresh: number;
 };
 
-/** v5 — adds `pdbRef`, a `PlRef` pointing at an upstream
- * `pl7.app/structure/pdb` PColumn (Spec R1–R6). When set, the workflow
+/** v5 , adds `pdbRef`, a `PlRef` pointing at an upstream
+ * `pl7.app/structure/pdb` PColumn (Spec R1-R6). When set, the workflow
  * resolves it into per-clonotype PDBs and runs the software once per
  * clonotype; output PColumns then key on `pl7.app/vdj/scClonotypeKey`
  * rather than the `structureId="static"` placeholder.
@@ -193,14 +192,14 @@ type BlockDataV5 = BlockDataV4 & {
   pdbRef?: PlRef;
 };
 
-/** v6 — adds `scoresTableState` for the per-clonotype scalar metrics
+/** v6 , adds `scoresTableState` for the per-clonotype scalar metrics
  * table (Spec R51). Surfaces the existing `scoresData` PFrame the
  * workflow already emits. */
 type BlockDataV6 = BlockDataV5 & {
   scoresTableState: PlDataTableStateV2;
 };
 
-/** v7 — adds GraphMaker state for the six Spec R54 distribution histograms:
+/** v7 , adds GraphMaker state for the six Spec R54 distribution histograms:
  * PSH, PPC, PNC, SFvCSP (Fv), CDRH3 compactness (VHH), and the composite
  * developability score. */
 type BlockDataV7 = BlockDataV6 & {
@@ -212,12 +211,12 @@ type BlockDataV7 = BlockDataV6 & {
   graphStateDevScoreV2: GraphMakerState;
 };
 
-/** v8 — adds R48 hydrophobicity scale selector. */
+/** v8 , adds R48 hydrophobicity scale selector. */
 type BlockDataV8 = BlockDataV7 & {
   hydrophobicityScale: HydrophobicityScale;
 };
 
-/** v9 — strips the legacy single-PDB path's `pdb` field, the three
+/** v9 , strips the legacy single-PDB path's `pdb` field, the three
  * persisted-but-unused PlAgDataTable v-model states, and the six
  * GraphMakerState fields left over from the GraphMaker→SVG histogram
  * migration. */
@@ -235,16 +234,16 @@ type BlockDataV9 = Omit<
   | "graphStateDevScoreV2"
 >;
 
-/** v10 — drops `rsasaBuriedCutoff` per spec R12 (Raybould 0.075 is
+/** v10 , drops `rsasaBuriedCutoff` per spec R12 (Raybould 0.075 is
  * hardcoded in the workflow now). */
 type BlockDataV10 = Omit<BlockDataV9, "rsasaBuriedCutoff">;
 
-/** Current shape (v11) — replaces the bare `pdbRef: PlRef` field with
+/** Current shape (v11) , replaces the bare `pdbRef: PlRef` field with
  * a `primaryRef: PrimaryRef` envelope per spec R1. The envelope is the
  * standard `{column, filter?}` shape exported from `@platforma-sdk/model`
  * (the type re-exports from `@milaboratories/pl-model-common`); the
  * optional `filter` slot reduces the clonotype set per R1's second
- * clause — wiring that filter end-to-end is R47, deferred to a later
+ * clause , wiring that filter end-to-end is R47, deferred to a later
  * slice. Switching to the envelope here just gets the type right; the
  * UI dropdown keeps writing only the `column` field. */
 export type BlockData = Omit<BlockDataV10, "pdbRef"> & {
@@ -325,14 +324,14 @@ const dataModel = new DataModelBuilder()
     return rest;
   })
   .migrate<BlockDataV10>("v10", (v9) => {
-    // Spec R12 — drop the user-tunable rSASA cutoff; the python defaults
+    // Spec R12 , drop the user-tunable rSASA cutoff; the python defaults
     // to 0.075 (the canonical Raybould 2019 value) and the workflow no
     // longer overrides it.
     const { rsasaBuriedCutoff: _r, ...rest } = v9;
     return rest;
   })
   .migrate<BlockData>("v11", (v10) => {
-    // Spec R1 — wire shape moves from bare `pdbRef: PlRef` to the
+    // Spec R1 , wire shape moves from bare `pdbRef: PlRef` to the
     // `PrimaryRef` envelope `{column: PlRef, filter?: PlRef}` so the
     // block accepts a properly typed primary input. Existing
     // installations have a PlRef in `pdbRef`; we wrap it via
@@ -346,7 +345,7 @@ const dataModel = new DataModelBuilder()
   })
   .init(() => ({
     primaryRef: undefined,
-    // R14 default scheme — upstream's 3D Structure Prediction block always
+    // R14 default scheme , upstream's 3D Structure Prediction block always
     // produces IMGT-numbered PDBs (the `pl7.app/structure/numbering` domain
     // we match on already requires `imgt`), so defaulting here saves the
     // first-run user a dropdown click. Override if you're feeding the block
@@ -361,11 +360,11 @@ const dataModel = new DataModelBuilder()
 
 export const platforma = BlockModelV3.create(dataModel)
   .args((data) => {
-    // Spec R1 — primary input is a `PrimaryRef` envelope; the workflow's
+    // Spec R1 , primary input is a `PrimaryRef` envelope; the workflow's
     // `wf.prepare` resolves `primaryRef.column` (the PlRef inside the
     // envelope) into per-clonotype PDBs and iterates via
     // `pframes.processColumn`. The envelope's optional `filter` slot
-    // (clonotype subset, R47) is not yet wired through — primaryRef
+    // (clonotype subset, R47) is not yet wired through , primaryRef
     // is constructed with no filter today.
     if (!data.primaryRef?.column) {
       throw new Error("Pick a predicted structures dataset");
@@ -380,7 +379,7 @@ export const platforma = BlockModelV3.create(dataModel)
       hydrophobicityScale: data.hydrophobicityScale,
     };
   })
-  // Spec R1-R6 — surface `pl7.app/structure/pdb` PColumns from the result
+  // Spec R1-R6 , surface `pl7.app/structure/pdb` PColumns from the result
   // pool so the UI can show a dropdown of predicted-structure datasets.
   // Matches what the 3D Structure Prediction block exports (`pdbsMap`
   // PFrame, IMGT-numbered PDBs keyed by clonotype).
@@ -393,7 +392,7 @@ export const platforma = BlockModelV3.create(dataModel)
     ]),
   )
   // Pass `undefined` for tableState (instead of ctx.data.tableState) so
-  // grid state writes via the UI's v-model don't trigger model re-runs —
+  // grid state writes via the UI's v-model don't trigger model re-runs ,
   // that feedback loop kept AG-Grid in placeholder state on multi-table
   // pages. UI binds v-model to local refs to preserve state per-session.
   .outputWithStatus("motifsTable", (ctx) => {
@@ -406,7 +405,7 @@ export const platforma = BlockModelV3.create(dataModel)
     if (pCols === undefined) return undefined;
     return createPlDataTableV2(ctx, pCols, undefined);
   })
-  // Spec R51 — per-clonotype scalar metrics table. PColumns come from the
+  // Spec R51 , per-clonotype scalar metrics table. PColumns come from the
   // PrimaryRef-path `scoresData` PFrame (axes: [scClonotypeKey]). Hidden
   // on the legacy single-PDB path (`scoresData` not emitted; resolve
   // returns undefined).
@@ -416,7 +415,7 @@ export const platforma = BlockModelV3.create(dataModel)
   // re-runs. If this lets the table render rows, the bug is the
   // model→UI→model feedback loop via v-model on table state.
   //
-  // Spec R5 — upstream `pl7.app/structure/cdrh3Length` is enriched in as
+  // Spec R5 , upstream `pl7.app/structure/cdrh3Length` is enriched in as
   // an additional column so the user can sanity-check our REMARK 99 / scheme
   // fallback against the prediction block's CDRH3 length. Auto-joined on
   // the shared `pl7.app/vdj/scClonotypeKey` axis by the PFrame driver.
@@ -439,7 +438,7 @@ export const platforma = BlockModelV3.create(dataModel)
       valueType: "String",
       axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
     });
-    // Spec R42 — surface the cluster axis when the 3D Structure Clustering
+    // Spec R42 , surface the cluster axis when the 3D Structure Clustering
     // block is upstream. The block emits these on the same scClonotypeKey
     // axis, so the PFrame driver auto-joins them into per-clonotype rows.
     // Users can then sort / filter / group by cluster in the table UI.
@@ -479,17 +478,20 @@ export const platforma = BlockModelV3.create(dataModel)
     ];
     return createPlDataTableV2(ctx, allCols, undefined);
   })
-  // Spec R54 — per-metric histograms. One PFrame + Spec output pair per
-  // metric. Splitting avoids GraphMaker pre-filling extra slots
-  // (color/facet) with sibling columns when given a multi-column source.
-  // The helper below resolves a single scoresData column by its
-  // `pl7.app/liabilities/*` name and wraps it for GraphMaker.
+  // Spec R54 , per-metric histograms. One PFrame + Spec output pair per
+  // metric. We use `ctx.createPFrame([col])` rather than
+  // `createPFrameForGraphs` because the latter pulls related columns
+  // from the result pool (everything sharing the scClonotypeKey axis):
+  // psh, ppc, cdrh3Length, etc. all end up in the same PFrame, and
+  // graph-maker picks the first numeric column it sees regardless of
+  // our defaultOptions binding. Single-column PFrame removes the
+  // ambiguity.
   .outputWithStatus("pshPf", (ctx): PFrameHandle | undefined => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
     if (pCols === undefined) return undefined;
     const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/psh");
     if (!col) return undefined;
-    return createPFrameForGraphs(ctx, [col]);
+    return ctx.createPFrame([col]);
   })
   .output("pshSpec", (ctx): PColumnIdAndSpec | undefined => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
@@ -502,7 +504,7 @@ export const platforma = BlockModelV3.create(dataModel)
     if (pCols === undefined) return undefined;
     const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/ppc");
     if (!col) return undefined;
-    return createPFrameForGraphs(ctx, [col]);
+    return ctx.createPFrame([col]);
   })
   .output("ppcSpec", (ctx): PColumnIdAndSpec | undefined => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
@@ -515,7 +517,7 @@ export const platforma = BlockModelV3.create(dataModel)
     if (pCols === undefined) return undefined;
     const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/pnc");
     if (!col) return undefined;
-    return createPFrameForGraphs(ctx, [col]);
+    return ctx.createPFrame([col]);
   })
   .output("pncSpec", (ctx): PColumnIdAndSpec | undefined => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
@@ -528,7 +530,7 @@ export const platforma = BlockModelV3.create(dataModel)
     if (pCols === undefined) return undefined;
     const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/sfvcsp");
     if (!col) return undefined;
-    return createPFrameForGraphs(ctx, [col]);
+    return ctx.createPFrame([col]);
   })
   .output("sfvcspSpec", (ctx): PColumnIdAndSpec | undefined => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
@@ -541,7 +543,7 @@ export const platforma = BlockModelV3.create(dataModel)
     if (pCols === undefined) return undefined;
     const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/cdrh3Compactness");
     if (!col) return undefined;
-    return createPFrameForGraphs(ctx, [col]);
+    return ctx.createPFrame([col]);
   })
   .output("cdrh3CompactnessSpec", (ctx): PColumnIdAndSpec | undefined => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
@@ -556,7 +558,7 @@ export const platforma = BlockModelV3.create(dataModel)
       (c) => c.spec.name === "pl7.app/liabilities/structuralDevelopabilityScore",
     );
     if (!col) return undefined;
-    return createPFrameForGraphs(ctx, [col]);
+    return ctx.createPFrame([col]);
   })
   .output("devScoreSpec", (ctx): PColumnIdAndSpec | undefined => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
@@ -571,19 +573,24 @@ export const platforma = BlockModelV3.create(dataModel)
   // for each dot; the scoresTable already auto-substitutes labels in its
   // row-axis cell display via PlAgDataTable's isLabelColumn detection.
   .output("clonotypeLabelsPf", (ctx): PFrameHandle | undefined => {
-    const labelCols = ctx.resultPool.findDataWithCompatibleSpec({
-      kind: "PColumn",
-      name: "pl7.app/label",
-      valueType: "String",
-      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
-    });
-    if (!labelCols || labelCols.length === 0) return undefined;
-    // `findDataWithCompatibleSpec` returns the deprecated PObject shape;
-    // `createPFrameForGraphs` is duck-typed to read `.spec` / `.data` so
-    // the cast is safe at runtime.
-    return createPFrameForGraphs(ctx, labelCols as never);
+    // Source from scoresData.getPColumns() instead of resultPool query.
+    // The PFrame driver auto-joins upstream `pl7.app/label` (and other
+    // scClonotypeKey-anchored columns) into scoresData's column set, but
+    // resultPool.findDataWithCompatibleSpec returns empty here in
+    // PrimaryRef-path runs. Mirrors 3d-structure-prediction's model
+    // pattern (structuresTable.getPColumns()).
+    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
+    if (!pCols) return undefined;
+    const labelCol = pCols.find(
+      (c) =>
+        c.spec.name === "pl7.app/label" &&
+        c.spec.axesSpec.length === 1 &&
+        c.spec.axesSpec[0].name === "pl7.app/vdj/scClonotypeKey",
+    );
+    if (!labelCol) return undefined;
+    return ctx.createPFrame([labelCol]);
   })
-  // Spec R52 — per-clonotype PDB ResourceMap exposed for the viewer modal.
+  // Spec R52 , per-clonotype PDB ResourceMap exposed for the viewer modal.
   // Reads the upstream `pl7.app/structure/pdb` PColumn (axis:
   // scClonotypeKey, valueType File) and parses it into [{key, value}]
   // pairs; UI consumes via `entry.value.handle` (a RemoteBlobHandle) and
@@ -593,7 +600,7 @@ export const platforma = BlockModelV3.create(dataModel)
     // envelope rather than fuzzy-matching the result pool. The PlRef
     // lives at `primaryRef.column` (spec R1); `findDataWithCompatibleSpec`
     // was returning empty here even with name + valueType + axes + domain
-    // all aligned, so we use the canonical ref-based path — same as how
+    // all aligned, so we use the canonical ref-based path , same as how
     // the workflow accesses it.
     const ref = ctx.args?.primaryRef?.column ?? ctx.data?.primaryRef?.column;
     if (!ref) return undefined;
@@ -607,7 +614,7 @@ export const platforma = BlockModelV3.create(dataModel)
     if (!parsed.isComplete) return undefined;
     return parsed.data;
   })
-  // Spec R53 — per-clonotype JSON report ResourceMap. Parsed from this
+  // Spec R53 , per-clonotype JSON report ResourceMap. Parsed from this
   // block's own `liabilitiesJsonsData` PFrame so the UI can fetch the
   // specific clonotype's report and render the detail panel alongside
   // the viewer modal. Keyed by scClonotypeKey, values carry a
@@ -625,7 +632,7 @@ export const platforma = BlockModelV3.create(dataModel)
     if (!parsed.isComplete) return undefined;
     return parsed.data;
   })
-  // Spec R52 — axis identifier for the scClonotypeKey axis on the scoresTable.
+  // Spec R52 , axis identifier for the scClonotypeKey axis on the scoresTable.
   // UI uses this to attach PlAgDataTable's `show-cell-button-for-axis-id`
   // so the viewer-trigger button renders on the clonotype-key column.
   .output("clonotypeAxisId", (ctx): AxisId | undefined => {
@@ -635,12 +642,12 @@ export const platforma = BlockModelV3.create(dataModel)
     if (!ref) return undefined;
     const pdbSpec = ctx.resultPool.getPColumnSpecByRef(ref);
     if (!pdbSpec) return undefined;
-    // The upstream PDB column carries [sampleId, scClonotypeKey] — match
+    // The upstream PDB column carries [sampleId, scClonotypeKey] , match
     // the clonotype axis by name rather than index, since `[0]` is
     // sampleId here and the cell button must hang off the clonotype axis.
     const found = pdbSpec.axesSpec.find((a) => a.name === "pl7.app/vdj/scClonotypeKey");
     if (!found) return undefined;
-    // Return a stripped AxisId — `PlAgDataTableV2` does an `isJsonEqual`
+    // Return a stripped AxisId , `PlAgDataTableV2` does an `isJsonEqual`
     // against its own column's axisId (run through `getAxisId`, dropping
     // `annotations` etc). Returning the raw `AxisSpec` with extra fields
     // silently breaks the deep-equal check → no open button renders.
@@ -658,7 +665,7 @@ export const platforma = BlockModelV3.create(dataModel)
     { type: "link", href: "/histogram-developability", label: "Developability score" },
   ])
   .title(() => "3D Structure-Based Liabilities")
-  // Spec R55 — active-parameter summary visible at the block header.
+  // Spec R55 , active-parameter summary visible at the block header.
   .subtitle((ctx) => {
     if (!ctx.args) return "";
     const a = ctx.args;

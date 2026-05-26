@@ -29,11 +29,11 @@ import { useRunSummaryAlerts } from "../composables/useRunSummaryAlerts";
 
 const app = useApp();
 
-// Spec R51 — per-clonotype scoresTable is now the primary view. The
+// Spec R51 , per-clonotype scoresTable is now the primary view. The
 // previous tab UI (table ↔ inline viewer) has been replaced by a row-
 // click `PlSlideModal`, matching the pattern used in the upstream
 // 3D-Structure-Prediction block. Cluster / centroid filtering happens
-// through PlAgDataTable's own column filters — the standalone toggle
+// through PlAgDataTable's own column filters , the standalone toggle
 // is gone.
 const scoresTableSettings = usePlDataTableSettingsV2({
   model: () => app.model.outputs.scoresTable,
@@ -43,22 +43,28 @@ const scoresTableSettings = usePlDataTableSettingsV2({
 // model output handler. Keeps the table out of placeholder-state limbo.
 const scoresLocalState = ref(createPlDataTableStateV2());
 
-// Spec R52 + R53 — modal-on-row-click. `clonotypePdbsMap` /
+// Spec R52 + R53 , modal-on-row-click. `clonotypePdbsMap` /
 // `clonotypeJsonsMap` are {key, value: {handle}} pairs keyed by
 // scClonotypeKey. `viewer` is set when a row's open-button fires; the
 // modal opens via `:model-value="viewer !== undefined"`.
 //
 // Color schemes (by-confidence / by-rsasa / by-hydrophobicity per spec)
 // are still blocked on `@milaboratories/structure-viewer` ≥ 0.3.0
-// publish — PlStructureViewer renders Mol*'s default preset for now.
+// publish , PlStructureViewer renders Mol*'s default preset for now.
 const pdbsMap = computed(() => app.model.outputs.clonotypePdbsMap);
 const jsonsMap = computed(() => app.model.outputs.clonotypeJsonsMap);
 const clonotypeAxisId = computed(() => app.model.outputs.clonotypeAxisId);
 
-// F2 — pretty clonotype labels from the upstream `pl7.app/label` column.
+// F2 , pretty clonotype labels from the upstream `pl7.app/label` column.
 // Used for the modal title, viewer file name, and detail-panel header.
+// Source from scoresTable.fullPframeHandle (auto-joined label column);
+// the standalone clonotypeLabelsPf output uses resultPool.findDataWithCompatibleSpec
+// which returns empty for domain-bound axes.
 // PlAgDataTable handles label substitution inside the table itself.
-const clonotypeLabelsPf = computed(() => app.model.outputs.clonotypeLabelsPf);
+const clonotypeLabelsPf = computed(() => {
+  const t = app.model.outputs.scoresTable;
+  return t && t.ok ? t.value.fullPframeHandle : undefined;
+});
 const { resolveLabel } = useClonotypeLabels(clonotypeLabelsPf, clonotypeAxisId);
 
 const selectedClonotypeKey = ref<string | null>(null);
@@ -79,7 +85,7 @@ const { runSummary, showRedAlert, showGatedAlert } = useRunSummaryAlerts(scoresT
 // users land on the input form instead of an empty page.
 const settingsOpen = ref(!app.model.data.primaryRef?.column);
 
-// Spec R1 — `PrimaryRef` is a frozen `{__isPrimaryRef, column, filter?}`
+// Spec R1 , `PrimaryRef` is a frozen `{__isPrimaryRef, column, filter?}`
 // envelope. `PlDropdownRef` deals in plain `PlRef`, so we expose the
 // inner `column` to the dropdown and rebuild the envelope on every
 // change via `createPrimaryRef`. The filter slot (R47) stays
@@ -91,7 +97,7 @@ const primaryRefColumn = computed<PlRef | undefined>({
   },
 });
 
-// Row-click handler — fired by `PlAgDataTableV2`'s `@cell-button-clicked`
+// Row-click handler , fired by `PlAgDataTableV2`'s `@cell-button-clicked`
 // when the user hits the open button on the clonotype-axis cell. The key
 // comes through as the first element of `PTableKey`; we then look up the
 // PDB handle in `pdbsMap` and seed the viewer props (the slideover binds
@@ -121,14 +127,14 @@ function pct(value: number): string {
 }
 
 const numberingSchemeOptions = [
-  { value: "", label: "— unknown (no region weighting) —" },
+  { value: "", label: ", unknown (no region weighting) ," },
   { value: "imgt", label: "IMGT" },
   { value: "chothia", label: "Chothia" },
   { value: "kabat", label: "Kabat" },
 ];
 
-// R48 — selectable hydrophobicity scales for PSH. KD is the Raybould 2019
-// default; the rest are the spec's calibration set (Raybould refs 31–35
+// R48 , selectable hydrophobicity scales for PSH. KD is the Raybould 2019
+// default; the rest are the spec's calibration set (Raybould refs 31-35
 // plus Black-Mould for the Gordon TNP comparison).
 const hydrophobicityScaleOptions = [
   { value: "kd", label: "Kyte-Doolittle (default)" },
@@ -240,7 +246,7 @@ const modalTitle = computed(() => {
           PSH weights each residue by its hydrophobicity (R25). Kyte-Doolittle is Raybould 2019's
           choice; switching scales lets you cross-check PSH and reproduce the spec's R48 sensitivity
           analysis. All scales are min-max normalized to [1.0, 2.0] so PSH magnitudes stay in the
-          same ballpark, but relative ordering between residues changes — expect different
+          same ballpark, but relative ordering between residues changes , expect different
           red/amber/green calls near the threshold.
         </p>
       </PlAccordionSection>
@@ -289,7 +295,7 @@ const modalTitle = computed(() => {
       </PlBtnGhost>
     </div>
 
-    <!-- Spec R44 — run-summary alert: >10% of clonotypes have any red flag. -->
+    <!-- Spec R44 , run-summary alert: >10% of clonotypes have any red flag. -->
     <PlAlert
       v-if="showRedAlert && runSummary"
       type="warn"
@@ -302,7 +308,7 @@ const modalTitle = computed(() => {
       }}) carry at least one red Raybould threshold flag. Inspect the table below for which metrics
       are driving this.
     </PlAlert>
-    <!-- Spec R45 — run-summary alert: >25% confidence-gated motifs. -->
+    <!-- Spec R45 , run-summary alert: >25% confidence-gated motifs. -->
     <PlAlert
       v-if="showGatedAlert && runSummary"
       type="warn"
@@ -318,7 +324,7 @@ const modalTitle = computed(() => {
       for this dataset.
     </PlAlert>
 
-    <!-- Spec R51 — primary view. One row per clonotype; default-visible
+    <!-- Spec R51 , primary view. One row per clonotype; default-visible
          columns set in `workflow/src/specs.lib.tengo` (mode, both risk
          classes, dev score, surfaced motif / extra-cys / broken-canonical
          counts, and the Raybould threshold flags). Raw metric values,
@@ -338,7 +344,7 @@ const modalTitle = computed(() => {
       />
     </div>
 
-    <!-- Spec R52 + R53 — viewer + per-clonotype detail panel in a
+    <!-- Spec R52 + R53 , viewer + per-clonotype detail panel in a
          slideover triggered by the row's open button. Closes by setting
          `viewer = undefined`, which also clears the clonotype selection
          so cluster badge / detail-panel content reset between opens. -->
@@ -352,7 +358,7 @@ const modalTitle = computed(() => {
 
       <RiskSummaryBar v-if="viewer" :report="detailReport" />
 
-      <!-- R42 cluster info badge — renders only when the 3D Structure
+      <!-- R42 cluster info badge , renders only when the 3D Structure
            Clustering block is upstream and the selected clonotype has
            an assignment in clusterMap. -->
       <div

@@ -8,7 +8,7 @@ import { ref, watch, type ComputedRef } from "vue";
  * `mixcr-clonotyping/workflow/src/clonotype-label.lib.tengo`).
  *
  * `PlAgDataTableV2` substitutes labels into row-axis cells automatically
- * via `isLabelColumn` detection — this composable serves the non-table
+ * via `isLabelColumn` detection , this composable serves the non-table
  * surfaces (modal titles, detail-panel headers, viewer file names,
  * dropdowns) that have to look the label up themselves.
  *

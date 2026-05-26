@@ -14,11 +14,11 @@ export const sdkPlugin = defineAppV3(platforma, () => {
   return {
     routes: {
       "/": () => MainPage,
-      // Spec R51 drill-downs — one PlAgDataTableV2 per page (multi-table
+      // Spec R51 drill-downs , one PlAgDataTableV2 per page (multi-table
       // pages hit a race that keeps AG-Grid stuck in placeholder state).
       "/motifs": () => MotifsPage,
       "/cysteines": () => CysteinesPage,
-      // Spec R54 — per-metric distribution histograms.
+      // Spec R54 , per-metric distribution histograms.
       "/histogram-psh": () => HistogramPshPage,
       "/histogram-ppc": () => HistogramPpcPage,
       "/histogram-pnc": () => HistogramPncPage,

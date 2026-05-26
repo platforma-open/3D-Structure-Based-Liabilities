@@ -6,9 +6,9 @@ import { readNumber } from "./ptableCell";
  * Spec R44 / R45 run-summary alert source. Reads `*Flag` columns and
  * `confidenceGatedMotifCount` from the scoresTable PTable and computes:
  *
- *   R44 — fraction of clonotypes with ANY red metric flag (PSH/PPC/PNC/
+ *   R44 , fraction of clonotypes with ANY red metric flag (PSH/PPC/PNC/
  *         SFvCSP/CDRH3-compactness/totalCdrLength). Alert fires above 10%.
- *   R45 — fraction of clonotypes with at least one confidence-gated motif.
+ *   R45 , fraction of clonotypes with at least one confidence-gated motif.
  *         Alert fires above 25%.
  */
 export type RunSummary = {
@@ -88,7 +88,7 @@ export function useRunSummaryAlerts(scoresTable: ComputedRef<ScoresTableOutput>)
     }
 
     // R45: gated-motif-count > 0. confidenceGatedMotifCount is Long-typed,
-    // which means BigInts inside a numeric-indexed wrapper object — readNumber
+    // which means BigInts inside a numeric-indexed wrapper object , readNumber
     // normalises that to a plain number.
     let gatedClonotypes = 0;
     if (gatedIndex !== -1) {

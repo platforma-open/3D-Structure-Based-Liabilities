@@ -3,7 +3,7 @@ import { getRawPlatformaInstance } from "@platforma-sdk/model";
 import { ref, watchEffect, type ComputedRef, type Ref } from "vue";
 
 /**
- * Spec R53 — fetch the per-clonotype `liabilities.json` blob for the
+ * Spec R53 , fetch the per-clonotype `liabilities.json` blob for the
  * currently-selected clonotype and parse it into a LiabilitiesReport.
  *
  * The blob driver fetch is async; if the user clicks through several

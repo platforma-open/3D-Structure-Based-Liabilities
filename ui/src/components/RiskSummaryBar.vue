@@ -3,7 +3,7 @@ import type { LiabilitiesReport } from "@platforma-open/milabs.3d-structure-base
 import { computed } from "vue";
 
 /**
- * Spec R41 / R41a — risk readout shown above the 3D viewer. Pulled out
+ * Spec R41 / R41a , risk readout shown above the 3D viewer. Pulled out
  * of ClonotypeDetailPanel so it sits in the tab page header where the
  * user reads it first, before the structure. Same fields the detail
  * panel used: mode, composite developability score, fixable-risk
@@ -28,12 +28,12 @@ const scores = computed(() => props.report?.scores);
   <div :class="$style.bar">
     <div :class="$style.cell">
       <span :class="$style.label">Mode</span>
-      <span :class="$style.value">{{ report?.mode ?? "—" }}</span>
+      <span :class="$style.value">{{ report?.mode ?? "-" }}</span>
     </div>
     <div :class="$style.cell">
       <span :class="$style.label">Dev. score</span>
       <span :class="$style.value">
-        {{ scores ? scores.structuralDevelopabilityScore.toFixed(2) : "—" }}
+        {{ scores ? scores.structuralDevelopabilityScore.toFixed(2) : "," }}
       </span>
     </div>
     <div :class="$style.cell">
@@ -48,7 +48,7 @@ const scores = computed(() => props.report?.scores);
       >
         {{ scores.structuralDevelopabilityRisk }}
       </span>
-      <span v-else :class="$style.value">—</span>
+      <span v-else :class="$style.value">,</span>
     </div>
     <div :class="$style.cell">
       <span :class="$style.label">Integrity</span>
@@ -62,7 +62,7 @@ const scores = computed(() => props.report?.scores);
       >
         {{ scores.structuralIntegrityRisk }}
       </span>
-      <span v-else :class="$style.value">—</span>
+      <span v-else :class="$style.value">,</span>
     </div>
   </div>
 </template>
