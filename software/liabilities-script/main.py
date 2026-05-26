@@ -17,16 +17,32 @@ from pathlib import Path
 import freesasa
 
 from cysteines import detect_cysteines
-from diagnostics import check_hallmark_tetrad, cross_check_ssbonds
 from metrics import compute_metrics
 from motifs import detect_motifs
-from parser import parse_pdb
 from scoring import compute_developability
+from structure import check_hallmark_tetrad, cross_check_ssbonds, parse_pdb
 
 
-import json
-_REFS_PATH = Path(__file__).parent / "ala_x_ala_refs.json"
-_AXA_REFS: dict[str, dict[str, float]] = json.loads(_REFS_PATH.read_text())["references"]
+# Heavy-atom Ala-X-Ala SASA references (R11), loaded from
+# data/heavy_atom_max_sasa.tsv (residue, total, sidechain columns).
+_REFS_PATH = Path(__file__).parent / "data" / "heavy_atom_max_sasa.tsv"
+
+
+def _load_axa_refs(path: Path) -> dict[str, dict[str, float]]:
+    refs: dict[str, dict[str, float]] = {}
+    with path.open() as fh:
+        for line in fh:
+            line = line.rstrip("\n")
+            if not line or line.startswith("#") or line.startswith("residue"):
+                continue
+            parts = line.split("\t")
+            if len(parts) != 3:
+                continue
+            refs[parts[0]] = {"total": float(parts[1]), "sidechain": float(parts[2])}
+    return refs
+
+
+_AXA_REFS: dict[str, dict[str, float]] = _load_axa_refs(_REFS_PATH)
 
 
 def compute_sasa(pdb_path: Path) -> dict[tuple[str, str], dict[str, float]]:

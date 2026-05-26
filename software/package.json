@@ -20,12 +20,12 @@
         "docker": {
           "artifact": {
             "type": "docker",
-            "context": "./src",
+            "context": "./liabilities-script",
             "dockerfile": "Dockerfile"
           },
           "cmd": [
             "python",
-            "/app/run_liabilities.py"
+            "/app/main.py"
           ]
         }
       }

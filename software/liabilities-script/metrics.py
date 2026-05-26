@@ -1,4 +1,9 @@
-"""Spec R24-R33 surface developability metrics.
+"""Spec R24-R33 surface developability metrics + R15a salt-bridge prep.
+
+Section 1 carries the Raybould 2019 / Gordon 2025 hydrophobicity and
+charge constants plus the R15a salt-bridge detector that runs before
+charge assignment. Section 2 is the patch detector + per-mode metric
+implementations.
 
 Fv (TAP) — Raybould 2019:
   R24  totalCdrLength  : sum of CDR loop lengths from numbering
@@ -26,21 +31,135 @@ of *contributing* residues that exceed their region threshold (R36).
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
-from biochem import (
-    GLYCINE_HYDROPHOBICITY,
-    KD_HYDROPHOBICITY,
-    charge_of,
-    detect_salt_bridges,
-    hydrophobicity_of,
-)
-from numbering import (
+from structure import (
     CDRH3_COMPACTNESS_ANCHORS_IMGT,
+    Residue,
     SCHEME_CDR_RANGES,
     SCHEME_VDOMAIN_END,
     region_for,
 )
+
+
+# ---------------------------------------------------------------------------
+# Section 1: biochemistry constants + R15a salt-bridge detection
+# ---------------------------------------------------------------------------
+
+# Kyte-Doolittle hydrophobicity values loaded from `data/Hydrophobics.txt`
+# (KD 1982 raw values, one residue per line as `<letter><whitespace><value>`).
+# Raybould 2019 PSH (R25) is defined on KD min-max-normalized to [1.0, 2.0];
+# the spec locks this in at the Concept level so there is no scale selector.
+_HYDRO_PATH = Path(__file__).parent / "data" / "Hydrophobics.txt"
+
+
+def _load_kd_raw(path: Path) -> dict[str, float]:
+    out: dict[str, float] = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        out[parts[0]] = float(parts[1])
+    return out
+
+
+def _minmax_to_range(raw: dict[str, float], lo: float, hi: float) -> dict[str, float]:
+    rmin = min(raw.values())
+    rmax = max(raw.values())
+    span = rmax - rmin
+    return {aa: lo + (v - rmin) / span * (hi - lo) for aa, v in raw.items()}
+
+
+_KD_RAW = _load_kd_raw(_HYDRO_PATH)
+KD_HYDROPHOBICITY: dict[str, float] = _minmax_to_range(_KD_RAW, 1.0, 2.0)
+GLYCINE_HYDROPHOBICITY: float = KD_HYDROPHOBICITY["G"]
+
+
+# R26 charge assignment per Raybould 2019. H carries 0.1 (rounded from the
+# literal H-H Henderson-Hasselbalch contribution at physiological pH).
+CHARGES: dict[str, float] = {
+    "D": -1.0, "E": -1.0,
+    "K": 1.0, "R": 1.0,
+    "H": 0.1,
+}
+
+# Side-chain heavy atoms that participate in the salt-bridge test (R15a).
+SALT_BRIDGE_DONOR_ATOMS: dict[str, tuple[str, ...]] = {
+    "LYS": ("NZ",),
+    "ARG": ("NH1", "NH2", "NE"),
+}
+SALT_BRIDGE_ACCEPTOR_ATOMS: dict[str, tuple[str, ...]] = {
+    "ASP": ("OD1", "OD2"),
+    "GLU": ("OE1", "OE2"),
+}
+SALT_BRIDGE_MAX_ANGSTROMS = 3.2
+
+
+def _atom_dist(a, b) -> float:
+    return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
+
+
+def detect_salt_bridges(parsed) -> set[tuple[str, int, str]]:
+    """Walk every K/R + D/E pair, return the set of residue keys that are in
+    a salt bridge. R15a uses N+ ↔ O- atom-pair distance ≤ 3.2 Å. Returned
+    keys are (chain_id, res_seq, i_code). Both partners are marked.
+    """
+    donors: list[tuple[str, Residue, object]] = []
+    acceptors: list[tuple[str, Residue, object]] = []
+
+    for chain_id in parsed.chain_order:
+        for r in parsed.residues_by_chain[chain_id]:
+            donor_atoms = SALT_BRIDGE_DONOR_ATOMS.get(r.res_name)
+            if donor_atoms:
+                for an in donor_atoms:
+                    a = r.atom(an)
+                    if a is not None:
+                        donors.append((chain_id, r, a))
+            accept_atoms = SALT_BRIDGE_ACCEPTOR_ATOMS.get(r.res_name)
+            if accept_atoms:
+                for an in accept_atoms:
+                    a = r.atom(an)
+                    if a is not None:
+                        acceptors.append((chain_id, r, a))
+
+    in_bridge: set[tuple[str, int, str]] = set()
+    for _dc, dr, da in donors:
+        for _ac, ar, aa_atom in acceptors:
+            if _atom_dist(da, aa_atom) <= SALT_BRIDGE_MAX_ANGSTROMS:
+                in_bridge.add((_dc, dr.res_seq, dr.i_code or ""))
+                in_bridge.add((_ac, ar.res_seq, ar.i_code or ""))
+    return in_bridge
+
+
+def hydrophobicity_of(
+    aa_letter: str,
+    in_salt_bridge: bool,
+    scale: dict[str, float] = KD_HYDROPHOBICITY,
+    glycine_value: float = GLYCINE_HYDROPHOBICITY,
+) -> Optional[float]:
+    """R15a: residues engaged in a salt bridge get the scale's glycine
+    value so they don't contribute the hydrophobicity of their full
+    charged side chain."""
+    if in_salt_bridge:
+        return glycine_value
+    return scale.get(aa_letter)
+
+
+def charge_of(aa_letter: str, in_salt_bridge: bool) -> float:
+    """R26 charge lookup. R15a zeroes residues already engaged in a salt
+    bridge so they don't count toward PPC/PNC/SFvCSP."""
+    if in_salt_bridge:
+        return 0.0
+    return CHARGES.get(aa_letter, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Section 2: patch detector + per-mode metric implementations
+# ---------------------------------------------------------------------------
 
 
 # Spec R25 pair filter: heavy-atom distance < 7.5 Å AND both residues are

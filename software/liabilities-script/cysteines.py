@@ -20,7 +20,7 @@ import math
 from dataclasses import dataclass
 from typing import Optional
 
-from numbering import CANONICAL_CYS_POSITIONS, role_of_chain
+from structure import CANONICAL_CYS_POSITIONS, role_of_chain
 
 
 SG_SG_MAX_ANGSTROMS = 3.0

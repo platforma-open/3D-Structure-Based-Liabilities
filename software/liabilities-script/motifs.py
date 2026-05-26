@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from numbering import region_for, role_of_chain
+from structure import region_for, role_of_chain
 
 # name -> (regex pattern, risk_level, fixability)
 ORIG_REGEX_LIABILITIES = {
