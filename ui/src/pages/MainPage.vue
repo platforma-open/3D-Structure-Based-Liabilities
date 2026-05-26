@@ -433,7 +433,11 @@ const modalTitle = computed(() => {
             padding: '12px 12px 8px',
           }"
         >
-          <PlStructureViewer v-bind="viewer" />
+          <!-- Spec R52: open the viewer colored by predicted-error
+               confidence. Structure-viewer's `uncertainty` theme maps to
+               the spec's `by-confidence` (see milaboratory/visualizations#88
+               + #89). -->
+          <PlStructureViewer v-bind="viewer" color-scheme="uncertainty" />
         </div>
         <div :style="{ flex: '0 0 520px', minWidth: '480px', maxWidth: '620px' }">
           <ClonotypeDetailPanel
