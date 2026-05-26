@@ -362,8 +362,24 @@ export const platforma = BlockModelV3.create(dataModel)
       valueType: "Double",
       axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
     });
+    // Spec R51 , default-visible columns include the mode-appropriate
+    // flag only. Mode lives on `BlockData.detectedMode`, filled by the UI
+    // watcher after the first successful run. Until it is set, both
+    // flags fall through to their workflow-side default (visible).
+    const mode = ctx.data?.detectedMode;
+    const modeSpecific: Record<string, "TAP" | "TNP"> = {
+      "pl7.app/liabilities/sfvcspFlag": "TAP",
+      "pl7.app/liabilities/cdrh3CompactnessFlag": "TNP",
+    };
+    const pColsForMode = pCols.map((c) => {
+      const owner = modeSpecific[c.spec.name];
+      if (!owner || !mode) return c;
+      const annotations = { ...(c.spec.annotations ?? {}) };
+      annotations["pl7.app/table/visibility"] = owner === mode ? "default" : "optional";
+      return { ...c, spec: { ...c.spec, annotations } };
+    });
     const allCols = [
-      ...pCols,
+      ...pColsForMode,
       ...(upstreamCdrh3 as typeof pCols),
       ...(upstreamLabel as typeof pCols),
       ...(clusterId as typeof pCols),
