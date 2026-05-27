@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "build": "pl-pkg build",
-    "test": "cd liabilities-script && python -m pytest tests -q",
+    "test": "python -m pytest -q",
     "prepublishOnly": "pl-pkg prepublish",
     "do-pack": "shx rm -f *.tgz && pl-pkg build && pnpm pack && shx mv platforma-open*.tgz package.tgz"
   },

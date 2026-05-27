@@ -8,9 +8,8 @@ these out explicitly (block-structure-liabilities.md:330):
 All three rejections fire before FreeSASA runs, so the tests can use
 minimal synthetic PDBs without worrying about SASA compatibility."""
 
-from tests.pdb_fixtures import make_chain, make_pdb
-
 import pytest
+from pdb_fixtures import make_chain, make_pdb
 
 from main import analyze_pdb
 

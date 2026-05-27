@@ -1,7 +1,7 @@
 """Tests for `structure.py` — parse_pdb, region_for, role_of_chain, and
 the R10 / R9 numbering plumbing they feed."""
 
-from tests.pdb_fixtures import make_chain, make_pdb
+from pdb_fixtures import make_chain, make_pdb
 
 from structure import SCHEME_CDR_RANGES, parse_pdb, region_for, role_of_chain
 
