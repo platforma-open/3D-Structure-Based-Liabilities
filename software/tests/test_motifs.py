@@ -1,4 +1,4 @@
-"""Tests for `motifs._mean_b_factor` — covers spec R4 (B-factor JSON
+"""Tests for `motifs._mean_b_factor` , covers spec R4 (B-factor JSON
 fallback) and the basic positive-B-factor path used by R34 confidence
 gating."""
 
@@ -52,7 +52,7 @@ class TestR4BFactorFallback:
         assert result == 3.5
 
     def test_fallback_skipped_when_b_factors_present(self):
-        """In-PDB B-factor wins — don't second-guess a positive signal."""
+        """In-PDB B-factor wins , don't second-guess a positive signal."""
         fallback = {("H", "100"): 99.0}
         result = _mean_b_factor(_residue([4.0, 6.0]), fallback, "H")
         assert result == 5.0
@@ -64,7 +64,7 @@ class TestR4BFactorFallback:
         assert _mean_b_factor(residue, fallback, "H") == 2.8
 
     def test_fallback_miss_yields_none(self):
-        """No entry in the fallback for this (chain, pos) — same outcome
+        """No entry in the fallback for this (chain, pos) , same outcome
         as no fallback at all."""
         fallback = {("H", "200"): 3.5}
         result = _mean_b_factor(_residue([0.0]), fallback, "H")

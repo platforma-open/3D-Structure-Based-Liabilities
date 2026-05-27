@@ -1,7 +1,7 @@
-"""Tests for `scoring.py` — R39 threshold flagging (Fv + VHH), R41
+"""Tests for `scoring.py` , R39 threshold flagging (Fv + VHH), R41
 composite developability score, R41a categorical risk classification.
 
-All inputs are synthesized dicts and dataclasses — no PDB, no FreeSASA."""
+All inputs are synthesized dicts and dataclasses , no PDB, no FreeSASA."""
 
 from cysteines import CysteineHit
 from motifs import MotifHit
@@ -96,7 +96,7 @@ class TestComputeFlagsFv:
         assert compute_flags(self._fv_metrics(sfvcsp=-25.0))["sfvcspFlag"] == "red"
 
     def test_vhh_compactness_not_flagged_in_fv_mode(self):
-        """TAP mode doesn't carry a `cdrh3CompactnessFlag` — only VHH does."""
+        """TAP mode doesn't carry a `cdrh3CompactnessFlag` , only VHH does."""
         flags = compute_flags(self._fv_metrics(cdrh3Compactness=1.0))
         assert "cdrh3CompactnessFlag" not in flags
 

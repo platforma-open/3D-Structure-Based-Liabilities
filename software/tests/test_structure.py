@@ -1,4 +1,4 @@
-"""Tests for `structure.py` — parse_pdb, region_for, role_of_chain, and
+"""Tests for `structure.py` , parse_pdb, region_for, role_of_chain, and
 the R10 / R9 numbering plumbing they feed."""
 
 from pdb_fixtures import make_chain, make_pdb
@@ -8,7 +8,7 @@ from structure import SCHEME_CDR_RANGES, parse_pdb, region_for, role_of_chain
 
 class TestParsePdb:
     """Spec R7 chain dispatch hinges on `parse_pdb` reporting the right
-    chain_order. These tests don't need FreeSASA — `parse_pdb` is pure
+    chain_order. These tests don't need FreeSASA , `parse_pdb` is pure
     string parsing."""
 
     def test_empty_input_yields_zero_chains(self):
@@ -53,7 +53,7 @@ class TestParsePdb:
         parsed = parse_pdb(text)
         assert parsed.platforma_cdrs["H"]["CDR1"] == (26, 32)
         assert parsed.platforma_cdrs["L"]["CDR1"] == (24, 34)
-        # R9: REMARK 99 chain field is authoritative — `B` is the heavy chain
+        # R9: REMARK 99 chain field is authoritative , `B` is the heavy chain
         # even though it's not the canonical letter.
         assert parsed.chain_role_to_pdb_chain["H"] == "B"
         assert parsed.chain_role_to_pdb_chain["L"] == "A"
@@ -78,7 +78,7 @@ class TestParsePdb:
         assert parsed.residues_by_chain["H"][0].res_name == "ALA"
 
     def test_long_single_chain_supported(self):
-        """200 residues in one chain — parse_pdb just records them. The R7
+        """200 residues in one chain , parse_pdb just records them. The R7
         scFv rejection (>180 single-chain) is a downstream check in
         main.analyze_pdb."""
         parsed = parse_pdb(make_pdb(make_chain("H", 200)))
@@ -108,7 +108,7 @@ class TestRegionFor:
     def test_remark_99_overrides_scheme_fallback(self):
         """When REMARK 99 CDR ranges are present for ALL three CDRs, they
         override the scheme-fixed ranges (R10 preferred path). Partial
-        overrides (one or two CDRs) are ignored — see the next test."""
+        overrides (one or two CDRs) are ignored , see the next test."""
         platforma_cdrs = {"H": {"CDR1": (40, 50), "CDR2": (60, 70), "CDR3": (100, 115)}}
         # 40 lands in REMARK CDR1, NOT IMGT CDR1 (which starts at 27).
         assert region_for("H", 40, "imgt", platforma_cdrs) == "CDR1"
