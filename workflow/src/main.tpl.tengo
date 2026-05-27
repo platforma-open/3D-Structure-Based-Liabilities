@@ -118,10 +118,12 @@ wf.body(func(args) {
 	cmd = withSidecar(cmd, "perResidueConfidence", "per_residue_confidence.tsv", "--per-residue-confidence") // R4 fallback
 
 	// R1 PrimaryRef.filter: single column (vs the multi-column lookups
-	// above), so use the corresponding `getColumn` accessor.
-	filterCol := args.columns.getColumn("filter")
-	if !is_undefined(filterCol) {
-		filterTsv := xsv.exportFrame([filterCol], "tsv", { mem: "1GiB", cpu: 1 })
+	// above), so use the `getColumn` accessor. The bundle only carries
+	// "filter" when wf.prepare actually addSingle'd it, so we gate on the
+	// same `primaryRef.filter` undefined check; `getColumn` panics if the
+	// key isn't in the pool.
+	if !is_undefined(args.primaryRef.filter) {
+		filterTsv := xsv.exportFrame([args.columns.getColumn("filter")], "tsv", { mem: "1GiB", cpu: 1 })
 		cmd = cmd.
 			addFile("clonotype_filter.tsv", filterTsv).
 			arg("--clonotype-filter").arg("clonotype_filter.tsv")
