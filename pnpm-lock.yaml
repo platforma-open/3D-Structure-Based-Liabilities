@@ -900,7 +900,7 @@ packages:
     engines: {node: '>=22.19.0'}
 
   '@milaboratories/graph-maker@file:vendor/graph-maker.tgz':
-    resolution: {integrity: sha512-lQEnblWWws2r6Q2MyWr/SCUz0wgUzL1iFvGCKg47AapRSmKi1F0QLes4hEk65OFnIIUqvjUKgrJhQj6KN+FaXA==, tarball: file:vendor/graph-maker.tgz}
+    resolution: {integrity: sha512-bWSVruPtejG7KToaRu1KwzHOgsmfpeY4Ovgn12q4aRmFPqhvGuouJfzvXPYzOAfQw2GAe+OnWzgctd01FlWdfw==, tarball: file:vendor/graph-maker.tgz}
     version: 1.4.3
     peerDependencies:
       '@platforma-sdk/model': 1.73.3
@@ -915,7 +915,7 @@ packages:
     engines: {node: '>=22'}
 
   '@milaboratories/miplots4@file:vendor/miplots4.tgz':
-    resolution: {integrity: sha512-WrrCmufkF3IUBcsb2mGlJOiEUEN7CmZkp9+lBTHfImeNhzZcItnQCsUhTQERvoBjBUTktL5kkivYun9pChpi2w==, tarball: file:vendor/miplots4.tgz}
+    resolution: {integrity: sha512-SKURKsXQVg2/10jouvGKJsjwJqXsDRrMsgEygb4ZkOROPKtNU5fN9V23D43N+dbHeZ71I68+B7tiOeQlhMkBqQ==, tarball: file:vendor/miplots4.tgz}
     version: 1.2.1
 
   '@milaboratories/pf-driver@1.4.12':
