@@ -148,7 +148,10 @@ wf.body(func(args) {
 	// straight from the upstream PDB column so downstream blocks auto-join
 	// against the upstream scClonotypeKey axis.
 	xsvSettings := specs.buildScoresXsvSettings(blockId, scClonotypeAxis)
-	scoresXsvPf := xsv.importFile(scoresTsv, "tsv", xsvSettings, { cpu: 1, mem: "2GiB" })
+	// `splitDataAndSpec: true` makes the returned map yield `{spec, data}`
+	// per entry, which the trace-injection loop below needs. Default `false`
+	// returns flat resource refs and `v.spec` would not resolve.
+	scoresXsvPf := xsv.importFile(scoresTsv, "tsv", xsvSettings, { splitDataAndSpec: true })
 
 	// Spec R43: derive the trace chain from the upstream PDB column and
 	// stamp every emitted PColumn so downstream consumers see the full

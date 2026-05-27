@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import type { PlStructureViewerProps } from "@milaboratories/structure-viewer";
 import { PlStructureViewer } from "@milaboratories/structure-viewer";
-import type { PlRef, PTableKey } from "@platforma-sdk/model";
-import { createPlDataTableStateV2, createPrimaryRef } from "@platforma-sdk/model";
+import type { PTableKey } from "@platforma-sdk/model";
+import { createPlDataTableStateV2 } from "@platforma-sdk/model";
 import {
   PlAccordionSection,
   PlAgDataTableV2,
   PlAlert,
   PlBlockPage,
   PlBtnGhost,
+  PlDatasetSelector,
   PlDropdown,
-  PlDropdownRef,
   PlMaskIcon24,
   PlNumberField,
   PlSlideModal,
@@ -76,30 +76,7 @@ const { selectedClusterAssignment } = useClusterAssignments(
 const { runSummary, showRedAlert, showGatedAlert } = useRunSummaryAlerts(scoresTableOutput);
 
 // Settings auto-opens on first load when no input is configured.
-const settingsOpen = ref(!app.model.data.primaryRef?.column);
-
-// Spec R1 , `PrimaryRef` is a frozen `{__isPrimaryRef, column, filter?}`
-// envelope. `PlDropdownRef` deals in plain `PlRef`, so we split into two
-// computeds: the primary column drives the dropdown over `pdbOptions`,
-// the optional filter PlRef narrows the clonotype set at workflow time.
-// Setting the column rebuilds the envelope; setting the filter merges it
-// onto the existing envelope (or no-ops if there's no column yet).
-const primaryRefColumn = computed<PlRef | undefined>({
-  get: () => app.model.data.primaryRef?.column,
-  set: (value) => {
-    app.model.data.primaryRef = value
-      ? createPrimaryRef(value, app.model.data.primaryRef?.filter)
-      : undefined;
-  },
-});
-const primaryRefFilter = computed<PlRef | undefined>({
-  get: () => app.model.data.primaryRef?.filter,
-  set: (value) => {
-    const col = app.model.data.primaryRef?.column;
-    if (!col) return;
-    app.model.data.primaryRef = createPrimaryRef(col, value);
-  },
-});
+const settingsOpen = ref(!app.model.data.dataset?.primary?.column);
 
 // `PTableKey` is `[scClonotypeKey]`; look up the PDB handle in `pdbsMap`
 // and seed the viewer props. Other modal contents (cluster badge, etc.)
@@ -155,23 +132,17 @@ const modalTitle = computed(() => {
     <PlSlideModal v-model="settingsOpen" close-on-outside-click shadow>
       <template #title>Settings</template>
 
-      <PlDropdownRef
-        v-model="primaryRefColumn"
-        :options="app.model.outputs.pdbOptions ?? []"
+      <!-- Spec R1 / R46. `PlDatasetSelector` surfaces anchor-marked
+           datasets from the result pool (3D Structure Prediction's
+           `pdbsMap` since v1.0.11) with subset filters
+           (`predictionSuccessful`, `confident`) auto-attached. v-model
+           carries the full `{primary, enrichments?}` envelope; the model
+           `.args()` unwraps `data.dataset.primary` back to the
+           `PrimaryRef` the workflow already consumes. -->
+      <PlDatasetSelector
+        v-model="app.model.data.dataset"
+        :options="app.model.outputs.datasetOptions"
         label="Predicted structures (from 3D Structure Prediction)"
-        clearable
-      />
-
-      <!-- Spec R1 `PrimaryRef.filter` , subset of clonotypes to analyze.
-           Compatible columns auto-discovered from the result pool
-           (`pl7.app/structure/predictionSuccessful`, `confident`); when
-           set, the workflow exports the column to a TSV sidecar and
-           Python skips clonotypes whose value is falsy. Optional; leave
-           clear to analyze every clonotype in the dataset. -->
-      <PlDropdownRef
-        v-model="primaryRefFilter"
-        :options="app.model.outputs.filterOptions ?? []"
-        label="Clonotype filter (optional)"
         clearable
       />
 
@@ -244,7 +215,7 @@ const modalTitle = computed(() => {
          on first load (see `settingsOpen` ref); this is for the case
          where the user closed the modal without picking a dataset. -->
     <div
-      v-if="!app.model.data.primaryRef?.column"
+      v-if="!app.model.data.dataset?.primary?.column"
       :style="{
         display: 'flex',
         flexDirection: 'column',
@@ -320,7 +291,10 @@ const modalTitle = computed(() => {
          are hidden behind AG-Grid's "Columns" panel. The open button on
          the clonotype-axis cell fires `@cell-button-clicked`, which
          seeds the row's PDB handle into `viewer` and pops the modal. -->
-    <div v-if="app.model.data.primaryRef?.column" :style="{ marginTop: '12px', height: '720px' }">
+    <div
+      v-if="app.model.data.dataset?.primary?.column"
+      :style="{ marginTop: '12px', height: '720px' }"
+    >
       <PlAgDataTableV2
         v-model="scoresLocalState"
         :settings="scoresTableSettings"

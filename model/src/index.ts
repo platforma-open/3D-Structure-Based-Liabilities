@@ -1,260 +1,67 @@
-import type { GraphMakerState } from "@milaboratories/graph-maker";
 import type {
   AxisId,
   BlockRenderCtx,
-  ImportFileHandle,
+  DatasetOption,
+  DatasetSelection,
   InferOutputsType,
   PColumn,
   PColumnDataUniversal,
   PColumnIdAndSpec,
   PFrameHandle,
-  PlDataTableStateV2,
-  PlRef,
-  PrimaryRef,
+  PObjectSpec,
 } from "@platforma-sdk/model";
 import {
   BlockModelV3,
-  createPlDataTableStateV2,
+  buildDatasetOptions,
   createPlDataTableV2,
-  createPrimaryRef,
   DataModelBuilder,
   getAxisId,
+  isPColumnSpec,
   parseResourceMap,
 } from "@platforma-sdk/model";
 
-/** Spec R14 / R10 , numbering schemes supported for region tagging. */
+/** Spec R14 / R10: numbering schemes supported for region tagging. */
 export type NumberingScheme = "imgt" | "chothia" | "kabat";
 
-/** Original shape; preserved so existing block instances migrate. */
-type BlockDataV1 = {
-  pdb: ImportFileHandle | undefined;
-  tableState: PlDataTableStateV2;
-};
-
-/** v2: cysTableState was added alongside the motif tableState. */
-type BlockDataV2 = BlockDataV1 & {
-  cysTableState: PlDataTableStateV2;
-};
-
-/** v3: adds numbering scheme + heavy/light chain mapping so motif scoring
- * can apply R19 region weights and cysteines can be classified against
- * canonical positions (R21). All three are optional ("" / undefined means
- * "unknown" and motif scoring falls back to neutral weights). */
-type BlockDataV3 = BlockDataV2 & {
+export type BlockData = {
+  /** Spec R1 / R46 dataset envelope picked via `PlDatasetSelector`.
+   * `.args()` unwraps `dataset.primary` back into the `PrimaryRef`
+   * shape the workflow's `wf.prepare` already knows how to resolve. */
+  dataset?: DatasetSelection;
+  /** R14 / R10 numbering scheme: empty string means unknown (motif
+   * scoring then falls back to neutral region weights). */
   numberingScheme: NumberingScheme | "";
+  /** R9 heavy / light chain overrides. Auto-detected from REMARK 99
+   * PLATFORMA CDR records; these fields are populated only when the
+   * user needs to override the detected mapping (e.g. on PDBs without
+   * REMARK 99 records). */
   heavyChainId: string;
   lightChainId: string;
-};
-
-/** v4 , adds R49 advanced thresholds (FR/CDR confidence gating + R12
- * buried/exposed rSASA cutoff). Defaults match the spec's calibrated
- * values for ImmuneBuilder. */
-type BlockDataV4 = BlockDataV3 & {
-  rsasaBuriedCutoff: number;
+  /** R34 region-aware confidence gating thresholds (Å). Calibrated for
+   * ImmuneBuilder per-atom predicted error; raise for crystal PDBs
+   * whose B-factor column carries Å² temperature factors. */
   frConfThresh: number;
   cdrConfThresh: number;
-};
-
-/** v5 , adds `pdbRef`, a `PlRef` pointing at an upstream
- * `pl7.app/structure/pdb` PColumn (Spec R1-R6). When set, the workflow
- * resolves it into per-clonotype PDBs and runs the software once per
- * clonotype; output PColumns then key on `pl7.app/vdj/scClonotypeKey`
- * rather than the `structureId="static"` placeholder.
- *
- * `pdb` (the legacy `ImportFileHandle` upload) stays for the local
- * single-PDB dev path (e.g. 1N8Z). When both are set, `pdbRef` wins. */
-type BlockDataV5 = BlockDataV4 & {
-  pdbRef?: PlRef;
-};
-
-/** v6 , adds `scoresTableState` for the per-clonotype scalar metrics
- * table (Spec R51). Surfaces the existing `scoresData` PFrame the
- * workflow already emits. */
-type BlockDataV6 = BlockDataV5 & {
-  scoresTableState: PlDataTableStateV2;
-};
-
-/** v7 , adds GraphMaker state for the six Spec R54 distribution histograms:
- * PSH, PPC, PNC, SFvCSP (Fv), CDRH3 compactness (VHH), and the composite
- * developability score. */
-type BlockDataV7 = BlockDataV6 & {
-  graphStatePshV2: GraphMakerState;
-  graphStatePpcV2: GraphMakerState;
-  graphStatePncV2: GraphMakerState;
-  graphStateSfvcspV2: GraphMakerState;
-  graphStateCdrh3CompactnessV2: GraphMakerState;
-  graphStateDevScoreV2: GraphMakerState;
-};
-
-/** v8 , adds R48 hydrophobicity scale selector. Removed in v13 when
- * the spec refresh fixed Hydrophobicity to KD (R48 removed from the
- * requirements list, spec Concept line: "Hydrophobicity is KD
- * min-max-normalized to [1.0, 2.0]"). */
-type BlockDataV8 = BlockDataV7 & {
-  hydrophobicityScale: "kd" | "ww" | "hessa" | "em" | "bm";
-};
-
-/** v9 , strips the legacy single-PDB path's `pdb` field, the three
- * persisted-but-unused PlAgDataTable v-model states, and the six
- * GraphMakerState fields left over from the GraphMaker→SVG histogram
- * migration. */
-type BlockDataV9 = Omit<
-  BlockDataV8,
-  | "pdb"
-  | "tableState"
-  | "cysTableState"
-  | "scoresTableState"
-  | "graphStatePshV2"
-  | "graphStatePpcV2"
-  | "graphStatePncV2"
-  | "graphStateSfvcspV2"
-  | "graphStateCdrh3CompactnessV2"
-  | "graphStateDevScoreV2"
->;
-
-/** v10 , drops `rsasaBuriedCutoff` per spec R12 (Raybould 0.075 is
- * hardcoded in the workflow now). */
-type BlockDataV10 = Omit<BlockDataV9, "rsasaBuriedCutoff">;
-
-/** v11 , replaces the bare `pdbRef: PlRef` field with a `primaryRef:
- * PrimaryRef` envelope per spec R1. */
-type BlockDataV11 = Omit<BlockDataV10, "pdbRef"> & {
-  primaryRef?: PrimaryRef;
-};
-
-/** v12 , adds the dataset-level `detectedMode` per the refreshed spec
- * (BlockData definition lines 222-231). Resolved by a UI watcher after
- * the first successful run from the per-clonotype `pl7.app/liabilities/mode`
- * column (uniform by R7); read by R51 (column selection), R54
- * (mode-specific histogram), R55 (subtitle prefix). */
-type BlockDataV12 = BlockDataV11 & {
+  /** Spec BlockData.detectedMode: dataset-level TAP / TNP resolved by
+   * the UI after the first successful run from the per-clonotype
+   * `pl7.app/liabilities/mode` column (uniform by R7). Drives R51
+   * mode-specific column visibility, R54 mode-specific histogram
+   * dispatch, and the R55 subtitle prefix. */
   detectedMode?: "TAP" | "TNP";
 };
 
-/** Current shape (v13) , drops `hydrophobicityScale` per the refreshed
- * spec. R48 (5-scale selector) is gone from the requirements; the spec
- * Concept locks Hydrophobicity to KD min-max-normalized to [1.0, 2.0]. */
-export type BlockData = Omit<BlockDataV12, "hydrophobicityScale">;
-
-const initialGraphState = (title: string, fillColor: string): GraphMakerState => ({
-  title,
-  template: "bins",
-  currentTab: null,
-  layersSettings: { bins: { fillColor } },
-  axesSettings: {
-    axisY: { axisLabelsAngle: 0 as const, scale: "linear" },
-    other: { binsCount: 30 },
-  },
-});
-
-const dataModel = new DataModelBuilder()
-  .from<BlockDataV1>("v1")
-  .migrate<BlockDataV2>("v2", (v1) => ({
-    ...v1,
-    cysTableState: createPlDataTableStateV2(),
-  }))
-  .migrate<BlockDataV3>("v3", (v2) => ({
-    ...v2,
-    numberingScheme: "",
-    heavyChainId: "",
-    lightChainId: "",
-  }))
-  .migrate<BlockDataV4>("v4", (v3) => ({
-    ...v3,
-    rsasaBuriedCutoff: 0.075,
-    frConfThresh: 4.0,
-    cdrConfThresh: 6.0,
-  }))
-  .migrate<BlockDataV5>("v5", (v4) => ({
-    ...v4,
-    pdbRef: undefined,
-  }))
-  .migrate<BlockDataV6>("v6", (v5) => ({
-    ...v5,
-    scoresTableState: createPlDataTableStateV2(),
-  }))
-  .migrate<BlockDataV7>("v7", (v6) => ({
-    ...v6,
-    graphStatePshV2: initialGraphState("PSH distribution", "#7da3d1"),
-    graphStatePpcV2: initialGraphState("PPC distribution", "#e5a06f"),
-    graphStatePncV2: initialGraphState("PNC distribution", "#82c79c"),
-    graphStateSfvcspV2: initialGraphState("SFvCSP distribution (Fv)", "#bb86d6"),
-    graphStateCdrh3CompactnessV2: initialGraphState(
-      "CDRH3 compactness distribution (VHH)",
-      "#d6b06b",
-    ),
-    graphStateDevScoreV2: initialGraphState("Developability score distribution", "#cf6e83"),
-  }))
-  .migrate<BlockDataV8>("v8", (v7) => ({
-    ...v7,
-    hydrophobicityScale: "kd",
-  }))
-  .migrate<BlockDataV9>("v9", (v8) => {
-    // Strip the persisted-but-unused fields. Destructuring discards them
-    // from the object literal returned to downstream code; the runtime
-    // payload effectively shrinks for every block instance that lands
-    // here. `_unused` names silence the no-unused-vars lint.
-    const {
-      pdb: _pdb,
-      tableState: _t1,
-      cysTableState: _t2,
-      scoresTableState: _t3,
-      graphStatePshV2: _g1,
-      graphStatePpcV2: _g2,
-      graphStatePncV2: _g3,
-      graphStateSfvcspV2: _g4,
-      graphStateCdrh3CompactnessV2: _g5,
-      graphStateDevScoreV2: _g6,
-      ...rest
-    } = v8;
-    return rest;
-  })
-  .migrate<BlockDataV10>("v10", (v9) => {
-    // Spec R12 , drop the user-tunable rSASA cutoff; the python defaults
-    // to 0.075 (the canonical Raybould 2019 value) and the workflow no
-    // longer overrides it.
-    const { rsasaBuriedCutoff: _r, ...rest } = v9;
-    return rest;
-  })
-  .migrate<BlockDataV11>("v11", (v10) => {
-    // Spec R1 , wire shape moves from bare `pdbRef: PlRef` to the
-    // `PrimaryRef` envelope `{column: PlRef, filter?: PlRef}`. Existing
-    // installations carrying a PlRef in `pdbRef` get wrapped via
-    // `createPrimaryRef`; the filter slot stays undefined until the
-    // user picks one in Settings.
-    const { pdbRef, ...rest } = v10;
-    return {
-      ...rest,
-      primaryRef: pdbRef ? createPrimaryRef(pdbRef) : undefined,
-    };
-  })
-  .migrate<BlockDataV12>("v12", (v11) => ({
-    // Spec BlockData definition (lines 222-231): dataset-level
-    // detectedMode resolved by the UI after the first successful run.
-    // Undefined until then, so the migration just adds the field as
-    // undefined; the UI watcher fills it once scoresTable is ready.
-    ...v11,
-    detectedMode: undefined,
-  }))
-  .migrate<BlockData>("v13", (v12) => {
-    // R48 dropped from the refreshed spec; existing instances may carry
-    // the legacy field. Strip it so the model shape matches the new spec.
-    const { hydrophobicityScale: _drop, ...rest } = v12;
-    return rest;
-  })
-  .init(() => ({
-    primaryRef: undefined,
-    // R14 default scheme , upstream's 3D Structure Prediction block always
-    // produces IMGT-numbered PDBs (the `pl7.app/structure/numbering` domain
-    // we match on already requires `imgt`), so defaulting here saves the
-    // first-run user a dropdown click. Override if you're feeding the block
-    // a custom non-IMGT PDB.
-    numberingScheme: "imgt",
-    heavyChainId: "",
-    lightChainId: "",
-    frConfThresh: 4.0,
-    cdrConfThresh: 6.0,
-  }));
+const dataModel = new DataModelBuilder().from<BlockData>("v1").init(() => ({
+  dataset: undefined,
+  // R14 default scheme: upstream's 3D Structure Prediction block always
+  // produces IMGT-numbered PDBs (the `pl7.app/structure/numbering`
+  // domain we match on already requires `imgt`), so defaulting here
+  // saves the first-run user a dropdown click.
+  numberingScheme: "imgt",
+  heavyChainId: "",
+  lightChainId: "",
+  frConfThresh: 4.0,
+  cdrConfThresh: 6.0,
+}));
 
 // Helpers for the per-metric histogram output pairs below. Each pair
 // resolves a single `scoresData` PColumn by name; `pfFromScores` wraps
@@ -278,15 +85,15 @@ function specFromScores(ctx: ScoresCtx, name: string): PColumnIdAndSpec | undefi
 
 export const platforma = BlockModelV3.create(dataModel)
   .args((data) => {
-    // Spec R1 , primary input is a `PrimaryRef` envelope. The workflow's
-    // `wf.prepare` resolves `primaryRef.column` into the upstream PDB
-    // PColumn for single-shot iteration; the optional `filter` slot
-    // narrows the clonotype set in Python before processing.
-    if (!data.primaryRef?.column) {
+    // Spec R1 / R46. UI carries `dataset: DatasetSelection`; we unwrap
+    // back to the PrimaryRef envelope the workflow already knows how to
+    // resolve (`wf.prepare` reads `args.primaryRef.column` for the PDB
+    // PColumn, `.filter` for the optional clonotype subset).
+    if (!data.dataset?.primary?.column) {
       throw new Error("Pick a predicted structures dataset");
     }
     return {
-      primaryRef: data.primaryRef,
+      primaryRef: data.dataset.primary,
       numberingScheme: data.numberingScheme,
       heavyChainId: data.heavyChainId,
       lightChainId: data.lightChainId,
@@ -294,29 +101,24 @@ export const platforma = BlockModelV3.create(dataModel)
       cdrConfThresh: data.cdrConfThresh,
     };
   })
-  // Spec R1-R6 , surface `pl7.app/structure/pdb` PColumns from the result
-  // pool so the UI can show a dropdown of predicted-structure datasets.
-  // Matches what the 3D Structure Prediction block exports (`pdbsMap`
-  // PFrame, IMGT-numbered PDBs keyed by clonotype).
-  .output("pdbOptions", (ctx) =>
-    ctx.resultPool.getOptions([
-      {
-        name: "pl7.app/structure/pdb",
-        domain: { "pl7.app/structure/numbering": "imgt" },
-      },
-    ]),
-  )
-  // Spec R1 `PrimaryRef.filter` , surface Int/Boolean PColumns anchored on
-  // the same scClonotypeKey axis as the PDB column so the user can pick
-  // a subset filter (e.g. upstream `pl7.app/structure/predictionSuccessful`
-  // or `pl7.app/structure/confident`). The workflow stages whatever the
-  // user picks as a TSV sidecar and Python drops clonotypes whose value
-  // is falsy before iterating.
-  .output("filterOptions", (ctx) =>
-    ctx.resultPool.getOptions([
-      { name: "pl7.app/structure/predictionSuccessful" },
-      { name: "pl7.app/structure/confident" },
-    ]),
+  // Spec R1 / R46. `buildDatasetOptions` surfaces anchor-marked PColumns
+  // (`pl7.app/isAnchor: "true"`) from the result pool as datasets the UI
+  // shows in `PlDatasetSelector`. We accept anchors whose name is
+  // `pl7.app/structure/pdb` (the 3D Structure Prediction block emits this
+  // since v1.0.11). Filter predicate identifies the Boolean/Int subset
+  // columns the user can pick to narrow the clonotype set per R47
+  // (predictionSuccessful, confident).
+  .output("datasetOptions", (ctx): DatasetOption[] | undefined =>
+    buildDatasetOptions(ctx, {
+      primary: (spec: PObjectSpec): boolean =>
+        isPColumnSpec(spec) &&
+        spec.name === "pl7.app/structure/pdb" &&
+        spec.annotations?.["pl7.app/isAnchor"] === "true",
+      filter: (spec: PObjectSpec): boolean =>
+        isPColumnSpec(spec) &&
+        (spec.name === "pl7.app/structure/predictionSuccessful" ||
+          spec.name === "pl7.app/structure/confident"),
+    }),
   )
   // Spec R51 , per-clonotype scalar metrics table. PColumns come from the
   // `scoresData` PFrame (axes: [scClonotypeKey]); enriched with upstream
@@ -461,7 +263,7 @@ export const platforma = BlockModelV3.create(dataModel)
     // was returning empty here even with name + valueType + axes + domain
     // all aligned, so we use the canonical ref-based path , same as how
     // the workflow accesses it.
-    const ref = ctx.args?.primaryRef?.column ?? ctx.data?.primaryRef?.column;
+    const ref = ctx.args?.primaryRef?.column ?? ctx.data?.dataset?.primary?.column;
     if (!ref) return undefined;
     const pdbCol = ctx.resultPool.getPColumnByRef(ref);
     if (!pdbCol) return undefined;
@@ -479,7 +281,7 @@ export const platforma = BlockModelV3.create(dataModel)
   .output("clonotypeAxisId", (ctx): AxisId | undefined => {
     // Resolve through the user-picked PlRef inside the PrimaryRef envelope
     // (spec R1), then read its spec.
-    const ref = ctx.args?.primaryRef?.column ?? ctx.data?.primaryRef?.column;
+    const ref = ctx.args?.primaryRef?.column ?? ctx.data?.dataset?.primary?.column;
     if (!ref) return undefined;
     const pdbSpec = ctx.resultPool.getPColumnSpecByRef(ref);
     if (!pdbSpec) return undefined;
