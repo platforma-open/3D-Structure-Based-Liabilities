@@ -123,15 +123,23 @@ def _chain_letters(residues):
     return "".join(letters)
 
 
-def _mean_b_factor(residue) -> Optional[float]:
+def _mean_b_factor(
+    residue,
+    fallback_lookup: Optional[dict] = None,
+    chain_id: Optional[str] = None,
+) -> Optional[float]:
     # Mean B-factor across heavy atoms of the residue. None when no atoms
-    # carry positive B-factor (e.g. coords parsed without it).
-    if not residue.atoms:
-        return None
-    vals = [a.b_factor for a in residue.atoms if a.b_factor > 0]
-    if not vals:
-        return None
-    return sum(vals) / len(vals)
+    # carry positive B-factor (e.g. coords parsed without it). R4: when the
+    # B-factor is missing AND an upstream per-residue confidence lookup is
+    # supplied, fall back to its errorAngstroms value for this residue.
+    if residue.atoms:
+        vals = [a.b_factor for a in residue.atoms if a.b_factor > 0]
+        if vals:
+            return sum(vals) / len(vals)
+    if fallback_lookup is not None and chain_id is not None:
+        pos_key = f"{residue.res_seq}{residue.i_code}".strip()
+        return fallback_lookup.get((chain_id, pos_key))
+    return None
 
 
 def _confidence_threshold(region: Optional[str], fr_threshold: float, cdr_threshold: float) -> float:
@@ -157,6 +165,7 @@ def _score_motif_hit(
     fixability_weight: float,
     fr_confidence_threshold: float,
     cdr_confidence_threshold: float,
+    confidence_fallback: Optional[dict] = None,
 ) -> MotifHit:
     """Assemble a single MotifHit once we know the residue passes R17
     surface exposure. Pulled out so the main loop reads as
@@ -176,7 +185,7 @@ def _score_motif_hit(
     """
     region_weight = REGION_WEIGHTS.get(region, REGION_WEIGHT_DEFAULT)
     exposure_factor = _exposure_factor(rsasa)
-    confidence = _mean_b_factor(residue)
+    confidence = _mean_b_factor(residue, confidence_fallback, chain_id)
     threshold = _confidence_threshold(region, fr_confidence_threshold, cdr_confidence_threshold)
     gated = confidence is not None and confidence > threshold
     return MotifHit(
@@ -207,6 +216,7 @@ def detect_motifs(
     light_chain_id: Optional[str] = None,
     fr_confidence_threshold: float = 4.0,
     cdr_confidence_threshold: float = 6.0,
+    confidence_fallback: Optional[dict] = None,
 ):
     """Walk each chain, apply the regex set, and emit hits whose
     chemically-relevant residue (R17) has rSASA >= cutoff. Buried matches
@@ -265,5 +275,6 @@ def detect_motifs(
                     fixability_weight=fixability_weight,
                     fr_confidence_threshold=fr_confidence_threshold,
                     cdr_confidence_threshold=cdr_confidence_threshold,
+                    confidence_fallback=confidence_fallback,
                 ))
     return hits

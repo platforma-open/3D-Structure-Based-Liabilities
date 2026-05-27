@@ -41,6 +41,15 @@ wf.prepare(func(args) {
 			name: "pl7.app/structure/cdrh3Length"
 		},
 		"cdrh3Length")
+	// R4: per-residue confidence JSON column. Fallback for when PDB
+	// B-factor is missing (e.g. PDBs synthesized without ImmuneBuilder's
+	// error-as-B-factor convention). Optional, in practice rarely needed.
+	bb.addMulti(
+		{
+			axes: [{ anchor: "pdb", idx: 0 }],
+			name: "pl7.app/structure/confidence/perResidue"
+		},
+		"perResidueConfidence")
 	if !is_undefined(args.primaryRef.filter) {
 		bb.addSingle(args.primaryRef.filter, "filter")
 	}
@@ -118,6 +127,19 @@ wf.body(func(args) {
 		cmd = cmd.
 			addFile("clonotype_filter.tsv", filterTsv).
 			arg("--clonotype-filter").arg("clonotype_filter.tsv")
+	}
+
+	// R4: stage upstream per-residue confidence JSON as a TSV sidecar.
+	// Python uses it as the fallback when a residue's B-factor is 0
+	// (e.g. crystal PDBs or PDBs synthesized without ImmuneBuilder's
+	// error-as-B-factor convention). Skip silently when the upstream
+	// block doesn't emit this column.
+	confCols := args.columns.getColumns("perResidueConfidence")
+	if !is_undefined(confCols) && len(confCols) > 0 {
+		confTsv := xsv.exportFrame([confCols[0]], "tsv", { mem: "1GiB", cpu: 1 })
+		cmd = cmd.
+			addFile("per_residue_confidence.tsv", confTsv).
+			arg("--per-residue-confidence").arg("per_residue_confidence.tsv")
 	}
 
 	// Optional CLI knobs (R10 fallback path + R9 chain identity overrides).

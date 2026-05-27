@@ -9,6 +9,7 @@ in the TSV alongside the metrics.
 
 import argparse
 import csv
+import json
 import os
 import sys
 from io import StringIO
@@ -152,6 +153,7 @@ def analyze_pdb(
     fr_conf_thresh: float,
     cdr_conf_thresh: float,
     upstream_cdrh3_length: int | None = None,
+    confidence_fallback: dict | None = None,
 ) -> dict:
     """Run the full per-clonotype analysis on a single PDB. Returns a dict
     matching the TSV column set. Raises ValueError on R7 / R10 failures.
@@ -202,6 +204,7 @@ def analyze_pdb(
         light_chain_id=light_chain_id,
         fr_confidence_threshold=fr_conf_thresh,
         cdr_confidence_threshold=cdr_conf_thresh,
+        confidence_fallback=confidence_fallback,
     )
     cys_hits = detect_cysteines(
         parsed, sasa_lookup,
@@ -328,6 +331,13 @@ def main() -> None:
                          "(spec R1 `PrimaryRef.filter`). Clonotypes whose "
                          "value is falsy (0, false, empty) are skipped "
                          "before iteration.")
+    ap.add_argument("--per-residue-confidence", type=Path, default=None,
+                    dest="per_residue_confidence_tsv",
+                    help="Optional TSV exported from upstream's "
+                         "`pl7.app/structure/confidence/perResidue` JSON "
+                         "PColumn. Per-residue errorAngstroms values feed "
+                         "the R4 fallback for motif confidence gating when "
+                         "the PDB's B-factor column is empty.")
     args = ap.parse_args()
 
     if not args.pdb_dir.is_dir():
@@ -359,6 +369,42 @@ def main() -> None:
                         upstream_cdrh3[r[key_col]] = int(float(raw))
                     except (TypeError, ValueError):
                         continue
+
+    per_residue_confidence: dict[str, dict[tuple[str, str], float]] = {}
+    if args.per_residue_confidence_tsv is not None and args.per_residue_confidence_tsv.is_file():
+        with args.per_residue_confidence_tsv.open() as fh:
+            reader = csv.DictReader(fh, delimiter="\t")
+            key_col = next((c for c in (reader.fieldnames or []) if "scClonotypeKey" in c), None)
+            val_col = next(
+                (c for c in (reader.fieldnames or []) if c != key_col),
+                None,
+            )
+            if key_col and val_col:
+                for r in reader:
+                    raw = r.get(val_col)
+                    if not raw:
+                        continue
+                    try:
+                        records = json.loads(raw)
+                    except (TypeError, ValueError):
+                        continue
+                    if not isinstance(records, list):
+                        continue
+                    lookup: dict[tuple[str, str], float] = {}
+                    for rec in records:
+                        if not isinstance(rec, dict):
+                            continue
+                        pos = rec.get("pos")
+                        chain = rec.get("chain")
+                        err = rec.get("errorAngstroms")
+                        if pos is None or chain is None or err is None:
+                            continue
+                        try:
+                            lookup[(str(chain), str(pos))] = float(err)
+                        except (TypeError, ValueError):
+                            continue
+                    if lookup:
+                        per_residue_confidence[r[key_col]] = lookup
 
     keep_clonotypes: set[str] | None = None
     if args.clonotype_filter_tsv is not None and args.clonotype_filter_tsv.is_file():
@@ -410,6 +456,7 @@ def main() -> None:
                 fr_conf_thresh=args.fr_conf_thresh,
                 cdr_conf_thresh=args.cdr_conf_thresh,
                 upstream_cdrh3_length=upstream_cdrh3.get(clonotype_key),
+                confidence_fallback=per_residue_confidence.get(clonotype_key),
             )
         except ValueError as e:
             print(
