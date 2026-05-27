@@ -18,6 +18,7 @@ assets := import("@platforma-sdk/workflow-tengo:assets")
 exec := import("@platforma-sdk/workflow-tengo:exec")
 maps := import("@platforma-sdk/workflow-tengo:maps")
 pframes := import("@platforma-sdk/workflow-tengo:pframes")
+pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
 xsv := import("@platforma-sdk/workflow-tengo:pframes.xsv")
 json := import("json")
 
@@ -159,16 +160,24 @@ wf.body(func(args) {
 
 	// Spec R38 / R39: import the per_clonotype.tsv as PColumns. Axes come
 	// straight from the upstream PDB column so downstream blocks auto-join
-	// against `[sampleId, scClonotypeKey]`. R43 trace is attached to the
-	// resulting PFrame as an annotation post-import.
+	// against the upstream scClonotypeKey axis.
 	xsvSettings := specs.buildScoresXsvSettings(blockId, scClonotypeAxis)
-	scoresPf := xsv.importFile(scoresTsv, "tsv", xsvSettings, { cpu: 1, mem: "2GiB" })
+	scoresXsvPf := xsv.importFile(scoresTsv, "tsv", xsvSettings, { cpu: 1, mem: "2GiB" })
 
-	// R43 trace assembly is left as a follow-up for the single-shot path
-	// (the per-row path used to thread `traceStep` through `processColumn`'s
-	// `traceSteps` option, which xsv.importFile doesn't have). Block-id
-	// domain is still attached per column via specs.lib.tengo so trace
-	// propagation can be reattached without an output shape change.
+	// Spec R43: derive the trace chain from the upstream PDB column and
+	// stamp every emitted PColumn so downstream consumers see the full
+	// block lineage (upstream blocks plus this one).
+	trace := pSpec.makeTrace(pdbCol.spec, {
+		type: "milaboratories.3d-structure-based-liabilities",
+		id: blockId,
+		importance: 20,
+		label: "3D Structure-Based Liabilities"
+	})
+	scoresPfBuilder := pframes.pFrameBuilder()
+	for k, v in scoresXsvPf {
+		scoresPfBuilder.add(k, trace.inject(v.spec), v.data)
+	}
+	scoresPf := scoresPfBuilder.build()
 
 	return {
 		outputs: {
