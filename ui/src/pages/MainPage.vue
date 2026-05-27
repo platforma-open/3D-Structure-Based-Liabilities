@@ -94,14 +94,25 @@ const { runSummary, showRedAlert, showGatedAlert } = useRunSummaryAlerts(scoresT
 const settingsOpen = ref(!app.model.data.primaryRef?.column);
 
 // Spec R1 , `PrimaryRef` is a frozen `{__isPrimaryRef, column, filter?}`
-// envelope. `PlDropdownRef` deals in plain `PlRef`, so we expose the
-// inner `column` to the dropdown and rebuild the envelope on every
-// change via `createPrimaryRef`. The filter slot (R47) stays
-// `undefined` until subset selection is wired.
+// envelope. `PlDropdownRef` deals in plain `PlRef`, so we split into two
+// computeds: the primary column drives the dropdown over `pdbOptions`,
+// the optional filter PlRef narrows the clonotype set at workflow time.
+// Setting the column rebuilds the envelope; setting the filter merges it
+// onto the existing envelope (or no-ops if there's no column yet).
 const primaryRefColumn = computed<PlRef | undefined>({
   get: () => app.model.data.primaryRef?.column,
   set: (value) => {
-    app.model.data.primaryRef = value ? createPrimaryRef(value) : undefined;
+    app.model.data.primaryRef = value
+      ? createPrimaryRef(value, app.model.data.primaryRef?.filter)
+      : undefined;
+  },
+});
+const primaryRefFilter = computed<PlRef | undefined>({
+  get: () => app.model.data.primaryRef?.filter,
+  set: (value) => {
+    const col = app.model.data.primaryRef?.column;
+    if (!col) return;
+    app.model.data.primaryRef = createPrimaryRef(col, value);
   },
 });
 
@@ -167,6 +178,19 @@ const modalTitle = computed(() => {
         v-model="primaryRefColumn"
         :options="app.model.outputs.pdbOptions ?? []"
         label="Predicted structures (from 3D Structure Prediction)"
+        clearable
+      />
+
+      <!-- Spec R1 `PrimaryRef.filter` , subset of clonotypes to analyze.
+           Compatible columns auto-discovered from the result pool
+           (`pl7.app/structure/predictionSuccessful`, `confident`); when
+           set, the workflow exports the column to a TSV sidecar and
+           Python skips clonotypes whose value is falsy. Optional; leave
+           clear to analyze every clonotype in the dataset. -->
+      <PlDropdownRef
+        v-model="primaryRefFilter"
+        :options="app.model.outputs.filterOptions ?? []"
+        label="Clonotype filter (optional)"
         clearable
       />
 

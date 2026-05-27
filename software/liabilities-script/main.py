@@ -322,6 +322,12 @@ def main() -> None:
                          "provided, the per-clonotype value overrides the "
                          "in-block CDR3 Cα count as the R30 compactness "
                          "numerator (R5 / R29).")
+    ap.add_argument("--clonotype-filter", type=Path, default=None,
+                    dest="clonotype_filter_tsv",
+                    help="Optional TSV exported from a Boolean/Int PColumn "
+                         "(spec R1 `PrimaryRef.filter`). Clonotypes whose "
+                         "value is falsy (0, false, empty) are skipped "
+                         "before iteration.")
     args = ap.parse_args()
 
     if not args.pdb_dir.is_dir():
@@ -354,6 +360,28 @@ def main() -> None:
                     except (TypeError, ValueError):
                         continue
 
+    keep_clonotypes: set[str] | None = None
+    if args.clonotype_filter_tsv is not None and args.clonotype_filter_tsv.is_file():
+        with args.clonotype_filter_tsv.open() as fh:
+            reader = csv.DictReader(fh, delimiter="\t")
+            key_col = next((c for c in (reader.fieldnames or []) if "scClonotypeKey" in c), None)
+            val_col = next(
+                (c for c in (reader.fieldnames or []) if c != key_col),
+                None,
+            )
+            if key_col and val_col:
+                keep_clonotypes = set()
+                for r in reader:
+                    raw = (r.get(val_col) or "").strip().lower()
+                    if raw in {"", "0", "false", "no", "null"}:
+                        continue
+                    try:
+                        if float(raw) == 0.0:
+                            continue
+                    except ValueError:
+                        pass
+                    keep_clonotypes.add(r[key_col])
+
     out_buf = StringIO()
     writer = csv.writer(out_buf, delimiter="\t", lineterminator="\n")
     writer.writerow(_TSV_COLUMNS)
@@ -365,6 +393,8 @@ def main() -> None:
                 f"clonotypeKey<TAB>filename): {entry}"
             )
         clonotype_key, pdb_filename = entry
+        if keep_clonotypes is not None and clonotype_key not in keep_clonotypes:
+            continue
         pdb_path = args.pdb_dir / pdb_filename
         if not pdb_path.is_file():
             raise SystemExit(

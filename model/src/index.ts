@@ -286,6 +286,18 @@ export const platforma = BlockModelV3.create(dataModel)
       },
     ]),
   )
+  // Spec R1 `PrimaryRef.filter` , surface Int/Boolean PColumns anchored on
+  // the same scClonotypeKey axis as the PDB column so the user can pick
+  // a subset filter (e.g. upstream `pl7.app/structure/predictionSuccessful`
+  // or `pl7.app/structure/confident`). The workflow stages whatever the
+  // user picks as a TSV sidecar and Python drops clonotypes whose value
+  // is falsy before iterating.
+  .output("filterOptions", (ctx) =>
+    ctx.resultPool.getOptions([
+      { name: "pl7.app/structure/predictionSuccessful" },
+      { name: "pl7.app/structure/confident" },
+    ]),
+  )
   // Spec R51 , per-clonotype scalar metrics table. PColumns come from the
   // PrimaryRef-path `scoresData` PFrame (axes: [scClonotypeKey]). Hidden
   // on the legacy single-PDB path (`scoresData` not emitted; resolve
