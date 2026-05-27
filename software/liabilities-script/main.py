@@ -10,10 +10,12 @@ in the TSV alongside the metrics.
 import argparse
 import csv
 import json
+import math
 import os
 import sys
 from io import StringIO
 from pathlib import Path
+from typing import Iterator
 
 import freesasa
 
@@ -79,9 +81,26 @@ def _safe_float(value) -> float | None:
         f = float(value)
     except (TypeError, ValueError):
         return None
-    if f != f:
-        return None
-    return f
+    return None if math.isnan(f) else f
+
+
+def _iter_clonotype_keyed_tsv(path: Path) -> Iterator[tuple[str, str]]:
+    """Yield (clonotype_key, raw_value) for each row of an xsv-exported TSV
+    with a `pl7.app/vdj/scClonotypeKey`-named first column and exactly one
+    value column. Skips rows with empty value. Used by the three sidecar
+    loaders below."""
+    with path.open() as fh:
+        reader = csv.DictReader(fh, delimiter="\t")
+        fields = reader.fieldnames or []
+        key_col = next((c for c in fields if "scClonotypeKey" in c), None)
+        val_col = next((c for c in fields if c != key_col), None)
+        if not key_col or not val_col:
+            return
+        for r in reader:
+            raw = r.get(val_col)
+            if raw is None or raw == "":
+                continue
+            yield r[key_col], raw
 
 
 def chown_to_host(path: Path) -> None:
@@ -352,81 +371,52 @@ def main() -> None:
 
     upstream_cdrh3: dict[str, int] = {}
     if args.cdrh3_lengths_tsv is not None and args.cdrh3_lengths_tsv.is_file():
-        with args.cdrh3_lengths_tsv.open() as fh:
-            reader = csv.DictReader(fh, delimiter="\t")
-            key_col = next((c for c in (reader.fieldnames or []) if "scClonotypeKey" in c), None)
-            val_col = next(
-                (c for c in (reader.fieldnames or [])
-                 if c != key_col and ("cdrh3Length" in c or c.endswith("Length"))),
-                None,
-            )
-            if key_col and val_col:
-                for r in reader:
-                    raw = r.get(val_col)
-                    if raw is None or raw == "":
-                        continue
-                    try:
-                        upstream_cdrh3[r[key_col]] = int(float(raw))
-                    except (TypeError, ValueError):
-                        continue
+        for k, raw in _iter_clonotype_keyed_tsv(args.cdrh3_lengths_tsv):
+            try:
+                upstream_cdrh3[k] = int(float(raw))
+            except (TypeError, ValueError):
+                continue
 
     per_residue_confidence: dict[str, dict[tuple[str, str], float]] = {}
     if args.per_residue_confidence_tsv is not None and args.per_residue_confidence_tsv.is_file():
-        with args.per_residue_confidence_tsv.open() as fh:
-            reader = csv.DictReader(fh, delimiter="\t")
-            key_col = next((c for c in (reader.fieldnames or []) if "scClonotypeKey" in c), None)
-            val_col = next(
-                (c for c in (reader.fieldnames or []) if c != key_col),
-                None,
-            )
-            if key_col and val_col:
-                for r in reader:
-                    raw = r.get(val_col)
-                    if not raw:
-                        continue
-                    try:
-                        records = json.loads(raw)
-                    except (TypeError, ValueError):
-                        continue
-                    if not isinstance(records, list):
-                        continue
-                    lookup: dict[tuple[str, str], float] = {}
-                    for rec in records:
-                        if not isinstance(rec, dict):
-                            continue
-                        pos = rec.get("pos")
-                        chain = rec.get("chain")
-                        err = rec.get("errorAngstroms")
-                        if pos is None or chain is None or err is None:
-                            continue
-                        try:
-                            lookup[(str(chain), str(pos))] = float(err)
-                        except (TypeError, ValueError):
-                            continue
-                    if lookup:
-                        per_residue_confidence[r[key_col]] = lookup
+        for k, raw in _iter_clonotype_keyed_tsv(args.per_residue_confidence_tsv):
+            try:
+                records = json.loads(raw)
+            except (TypeError, ValueError):
+                continue
+            if not isinstance(records, list):
+                continue
+            lookup: dict[tuple[str, str], float] = {}
+            for rec in records:
+                if not isinstance(rec, dict):
+                    continue
+                pos = rec.get("pos")
+                chain = rec.get("chain")
+                err = rec.get("errorAngstroms")
+                if pos is None or chain is None or err is None:
+                    continue
+                try:
+                    lookup[(str(chain), str(pos))] = float(err)
+                except (TypeError, ValueError):
+                    continue
+            if lookup:
+                per_residue_confidence[k] = lookup
 
+    # `None` means no filter picked, run on every clonotype. An empty set
+    # means the filter was picked but no clonotype passed (skip them all).
     keep_clonotypes: set[str] | None = None
     if args.clonotype_filter_tsv is not None and args.clonotype_filter_tsv.is_file():
-        with args.clonotype_filter_tsv.open() as fh:
-            reader = csv.DictReader(fh, delimiter="\t")
-            key_col = next((c for c in (reader.fieldnames or []) if "scClonotypeKey" in c), None)
-            val_col = next(
-                (c for c in (reader.fieldnames or []) if c != key_col),
-                None,
-            )
-            if key_col and val_col:
-                keep_clonotypes = set()
-                for r in reader:
-                    raw = (r.get(val_col) or "").strip().lower()
-                    if raw in {"", "0", "false", "no", "null"}:
-                        continue
-                    try:
-                        if float(raw) == 0.0:
-                            continue
-                    except ValueError:
-                        pass
-                    keep_clonotypes.add(r[key_col])
+        keep_clonotypes = set()
+        for k, raw in _iter_clonotype_keyed_tsv(args.clonotype_filter_tsv):
+            v = raw.strip().lower()
+            if v in {"0", "false", "no", "null"}:
+                continue
+            try:
+                if float(v) == 0.0:
+                    continue
+            except ValueError:
+                pass
+            keep_clonotypes.add(k)
 
     out_buf = StringIO()
     writer = csv.writer(out_buf, delimiter="\t", lineterminator="\n")

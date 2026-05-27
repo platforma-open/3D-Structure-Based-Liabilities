@@ -5,13 +5,14 @@
 // Single-shot architecture per the refreshed spec Software Interface +
 // Processing Pipeline. The workflow root resolves the upstream
 // `pl7.app/structure/pdb` PColumn from the PrimaryRef envelope (R1),
-// stages every PDB blob into one exec call, builds a
-// `pdb_index.tsv` listing all (sampleId, scClonotypeKey, filename)
-// triples, runs `python /app/main.py` once against the whole dataset,
-// and imports the resulting `per_clonotype.tsv` via `xsv.importFile`
-// to produce per-clonotype scalar PColumns (R38) with axes inherited
-// directly from the upstream PDB column. PrimaryRef.filter (R47) is
-// not yet applied.
+// stages every PDB blob into one exec call, builds a 2-column
+// `pdb_index.tsv` (clonotypeKey, filename), runs `python /app/main.py`
+// once against the whole dataset, and imports the resulting
+// `per_clonotype.tsv` via `xsv.importFile` to produce per-clonotype
+// scalar PColumns (R38) with axes inherited from the upstream PDB
+// column. Optional sidecars: upstream `cdrh3Length` (R5/R29 numerator),
+// `confidence/perResidue` JSON (R4 fallback), and the user-picked
+// `PrimaryRef.filter` Boolean/Int PColumn (R1 subset).
 
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 assets := import("@platforma-sdk/workflow-tengo:assets")

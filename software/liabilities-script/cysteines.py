@@ -46,7 +46,7 @@ class CysteineHit:
 
 
 def _dist(a, b) -> float:
-    return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
+    return math.dist((a.x, a.y, a.z), (b.x, b.y, b.z))
 
 
 def _bonding_test(ca1, sg1, ca2, sg2) -> bool:

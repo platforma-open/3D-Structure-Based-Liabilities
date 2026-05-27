@@ -100,7 +100,16 @@ SALT_BRIDGE_MAX_ANGSTROMS = 3.2
 
 
 def _atom_dist(a, b) -> float:
-    return math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
+    return math.dist((a.x, a.y, a.z), (b.x, b.y, b.z))
+
+
+def _centroid(atoms) -> tuple[float, float, float]:
+    n = len(atoms)
+    return (
+        sum(a.x for a in atoms) / n,
+        sum(a.y for a in atoms) / n,
+        sum(a.z for a in atoms) / n,
+    )
 
 
 def detect_salt_bridges(parsed) -> set[tuple[str, int, str]]:
@@ -194,13 +203,11 @@ class VhhMetrics:
 
 
 def _heavy_atom_min_distance(r_a, r_b) -> float:
-    best = float("inf")
-    for a in r_a.atoms:
-        for b in r_b.atoms:
-            d = math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2 + (a.z - b.z) ** 2)
-            if d < best:
-                best = d
-    return best
+    return min(
+        math.dist((a.x, a.y, a.z), (b.x, b.y, b.z))
+        for a in r_a.atoms
+        for b in r_b.atoms
+    )
 
 
 def _cdr_vicinity_residues(residues, regions, rsasa_lookup, buried_cutoff):
@@ -394,13 +401,7 @@ def _cdrh3_compactness_imgt(
             anchor_ca.append(ca)
     if not cdr3_ca or not anchor_ca:
         return None
-    cx = sum(a.x for a in cdr3_ca) / len(cdr3_ca)
-    cy = sum(a.y for a in cdr3_ca) / len(cdr3_ca)
-    cz = sum(a.z for a in cdr3_ca) / len(cdr3_ca)
-    ax = sum(a.x for a in anchor_ca) / len(anchor_ca)
-    ay = sum(a.y for a in anchor_ca) / len(anchor_ca)
-    az = sum(a.z for a in anchor_ca) / len(anchor_ca)
-    rho = math.sqrt((cx - ax) ** 2 + (cy - ay) ** 2 + (cz - az) ** 2)
+    rho = math.dist(_centroid(cdr3_ca), _centroid(anchor_ca))
     if rho == 0:
         return None
     numerator = upstream_cdrh3_length if upstream_cdrh3_length is not None else len(cdr3_ca)

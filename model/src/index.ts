@@ -1,8 +1,11 @@
 import type { GraphMakerState } from "@milaboratories/graph-maker";
 import type {
   AxisId,
+  BlockRenderCtx,
   ImportFileHandle,
   InferOutputsType,
+  PColumn,
+  PColumnDataUniversal,
   PColumnIdAndSpec,
   PFrameHandle,
   PlDataTableStateV2,
@@ -215,11 +218,10 @@ const dataModel = new DataModelBuilder()
   })
   .migrate<BlockDataV11>("v11", (v10) => {
     // Spec R1 , wire shape moves from bare `pdbRef: PlRef` to the
-    // `PrimaryRef` envelope `{column: PlRef, filter?: PlRef}` so the
-    // block accepts a properly typed primary input. Existing
-    // installations have a PlRef in `pdbRef`; we wrap it via
-    // `createPrimaryRef` (filter stays undefined for now, R47 fills
-    // it in later).
+    // `PrimaryRef` envelope `{column: PlRef, filter?: PlRef}`. Existing
+    // installations carrying a PlRef in `pdbRef` get wrapped via
+    // `createPrimaryRef`; the filter slot stays undefined until the
+    // user picks one in Settings.
     const { pdbRef, ...rest } = v10;
     return {
       ...rest,
@@ -254,14 +256,32 @@ const dataModel = new DataModelBuilder()
     cdrConfThresh: 6.0,
   }));
 
+// Helpers for the per-metric histogram output pairs below. Each pair
+// resolves a single `scoresData` PColumn by name; `pfFromScores` wraps
+// it in a single-column PFrame for graph-maker binding, `specFromScores`
+// returns the `{columnId, spec}` pair the HistogramPage default options
+// bind to.
+type ScoresPColumn = PColumn<PColumnDataUniversal | undefined>;
+type ScoresCtx = BlockRenderCtx<unknown, unknown>;
+function findScoresCol(ctx: ScoresCtx, name: string): ScoresPColumn | undefined {
+  const cols = ctx.outputs?.resolve("scoresData")?.getPColumns() as ScoresPColumn[] | undefined;
+  return cols?.find((c) => c.spec.name === name);
+}
+function pfFromScores(ctx: ScoresCtx, name: string): PFrameHandle | undefined {
+  const col = findScoresCol(ctx, name);
+  return col ? ctx.createPFrame([col]) : undefined;
+}
+function specFromScores(ctx: ScoresCtx, name: string): PColumnIdAndSpec | undefined {
+  const col = findScoresCol(ctx, name);
+  return col ? { columnId: col.id, spec: col.spec } : undefined;
+}
+
 export const platforma = BlockModelV3.create(dataModel)
   .args((data) => {
-    // Spec R1 , primary input is a `PrimaryRef` envelope; the workflow's
-    // `wf.prepare` resolves `primaryRef.column` (the PlRef inside the
-    // envelope) into per-clonotype PDBs and iterates via
-    // `pframes.processColumn`. The envelope's optional `filter` slot
-    // (clonotype subset, R47) is not yet wired through , primaryRef
-    // is constructed with no filter today.
+    // Spec R1 , primary input is a `PrimaryRef` envelope. The workflow's
+    // `wf.prepare` resolves `primaryRef.column` into the upstream PDB
+    // PColumn for single-shot iteration; the optional `filter` slot
+    // narrows the clonotype set in Python before processing.
     if (!data.primaryRef?.column) {
       throw new Error("Pick a predicted structures dataset");
     }
@@ -299,19 +319,13 @@ export const platforma = BlockModelV3.create(dataModel)
     ]),
   )
   // Spec R51 , per-clonotype scalar metrics table. PColumns come from the
-  // PrimaryRef-path `scoresData` PFrame (axes: [scClonotypeKey]). Hidden
-  // on the legacy single-PDB path (`scoresData` not emitted; resolve
-  // returns undefined).
-  //
-  // Isolation test: pass `undefined` for tableState (instead of
-  // ctx.data.scoresTableState) so AG-Grid state writes don't trigger model
-  // re-runs. If this lets the table render rows, the bug is the
-  // model→UI→model feedback loop via v-model on table state.
-  //
-  // Spec R5 , upstream `pl7.app/structure/cdrh3Length` is enriched in as
-  // an additional column so the user can sanity-check our REMARK 99 / scheme
-  // fallback against the prediction block's CDRH3 length. Auto-joined on
-  // the shared `pl7.app/vdj/scClonotypeKey` axis by the PFrame driver.
+  // `scoresData` PFrame (axes: [scClonotypeKey]); enriched with upstream
+  // `cdrh3Length` (R5 sanity-check column), upstream `pl7.app/label` for
+  // pretty row keys, and `pl7.app/clusterId` etc. when the 3D Structure
+  // Clustering block is upstream. Joined on the shared scClonotypeKey
+  // axis by the PFrame driver. `tableState` is passed as `undefined` so
+  // AG-Grid state writes don't trigger model re-runs (avoids the
+  // model→UI→model feedback loop via v-model).
   .outputWithStatus("scoresTable", (ctx) => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
     if (pCols === undefined) return undefined;
@@ -388,95 +402,31 @@ export const platforma = BlockModelV3.create(dataModel)
     return createPlDataTableV2(ctx, allCols, undefined);
   })
   // Spec R54 , per-metric histograms. One PFrame + Spec output pair per
-  // metric. We use `ctx.createPFrame([col])` rather than
-  // `createPFrameForGraphs` because the latter pulls related columns
-  // from the result pool (everything sharing the scClonotypeKey axis):
-  // psh, ppc, cdrh3Length, etc. all end up in the same PFrame, and
-  // graph-maker picks the first numeric column it sees regardless of
-  // our defaultOptions binding. Single-column PFrame removes the
-  // ambiguity.
-  .outputWithStatus("pshPf", (ctx): PFrameHandle | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/psh");
-    if (!col) return undefined;
-    return ctx.createPFrame([col]);
-  })
-  .output("pshSpec", (ctx): PColumnIdAndSpec | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/psh");
-    return col ? { columnId: col.id, spec: col.spec } : undefined;
-  })
-  .outputWithStatus("ppcPf", (ctx): PFrameHandle | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/ppc");
-    if (!col) return undefined;
-    return ctx.createPFrame([col]);
-  })
-  .output("ppcSpec", (ctx): PColumnIdAndSpec | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/ppc");
-    return col ? { columnId: col.id, spec: col.spec } : undefined;
-  })
-  .outputWithStatus("pncPf", (ctx): PFrameHandle | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/pnc");
-    if (!col) return undefined;
-    return ctx.createPFrame([col]);
-  })
-  .output("pncSpec", (ctx): PColumnIdAndSpec | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/pnc");
-    return col ? { columnId: col.id, spec: col.spec } : undefined;
-  })
-  .outputWithStatus("sfvcspPf", (ctx): PFrameHandle | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/sfvcsp");
-    if (!col) return undefined;
-    return ctx.createPFrame([col]);
-  })
-  .output("sfvcspSpec", (ctx): PColumnIdAndSpec | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/sfvcsp");
-    return col ? { columnId: col.id, spec: col.spec } : undefined;
-  })
-  .outputWithStatus("cdrh3CompactnessPf", (ctx): PFrameHandle | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/cdrh3Compactness");
-    if (!col) return undefined;
-    return ctx.createPFrame([col]);
-  })
-  .output("cdrh3CompactnessSpec", (ctx): PColumnIdAndSpec | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find((c) => c.spec.name === "pl7.app/liabilities/cdrh3Compactness");
-    return col ? { columnId: col.id, spec: col.spec } : undefined;
-  })
-  .outputWithStatus("devScorePf", (ctx): PFrameHandle | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find(
-      (c) => c.spec.name === "pl7.app/liabilities/structuralDevelopabilityScore",
-    );
-    if (!col) return undefined;
-    return ctx.createPFrame([col]);
-  })
-  .output("devScoreSpec", (ctx): PColumnIdAndSpec | undefined => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    const col = pCols.find(
-      (c) => c.spec.name === "pl7.app/liabilities/structuralDevelopabilityScore",
-    );
-    return col ? { columnId: col.id, spec: col.spec } : undefined;
-  })
+  // metric, all built from `scoresData` via `findScoresCol` (declared at
+  // module scope). `ctx.createPFrame([col])` is used over
+  // `createPFrameForGraphs` because the latter pulls every column
+  // sharing the scClonotypeKey axis, which would let graph-maker pick
+  // an unrelated numeric column over the one bound by `defaultOptions`.
+  .outputWithStatus("pshPf", (ctx) => pfFromScores(ctx, "pl7.app/liabilities/psh"))
+  .output("pshSpec", (ctx) => specFromScores(ctx, "pl7.app/liabilities/psh"))
+  .outputWithStatus("ppcPf", (ctx) => pfFromScores(ctx, "pl7.app/liabilities/ppc"))
+  .output("ppcSpec", (ctx) => specFromScores(ctx, "pl7.app/liabilities/ppc"))
+  .outputWithStatus("pncPf", (ctx) => pfFromScores(ctx, "pl7.app/liabilities/pnc"))
+  .output("pncSpec", (ctx) => specFromScores(ctx, "pl7.app/liabilities/pnc"))
+  .outputWithStatus("sfvcspPf", (ctx) => pfFromScores(ctx, "pl7.app/liabilities/sfvcsp"))
+  .output("sfvcspSpec", (ctx) => specFromScores(ctx, "pl7.app/liabilities/sfvcsp"))
+  .outputWithStatus("cdrh3CompactnessPf", (ctx) =>
+    pfFromScores(ctx, "pl7.app/liabilities/cdrh3Compactness"),
+  )
+  .output("cdrh3CompactnessSpec", (ctx) =>
+    specFromScores(ctx, "pl7.app/liabilities/cdrh3Compactness"),
+  )
+  .outputWithStatus("devScorePf", (ctx) =>
+    pfFromScores(ctx, "pl7.app/liabilities/structuralDevelopabilityScore"),
+  )
+  .output("devScoreSpec", (ctx) =>
+    specFromScores(ctx, "pl7.app/liabilities/structuralDevelopabilityScore"),
+  )
   // Upstream `pl7.app/label` column anchored on scClonotypeKey. Exposed as
   // a standalone PFrame so the strip plot can resolve readable clone names
   // for each dot; the scoresTable already auto-substitutes labels in its
