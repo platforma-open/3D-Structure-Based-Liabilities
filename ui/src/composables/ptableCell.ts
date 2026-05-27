@@ -38,9 +38,24 @@ export function readNumber(col: PTableColumn, i: number): number {
   return Number(v);
 }
 
+/** Read row `i` as a number, preserving null for missing cells. Use when
+ *  callers need to distinguish "no value" from "0.0". */
+export function readNullableNumber(col: PTableColumn, i: number): number | null {
+  const v = readCell(col, i);
+  return v === null ? null : Number(v);
+}
+
 /** Read row `i` as a string. Returns null when missing. */
 export function readString(col: PTableColumn, i: number): string | null {
   const v = readCell(col, i);
   if (v === null) return null;
   return String(v);
 }
+
+/** Shape of the `scoresTable` output as seen from a Vue composable: a wrapped
+ *  `outputWithStatus` result whose `value` carries `fullTableHandle` for the
+ *  pFrameDriver. Lives here (next to readCell) since both consumers
+ *  (useClusterAssignments, useRunSummaryAlerts) operate on the same handle. */
+export type ScoresTableOutput =
+  | { ok?: boolean; value?: { fullTableHandle?: unknown } }
+  | undefined;

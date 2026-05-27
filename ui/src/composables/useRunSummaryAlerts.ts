@@ -1,6 +1,6 @@
 import { getRawPlatformaInstance } from "@platforma-sdk/model";
 import { computed, ref, watchEffect, type ComputedRef } from "vue";
-import { readNumber } from "./ptableCell";
+import { readNumber, type ScoresTableOutput } from "./ptableCell";
 
 /**
  * Spec R44 / R45 run-summary alert source. Reads `*Flag` columns and
@@ -18,8 +18,6 @@ export type RunSummary = {
   redFraction: number;
   gatedFraction: number;
 };
-
-type ScoresTableOutput = { ok?: boolean; value?: { fullTableHandle?: unknown } } | undefined;
 
 const RED = "red";
 const FLAG_COL_NAMES = new Set([
@@ -88,8 +86,10 @@ export function useRunSummaryAlerts(scoresTable: ComputedRef<ScoresTableOutput>)
     }
 
     // R45: gated-motif-count > 0. confidenceGatedMotifCount is Long-typed,
-    // which means BigInts inside a numeric-indexed wrapper object , readNumber
-    // normalises that to a plain number.
+    // which means BigInts inside a numeric-indexed wrapper object; readNumber
+    // normalises that to a plain number. The gated column rides at the end
+    // of `requestIndices` (after all flag indices), so its data slot is at
+    // `flagIndices.length`.
     let gatedClonotypes = 0;
     if (gatedIndex !== -1) {
       const gatedCol = data[flagIndices.length];

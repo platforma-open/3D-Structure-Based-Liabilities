@@ -1,12 +1,12 @@
 import { getRawPlatformaInstance } from "@platforma-sdk/model";
 import { computed, ref, watchEffect, type ComputedRef, type Ref } from "vue";
-import { readCell, readNumber, readString } from "./ptableCell";
+import { readCell, readNullableNumber, readNumber, type ScoresTableOutput } from "./ptableCell";
 
 /**
- * Spec R42 , per-clonotype cluster assignment row, lifted out of the
- * scoresTable PTable. Populated only when the 3D Structure Clustering
- * block is upstream (it auto-joins these columns on the scClonotypeKey
- * axis); otherwise the map stays empty and the UI hides cluster bits.
+ * Per-clonotype cluster assignment, joined onto scoresTable via the
+ * scClonotypeKey axis when the 3D Structure Clustering block sits
+ * upstream. When clustering isn't in the pipeline the map stays empty
+ * and the slideover hides cluster bits.
  */
 export type ClusterAssignment = {
   clusterId: string;
@@ -15,19 +15,11 @@ export type ClusterAssignment = {
   tmScoreToCentroid: number | null;
 };
 
-/** Output value shape of `outputs.scoresTable` , `OutputWithStatus<PlDataTableV2>`. */
-type ScoresTableOutput = { ok?: boolean; value?: { fullTableHandle?: unknown } } | undefined;
-
 /**
  * Subscribe to the scoresTable PTable and rebuild a per-clonotype cluster
- * assignment map whenever it changes. Returns the live map plus a couple
- * of derived computeds the UI uses.
- *
- * `selectedClonotypeKey` is passed in (rather than created inside) so the
- * cluster badge in the slideover stays bound to the row the user opened.
- * Filtering by cluster / centroid is now done via PlAgDataTable's own
- * column filters on the main table , the in-page "Centroids only" toggle
- * that used to auto-jump the selection is gone.
+ * assignment map whenever it changes. `selectedClonotypeKey` is passed
+ * in (rather than created inside) so the cluster badge in the slideover
+ * stays bound to the row the user opened.
  */
 export function useClusterAssignments(
   scoresTable: ComputedRef<ScoresTableOutput>,
@@ -95,26 +87,17 @@ export function useClusterAssignments(
         isCentroid:
           isCentroidIdx === -1 ? false : readNumber(data[posOf(isCentroidIdx)], row) === 1,
         tmDistanceToCentroid:
-          tmDistIdx === -1
-            ? null
-            : readString(data[posOf(tmDistIdx)], row) === null
-              ? null
-              : readNumber(data[posOf(tmDistIdx)], row),
+          tmDistIdx === -1 ? null : readNullableNumber(data[posOf(tmDistIdx)], row),
         tmScoreToCentroid:
-          tmScoreIdx === -1
-            ? null
-            : readString(data[posOf(tmScoreIdx)], row) === null
-              ? null
-              : readNumber(data[posOf(tmScoreIdx)], row),
+          tmScoreIdx === -1 ? null : readNullableNumber(data[posOf(tmScoreIdx)], row),
       };
     }
     clusterMap.value = out;
   });
 
-  const hasClusterData = computed(() => Object.keys(clusterMap.value).length > 0);
   const selectedClusterAssignment = computed<ClusterAssignment | undefined>(() =>
     selectedClonotypeKey.value ? clusterMap.value[selectedClonotypeKey.value] : undefined,
   );
 
-  return { clusterMap, hasClusterData, selectedClusterAssignment };
+  return { selectedClusterAssignment };
 }

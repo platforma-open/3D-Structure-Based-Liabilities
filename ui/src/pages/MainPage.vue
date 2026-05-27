@@ -27,48 +27,36 @@ import { useRunSummaryAlerts } from "../composables/useRunSummaryAlerts";
 
 const app = useApp();
 
-// Spec R51 , per-clonotype scoresTable is now the primary view. The
-// previous tab UI (table ↔ inline viewer) has been replaced by a row-
-// click `PlSlideModal`, matching the pattern used in the upstream
-// 3D-Structure-Prediction block. Cluster / centroid filtering happens
-// through PlAgDataTable's own column filters , the standalone toggle
-// is gone.
+// Spec R51 primary view. `sourceId` is versioned so a shape change on
+// the underlying PColumn invalidates AG-Grid's column-order cache.
 const scoresTableSettings = usePlDataTableSettingsV2({
   model: () => app.model.outputs.scoresTable,
   sourceId: () => "scores-v2",
 });
-// v-model writes stay UI-local so AG-Grid state events don't re-fire the
-// model output handler. Keeps the table out of placeholder-state limbo.
+// v-model writes stay UI-local so AG-Grid state events don't re-fire
+// the model output handler.
 const scoresLocalState = ref(createPlDataTableStateV2());
 
-// Spec R52 + R53 , modal-on-row-click. `clonotypePdbsMap` /
-// `clonotypeJsonsMap` are {key, value: {handle}} pairs keyed by
-// scClonotypeKey. `viewer` is set when a row's open-button fires; the
-// modal opens via `:model-value="viewer !== undefined"`.
-//
-// Color schemes (by-confidence / by-rsasa / by-hydrophobicity per spec)
-// are still blocked on `@milaboratories/structure-viewer` ≥ 0.3.0
-// publish , PlStructureViewer renders Mol*'s default preset for now.
+// Spec R52 modal viewer. `pdbsMap` is {key, value: {handle}} pairs keyed
+// by scClonotypeKey; `viewer` is set when a row's open-button fires and
+// the slideover opens via `:model-value="viewer !== undefined"`.
 const pdbsMap = computed(() => app.model.outputs.clonotypePdbsMap);
 const clonotypeAxisId = computed(() => app.model.outputs.clonotypeAxisId);
 
-// F2 , pretty clonotype labels from the upstream `pl7.app/label` column.
-// Used for the modal title, viewer file name, and detail-panel header.
-// Source from scoresTable.fullPframeHandle (auto-joined label column);
-// the standalone clonotypeLabelsPf output uses resultPool.findDataWithCompatibleSpec
-// which returns empty for domain-bound axes.
-// PlAgDataTable handles label substitution inside the table itself.
+// F2 pretty clonotype labels. Sourced from `scoresTable.fullPframeHandle`
+// (auto-joined `pl7.app/label` column); the dedicated `clonotypeLabelsPf`
+// output came up empty via `findDataWithCompatibleSpec` for
+// domain-bound axes.
 const clonotypeLabelsPf = computed(() => {
   const t = app.model.outputs.scoresTable;
   return t?.ok && t.value ? t.value.fullPframeHandle : undefined;
 });
 const { resolveLabel } = useClonotypeLabels(clonotypeLabelsPf, clonotypeAxisId);
 
-// Dataset-level mode (uniform per R7). Spec BlockData definition places
-// detectedMode on `BlockData.detectedMode`; the model can't read PColumn
-// data synchronously in an output callback, so the UI resolves it from
-// the per-clonotype `pl7.app/liabilities/mode` column and writes back
-// into BlockData on change. R51, R54, R55 read from `app.model.data.detectedMode`.
+// Dataset-level mode (uniform per R7) resolved from the per-clonotype
+// `pl7.app/liabilities/mode` column and written back to BlockData so R51
+// column visibility, R54 mode-specific histogram, and R55 subtitle all
+// key off `app.model.data.detectedMode`.
 const { mode: resolvedMode } = useDetectedMode(clonotypeLabelsPf);
 watch(resolvedMode, (next) => {
   if (next && next !== app.model.data.detectedMode) {
@@ -81,16 +69,13 @@ const viewer = ref<PlStructureViewerProps>();
 
 const scoresTableOutput = computed(() => app.model.outputs.scoresTable);
 
-const { clusterMap, selectedClusterAssignment } = useClusterAssignments(
+const { selectedClusterAssignment } = useClusterAssignments(
   scoresTableOutput,
   selectedClonotypeKey,
 );
 const { runSummary, showRedAlert, showGatedAlert } = useRunSummaryAlerts(scoresTableOutput);
 
-// Settings slide-over (predicted structures dropdown + numbering scheme
-// override + chain mapping override + Advanced thresholds + hydrophobicity
-// scale). Auto-opens on first load when no input is configured so new
-// users land on the input form instead of an empty page.
+// Settings auto-opens on first load when no input is configured.
 const settingsOpen = ref(!app.model.data.primaryRef?.column);
 
 // Spec R1 , `PrimaryRef` is a frozen `{__isPrimaryRef, column, filter?}`
@@ -116,13 +101,9 @@ const primaryRefFilter = computed<PlRef | undefined>({
   },
 });
 
-// Row-click handler , fired by `PlAgDataTableV2`'s `@cell-button-clicked`
-// when the user hits the open button on the clonotype-axis cell. The key
-// comes through as the first element of `PTableKey`; we then look up the
-// PDB handle in `pdbsMap` and seed the viewer props (the slideover binds
-// to `viewer !== undefined`). The detail panel + cluster badge read the
-// same `selectedClonotypeKey` ref so everything in the modal updates
-// together.
+// `PTableKey` is `[scClonotypeKey]`; look up the PDB handle in `pdbsMap`
+// and seed the viewer props. Other modal contents (cluster badge, etc.)
+// read `selectedClonotypeKey` so everything updates together.
 function openViewerForRow(rowKey?: PTableKey) {
   const rawKey = rowKey?.at(0);
   if (rawKey == null) return;
@@ -146,7 +127,7 @@ function pct(value: number): string {
 }
 
 const numberingSchemeOptions = [
-  { value: "", label: ", unknown (no region weighting) ," },
+  { value: "", label: "unknown (no region weighting)" },
   { value: "imgt", label: "IMGT" },
   { value: "chothia", label: "Chothia" },
   { value: "kabat", label: "Kabat" },
