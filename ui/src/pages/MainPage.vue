@@ -60,7 +60,7 @@ const clonotypeAxisId = computed(() => app.model.outputs.clonotypeAxisId);
 // PlAgDataTable handles label substitution inside the table itself.
 const clonotypeLabelsPf = computed(() => {
   const t = app.model.outputs.scoresTable;
-  return t && t.ok ? t.value.fullPframeHandle : undefined;
+  return t?.ok && t.value ? t.value.fullPframeHandle : undefined;
 });
 const { resolveLabel } = useClonotypeLabels(clonotypeLabelsPf, clonotypeAxisId);
 

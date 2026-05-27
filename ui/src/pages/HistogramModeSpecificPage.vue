@@ -9,7 +9,7 @@ import { histogramConfigs } from "./histogramConfigs";
 const app = useApp();
 const scoresPf = computed(() => {
   const t = app.model.outputs.scoresTable;
-  return t && t.ok ? t.value.fullPframeHandle : undefined;
+  return t?.ok && t.value ? t.value.fullPframeHandle : undefined;
 });
 const { mode } = useDetectedMode(scoresPf);
 

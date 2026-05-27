@@ -58,9 +58,9 @@ wf.body(func(args) {
 	for keyJson in maps.getKeys(inputsMap) {
 		keyArr := json.decode(keyJson)
 		clonotypeKey := keyArr[0]
-		filename := "pdbs/" + clonotypeKey + ".pdb"
-		cmd = cmd.addFile(filename, inputsMap[keyJson].getValue())
-		indexLines = append(indexLines, clonotypeKey + "\t" + filename)
+		bareName := clonotypeKey + ".pdb"
+		cmd = cmd.addFile("pdbs/" + bareName, inputsMap[keyJson].getValue())
+		indexLines = append(indexLines, clonotypeKey + "\t" + bareName)
 		rowCount += 1
 	}
 
@@ -109,8 +109,6 @@ wf.body(func(args) {
 		outputs: {
 			scoresData: pframes.exportFrame(scoresPf)
 		},
-		exports: {
-			scores: scoresPf
-		}
+		exports: {}
 	}
 })
