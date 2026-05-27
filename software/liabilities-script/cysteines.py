@@ -72,7 +72,7 @@ def _collect_cys_records(parsed):
 
 def _scan_disulfides(cys_records) -> dict[int, int]:
     """Pairwise scan over cys_records; returns idx → partner_idx for every
-    Cys engaged in a disulfide. First-match wins on ambiguous geometry —
+    Cys engaged in a disulfide. First-match wins on ambiguous geometry ,
     if one Cys could bond to two partners, we lock the first one we hit
     and treat the other as `unbonded` (consistent with REMARK SSBOND-style
     1:1 bond accounting; ambiguous cases are rare and biologically odd)."""
@@ -152,7 +152,7 @@ def detect_cysteines(
         (role, pos) for role, positions in canonical_positions.items() for pos in positions
     }
     # Used below to skip phantom rows for canonical positions that ARE
-    # filled — keyed by (role, res_seq).
+    # filled , keyed by (role, res_seq).
     cys_by_role_pos: dict[tuple[str, int], int] = {}
     for idx, (chain_id, r, _ca, _sg) in enumerate(cys_records):
         role = role_of_chain(chain_id, heavy_chain_id, light_chain_id)

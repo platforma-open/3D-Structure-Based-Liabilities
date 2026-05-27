@@ -61,12 +61,12 @@ class Parsed:
     chain_order: List[str] = field(default_factory=list)
     residues_by_chain: Dict[str, List[Residue]] = field(default_factory=dict)
     ssbonds: List[Ssbond] = field(default_factory=list)
-    # Spec R10 — CDR ranges from `REMARK 99 PLATFORMA CDR*` records emitted
+    # Spec R10 , CDR ranges from `REMARK 99 PLATFORMA CDR*` records emitted
     # by the Structure Prediction block. Shape: {"H": {"CDR1": (start, end),
     # "CDR2": (...), "CDR3": (...)}, "L": {...}}. Empty when not present;
     # downstream code falls back to scheme-aware fixed ranges.
     platforma_cdrs: Dict[str, Dict[str, Tuple[int, int]]] = field(default_factory=dict)
-    # Spec R9 — REMARK 99 chain identity is authoritative. Maps role ("H"/"L")
+    # Spec R9 , REMARK 99 chain identity is authoritative. Maps role ("H"/"L")
     # to the physical PDB chain letter the records reference. e.g. given
     # `REMARK 99 PLATFORMA CDRH1 B27-B38`, this becomes {"H": "B"}. Caller
     # uses this to override the user's heavy/light chain dropdowns when
@@ -117,7 +117,7 @@ def parse_pdb(text: str) -> Parsed:
                 if end < start:
                     continue
                 out.platforma_cdrs.setdefault(role, {})[f"CDR{cdr_idx}"] = (start, end)
-                # Spec R9 — record the physical PDB chain letter for this role.
+                # Spec R9 , record the physical PDB chain letter for this role.
                 # Later records for the same role must agree; conflicts are
                 # silently dropped (downstream falls back to the user's mapping).
                 existing = out.chain_role_to_pdb_chain.get(role)
@@ -158,7 +158,7 @@ def parse_pdb(text: str) -> Parsed:
             #   30-37 x   38-45 y      46-53 z  (Å, free-form floats)
             #   60-65 B-factor (Å² for crystals, Å for ImmuneBuilder-predicted)
             #
-            # altLoc filter — multi-conformer side chains list each alternate
+            # altLoc filter , multi-conformer side chains list each alternate
             # location with a letter ('A', 'B', ...). Keeping only ' ' and 'A'
             # ensures geometry tests (distance pairs, salt bridges) don't
             # double-count atoms.
@@ -274,7 +274,7 @@ def region_for(
     """Return "FR1" / "CDR1" / "FR2" / "CDR2" / "FR3" / "CDR3" / "FR4" /
     None. Returns None when chain_role is unknown (e.g. antigen chains in a
     complex), scheme is invalid, or residue falls outside the V-domain (e.g.
-    constant region in a Fab — we don't tag CH1/CL).
+    constant region in a Fab , we don't tag CH1/CL).
 
     chain_role: "H" or "L". Pass "H" for VHH (single-chain camelid) too;
     its numbering follows heavy-chain convention.
@@ -305,7 +305,7 @@ def region_for(
     v_end = SCHEME_VDOMAIN_END[s][chain_role]
 
     if res_seq > v_end:
-        return None  # constant region — not tagged
+        return None  # constant region , not tagged
     if res_seq < cdr1_start:
         return "FR1"
     if cdr1_start <= res_seq <= cdr1_end:
@@ -513,7 +513,7 @@ def check_hallmark_tetrad(
     )
     if mismatch:
         observed = ", ".join(
-            f"{p}={o or '—'}" for p, o in zip(positions, one_letters)
+            f"{p}={o or '?'}" for p, o in zip(positions, one_letters)
         )
         print(
             f"WARN (spec R33): hallmark-tetrad residues at {observed} "

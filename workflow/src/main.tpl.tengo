@@ -17,10 +17,12 @@
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 assets := import("@platforma-sdk/workflow-tengo:assets")
 exec := import("@platforma-sdk/workflow-tengo:exec")
+ll := import("@platforma-sdk/workflow-tengo:ll")
 maps := import("@platforma-sdk/workflow-tengo:maps")
 pframes := import("@platforma-sdk/workflow-tengo:pframes")
 pSpec := import("@platforma-sdk/workflow-tengo:pframes.spec")
 xsv := import("@platforma-sdk/workflow-tengo:pframes.xsv")
+text := import("text")
 json := import("json")
 
 specs := import(":specs")
@@ -68,7 +70,6 @@ wf.body(func(args) {
 	pdbCol := args.resolvedPdb
 	pdbAxes := pdbCol.spec.axesSpec
 	if len(pdbAxes) != 1 {
-		ll := import("@platforma-sdk/workflow-tengo:ll")
 		ll.panic("unsupported PDB column axes count: expected 1 (scClonotypeKey), got %d", len(pdbAxes))
 	}
 	scClonotypeAxis := pdbAxes[0]
@@ -85,44 +86,39 @@ wf.body(func(args) {
 		cpu(2).
 		printErrStreamToStdout()
 
-	rowCount := 0
 	for keyJson in maps.getKeys(inputsMap) {
-		keyArr := json.decode(keyJson)
-		clonotypeKey := keyArr[0]
+		clonotypeKey := json.decode(keyJson)[0]
 		bareName := clonotypeKey + ".pdb"
 		cmd = cmd.addFile("pdbs/" + bareName, inputsMap[keyJson].getValue())
 		indexLines = append(indexLines, clonotypeKey + "\t" + bareName)
-		rowCount += 1
-	}
-
-	pdbIndex := ""
-	for line in indexLines {
-		pdbIndex += line + "\n"
 	}
 
 	cmd = cmd.
-		writeFile("pdb_index.tsv", pdbIndex).
+		writeFile("pdb_index.tsv", text.join(indexLines, "\n") + "\n").
 		arg("--pdb-dir").arg("pdbs").
 		arg("--pdb-index").arg("pdb_index.tsv").
 		arg("--output-tsv").arg("per_clonotype.tsv").
 		arg("--fr-confidence-gating-threshold").arg(string(args.frConfThresh)).
 		arg("--cdr-confidence-gating-threshold").arg(string(args.cdrConfThresh))
 
-	// R5/R29: stage upstream `pl7.app/structure/cdrh3Length` as a TSV sidecar
-	// so Python uses it as the R30 compactness numerator. Skip silently when
-	// no compatible column is in the result pool (the in-block REMARK 99 /
-	// scheme-fallback count remains the fallback).
-	cdrh3Cols := args.columns.getColumns("cdrh3Length")
-	if !is_undefined(cdrh3Cols) && len(cdrh3Cols) > 0 {
-		cdrh3Tsv := xsv.exportFrame([cdrh3Cols[0]], "tsv", { mem: "1GiB", cpu: 1 })
-		cmd = cmd.
-			addFile("cdrh3_lengths.tsv", cdrh3Tsv).
-			arg("--cdrh3-lengths").arg("cdrh3_lengths.tsv")
+	// Optional enrichment sidecars. Each takes the first column matching
+	// the bundle key (xsv.exportFrame to a TSV, then `addFile` + CLI flag).
+	// Skipped silently when the bundle yields no match, so the block runs
+	// against older upstreams that don't emit the column. Returns the
+	// possibly-extended `cmd` so callers can chain.
+	withSidecar := func(c, bundleKey, filename, cliFlag) {
+		cols := args.columns.getColumns(bundleKey)
+		if is_undefined(cols) || len(cols) == 0 {
+			return c
+		}
+		sidecarTsv := xsv.exportFrame([cols[0]], "tsv", { mem: "1GiB", cpu: 1 })
+		return c.addFile(filename, sidecarTsv).arg(cliFlag).arg(filename)
 	}
+	cmd = withSidecar(cmd, "cdrh3Length", "cdrh3_lengths.tsv", "--cdrh3-lengths")                    // R5/R29 numerator
+	cmd = withSidecar(cmd, "perResidueConfidence", "per_residue_confidence.tsv", "--per-residue-confidence") // R4 fallback
 
-	// R1 PrimaryRef.filter: stage the picked filter column as a TSV
-	// sidecar; Python drops clonotypes whose filter value is falsy
-	// before iterating. Empty when the user didn't pick a filter.
+	// R1 PrimaryRef.filter: single column (vs the multi-column lookups
+	// above), so use the corresponding `getColumn` accessor.
 	filterCol := args.columns.getColumn("filter")
 	if !is_undefined(filterCol) {
 		filterTsv := xsv.exportFrame([filterCol], "tsv", { mem: "1GiB", cpu: 1 })
@@ -131,30 +127,17 @@ wf.body(func(args) {
 			arg("--clonotype-filter").arg("clonotype_filter.tsv")
 	}
 
-	// R4: stage upstream per-residue confidence JSON as a TSV sidecar.
-	// Python uses it as the fallback when a residue's B-factor is 0
-	// (e.g. crystal PDBs or PDBs synthesized without ImmuneBuilder's
-	// error-as-B-factor convention). Skip silently when the upstream
-	// block doesn't emit this column.
-	confCols := args.columns.getColumns("perResidueConfidence")
-	if !is_undefined(confCols) && len(confCols) > 0 {
-		confTsv := xsv.exportFrame([confCols[0]], "tsv", { mem: "1GiB", cpu: 1 })
-		cmd = cmd.
-			addFile("per_residue_confidence.tsv", confTsv).
-			arg("--per-residue-confidence").arg("per_residue_confidence.tsv")
-	}
-
 	// Optional CLI knobs (R10 fallback path + R9 chain identity overrides).
 	// Empty strings are skipped so Python falls through to its defaults.
-	if !is_undefined(args.numberingScheme) && args.numberingScheme != "" {
-		cmd = cmd.arg("--numbering-scheme").arg(args.numberingScheme)
+	withOptArg := func(c, flag, value) {
+		if is_undefined(value) || value == "" {
+			return c
+		}
+		return c.arg(flag).arg(value)
 	}
-	if !is_undefined(args.heavyChainId) && args.heavyChainId != "" {
-		cmd = cmd.arg("--chain-h").arg(args.heavyChainId)
-	}
-	if !is_undefined(args.lightChainId) && args.lightChainId != "" {
-		cmd = cmd.arg("--chain-l").arg(args.lightChainId)
-	}
+	cmd = withOptArg(cmd, "--numbering-scheme", args.numberingScheme)
+	cmd = withOptArg(cmd, "--chain-h", args.heavyChainId)
+	cmd = withOptArg(cmd, "--chain-l", args.lightChainId)
 
 	result := cmd.saveFile("per_clonotype.tsv").run()
 	scoresTsv := result.getFile("per_clonotype.tsv")

@@ -55,7 +55,7 @@ _VHH_THRESHOLDS = _coerce_band_tuples(_VHH_THRESHOLDS_RAW)
 def _flag_one_sided(value: float, spec: dict) -> str:
     """Three-band: amber within (amber_lo, amber_hi); red on the bad side
     of the band, green on the good side. `direction` picks which side is
-    bad — "high_bad" (most metrics) treats values above amber as red,
+    bad , "high_bad" (most metrics) treats values above amber as red,
     "low_bad" (SFvCSP) treats values below amber as red."""
     amber_lo, amber_hi = spec["amber"]
     direction = spec.get("direction", "high_bad")
@@ -141,7 +141,7 @@ def _cys_class_bump(cys_class: str, sidechain_rsasa: Optional[float], buried_cut
     return 0.0
 
 
-# R41a — engineering-grade fixability tiers + the four-step risk ladder.
+# R41a , engineering-grade fixability tiers + the four-step risk ladder.
 # `_ENGINEERING_FIXABILITIES` is the same set the sequence-liabilities
 # block uses for `classify_developability_risk` (motifs we can credibly
 # fix without a sequence redesign).
@@ -151,14 +151,14 @@ _RISK_ORDER = {n: i for i, n in enumerate(_RISK_LEVELS)}
 
 
 def _seq_risk_to_level(rc: str) -> str:
-    """R41a — sequence-side risk class → R41a level. Identity-ish mapping
+    """R41a , sequence-side risk class → R41a level. Identity-ish mapping
     that defends against unexpected `sequenceRiskClass` values by falling
     through to "None"."""
     return {"High": "High", "Medium": "Medium", "Low": "Low"}.get(rc, "None")
 
 
 def _developability_risk(motif_hits, flags: dict[str, str]) -> str:
-    """R41a — over engineering-fixable, non-gated motifs only:
+    """R41a , over engineering-fixable, non-gated motifs only:
        1. Take the highest sequenceRiskClass among them as the base level.
        2. Promote to Medium if ANY metric flag is amber.
        3. Promote to High if ANY metric flag is red.
@@ -184,11 +184,11 @@ def _developability_risk(motif_hits, flags: dict[str, str]) -> str:
 
 
 def _has_integrity_issue(motif_hits, cys_hits, rsasa_buried_cutoff: float) -> bool:
-    """R41a structuralIntegrityRisk — Present iff at least one of:
+    """R41a structuralIntegrityRisk , Present iff at least one of:
        • a canonical disulfide is broken or missing entirely (cys side),
        • an extra Cys is surface-exposed (free thiol → covalent aggregation risk),
        • a non-gated motif lives in the {hard_to_fix, structural} tier.
-    Any one is enough — short-circuits as soon as it finds a trigger."""
+    Any one is enough , short-circuits as soon as it finds a trigger."""
     for h in cys_hits:
         if h.cysClass in ("disulfide_broken", "disulfide_missing"):
             return True

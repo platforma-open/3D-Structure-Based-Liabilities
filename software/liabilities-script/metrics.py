@@ -5,7 +5,7 @@ charge constants plus the R15a salt-bridge detector that runs before
 charge assignment. Section 2 is the patch detector + per-mode metric
 implementations.
 
-Fv (TAP) — Raybould 2019:
+Fv (TAP) , Raybould 2019:
   R24  totalCdrLength  : sum of CDR loop lengths from numbering
   R25  PSH             : Σ H(R₁)·H(R₂)/r² over surface CDR-vicinity pairs
                          within 7.5 Å heavy-atom distance, no type restriction
@@ -14,7 +14,7 @@ Fv (TAP) — Raybould 2019:
   R28  SFvCSP          : [Σ_RH Q(RH)] × [Σ_RL Q(RL)] over surface-exposed
                          whole-V-domain residues (NOT CDR-restricted)
 
-VHH (TNP) — Gordon 2025:
+VHH (TNP) , Gordon 2025:
   R29  totalCdrLength  : sum of three CDR lengths (single chain)
   R31  PSH/PPC/PNC     : same algorithms applied to one chain, but with
                          same-type-pair restriction (PSH: H-H pairs only;
@@ -25,7 +25,7 @@ VHH (TNP) — Gordon 2025:
 Per R34/R36 the residue's local positional uncertainty is the parser's
 mean heavy-atom B-factor, gated region-aware against `frConfidenceGatingThreshold`
 (framework) or `cdrConfidenceGatingThreshold` (CDR). For each metric we
-emit a parallel `<metric>LowConfidenceResidueFraction` Double — fraction
+emit a parallel `<metric>LowConfidenceResidueFraction` Double , fraction
 of *contributing* residues that exceed their region threshold (R36).
 """
 
@@ -112,6 +112,27 @@ def _centroid(atoms) -> tuple[float, float, float]:
     )
 
 
+def _weight_fns(in_bridge: dict):
+    """Build the three PSH / PPC / PNC weight closures over a shared
+    `in_bridge` map (R15a: salt-bridged residues take the glycine
+    hydrophobicity and zero charge). The same three are needed by both
+    `_chain_metrics` (per-chain, VHH mode) and the TAP-mode Fv pool
+    built from H+L; centralising avoids triple-duplicating them."""
+    def hydrophobicity(i, aa):
+        v = hydrophobicity_of(aa, in_bridge.get(i, False), KD_HYDROPHOBICITY, GLYCINE_HYDROPHOBICITY)
+        return v if v is not None else 0.0
+
+    def pos_charge_abs(i, aa):
+        c = charge_of(aa, in_bridge.get(i, False))
+        return c if c > 0 else 0.0
+
+    def neg_charge_abs(i, aa):
+        c = charge_of(aa, in_bridge.get(i, False))
+        return -c if c < 0 else 0.0
+
+    return hydrophobicity, pos_charge_abs, neg_charge_abs
+
+
 def detect_salt_bridges(parsed) -> set[tuple[str, int, str]]:
     """Walk every K/R + D/E pair, return the set of residue keys that are in
     a salt bridge. R15a uses N+ ↔ O- atom-pair distance ≤ 3.2 Å. Returned
@@ -182,7 +203,7 @@ _CDR_VICINITY_ANGSTROMS = 4.0
 
 @dataclass
 class FvMetrics:
-    """R24-R28 (Fv mode) — emitted only when 2 mapped chains and Fv-shape input."""
+    """R24-R28 (Fv mode) , emitted only when 2 mapped chains and Fv-shape input."""
     totalCdrLength: int
     psh: float
     pshPatchCount: int
@@ -193,7 +214,7 @@ class FvMetrics:
 
 @dataclass
 class VhhMetrics:
-    """R29-R33 (VHH mode) — single chain, type-restricted patches, CDRH3 compactness."""
+    """R29-R33 (VHH mode) , single chain, type-restricted patches, CDRH3 compactness."""
     totalCdrLength: int
     psh: float
     pshPatchCount: int
@@ -452,8 +473,6 @@ def compute_metrics(
 
     salt_bridges = detect_salt_bridges(parsed)
     chain_id_to_residues = dict(parsed.residues_by_chain)
-    h_scale = KD_HYDROPHOBICITY
-    h_glycine = GLYCINE_HYDROPHOBICITY
 
     h_present = heavy_chain_id and heavy_chain_id in chain_id_to_residues
     l_present = light_chain_id and light_chain_id in chain_id_to_residues
@@ -474,17 +493,7 @@ def compute_metrics(
         regions = [region_for(role, r.res_seq, numbering_scheme, parsed.platforma_cdrs) for r in residues]
         cdr_vic = _cdr_vicinity_residues(residues, regions, rsasa_lookup, rsasa_buried_cutoff)
 
-        def h_weight(i, aa):
-            v = hydrophobicity_of(aa, in_bridge.get(i, False), h_scale, h_glycine)
-            return v if v is not None else 0.0
-
-        def pos_charge_abs(i, aa):
-            c = charge_of(aa, in_bridge.get(i, False))
-            return c if c > 0 else 0.0
-
-        def neg_charge_abs(i, aa):
-            c = charge_of(aa, in_bridge.get(i, False))
-            return -c if c < 0 else 0.0
+        h_weight, pos_charge_abs, neg_charge_abs = _weight_fns(in_bridge)
 
         psh, psh_patches, psh_contrib = _residue_pair_sum(
             cdr_vic, residues, aa_letters, h_weight,
@@ -506,7 +515,7 @@ def compute_metrics(
     out: dict = {"mode": mode}
 
     if mode == "TAP":
-        # Combine H and L into a single CDR-vicinity / pair pool — but the
+        # Combine H and L into a single CDR-vicinity / pair pool , but the
         # spec defines PSH/PPC/PNC over the *Fv* (both chains together).
         # We compute per-chain CDR vicinities, then merge for inter-chain
         # pair contributions.
@@ -545,17 +554,7 @@ def compute_metrics(
 
         cdr_vic = _cdr_vicinity_residues(residues, regions, rsasa_lookup, rsasa_buried_cutoff)
 
-        def h_weight(i, aa):
-            v = hydrophobicity_of(aa, in_bridge.get(i, False), h_scale, h_glycine)
-            return v if v is not None else 0.0
-
-        def pos_charge_abs(i, aa):
-            c = charge_of(aa, in_bridge.get(i, False))
-            return c if c > 0 else 0.0
-
-        def neg_charge_abs(i, aa):
-            c = charge_of(aa, in_bridge.get(i, False))
-            return -c if c < 0 else 0.0
+        h_weight, pos_charge_abs, neg_charge_abs = _weight_fns(in_bridge)
 
         psh, psh_patches, psh_contrib = _residue_pair_sum(cdr_vic, residues, aa_letters, h_weight)
         ppc, _, ppc_contrib = _residue_pair_sum(cdr_vic, residues, aa_letters, pos_charge_abs)

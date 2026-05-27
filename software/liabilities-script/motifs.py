@@ -1,6 +1,6 @@
 # Regex set + weights + risk taxonomy copied VERBATIM from
 # blocks/antibody-sequence-liabilities/liabilities-calc-script/src/definitions.py
-# (R16). Spec requires this block to be standalone — no import — to avoid
+# (R16). Spec requires this block to be standalone , no import , to avoid
 # silent half-coupling. A parity check vs the source is owed at M1.
 
 import math
@@ -84,7 +84,7 @@ class MotifHit:
     region: str | None
     # R18: absolute SASA (Å²) for the chemically-relevant residue, paired
     # with rSASA. Spec mandates both even though rSASA × Ala-X-Ala ref
-    # recovers it — keeping the raw value makes downstream analytics
+    # recovers it , keeping the raw value makes downstream analytics
     # comparable to TAP-style reports without a back-conversion step.
     sasa: float | None
     rsasa: float
@@ -106,7 +106,7 @@ class MotifHit:
 
 
 def _exposure_factor(rsasa: float | None) -> float:
-    # R20: logistic centered at 0.30 — avoids a cliff at the buried/exposed
+    # R20: logistic centered at 0.30 , avoids a cliff at the buried/exposed
     # cutoff so transitional residues taper smoothly into the score.
     if rsasa is None:
         return 0.0
@@ -173,13 +173,13 @@ def _score_motif_hit(
     arithmetic per hit.
 
     Computes:
-      • exposureFactor  — R20 logistic on rSASA (smooths the buried/exposed
+      • exposureFactor  , R20 logistic on rSASA (smooths the buried/exposed
                           cliff at 0.30).
-      • confidence       — residue's mean heavy-atom B-factor (R34).
-      • confidenceGated  — true when B-factor exceeds the region-aware
+      • confidence       , residue's mean heavy-atom B-factor (R34).
+      • confidenceGated  , true when B-factor exceeds the region-aware
                           threshold (R35); gated hits stay in the table
                           for traceability but skip motifStructuralRiskScore.
-      • weightedScore    — fixability_weight × region_weight × exposureFactor.
+      • weightedScore    , fixability_weight × region_weight × exposureFactor.
                           The R19 region weight rewards CDR-localized hits
                           (most therapeutically relevant) over framework.
     """
@@ -220,7 +220,7 @@ def detect_motifs(
 ):
     """Walk each chain, apply the regex set, and emit hits whose
     chemically-relevant residue (R17) has rSASA >= cutoff. Buried matches
-    are suppressed entirely per the spec, not just down-weighted — a buried
+    are suppressed entirely per the spec, not just down-weighted , a buried
     NG can't be deamidated, so flagging it would be a false positive.
 
     When numbering_scheme + heavy/light chain mapping are supplied, hits get
@@ -252,7 +252,7 @@ def detect_motifs(
                     continue
                 residue = residues[pos_in_seq]
                 if AA_THREE_TO_ONE.get(residue.res_name) is None:
-                    # Non-standard residue — skip (we can't trust the
+                    # Non-standard residue , skip (we can't trust the
                     # 1-letter translation that fed the regex match).
                     continue
                 key = (chain_id, f"{residue.res_seq}{residue.i_code}".strip())

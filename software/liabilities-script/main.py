@@ -260,13 +260,15 @@ def analyze_pdb(
         parsed, numbering_scheme, heavy_chain_id, chain_count_mode=mode
     )
     hallmark_warning = ""
-    if isinstance(hallmark, dict) and hallmark.get("mismatch"):
+    if hallmark and hallmark.get("mismatch"):
         impl = hallmark.get("impliedMode", "?")
         hallmark_warning = (
             f"hallmark tetrad implies {impl} but chain count says {mode}"
         )
 
-    sm = surface_metrics if isinstance(surface_metrics, dict) and "mode" in surface_metrics else {}
+    # compute_metrics returns {} when neither chain is mapped; .get(...) below
+    # returns None for every metric in that case.
+    sm = surface_metrics
     flags = developability["flags"]
     extra_cys = sum(1 for h in cys_hits if h.cysClass == "cys_extra")
     exposed_extra_cys = sum(

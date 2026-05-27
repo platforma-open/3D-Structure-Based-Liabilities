@@ -56,6 +56,4 @@ export function readString(col: PTableColumn, i: number): string | null {
  *  `outputWithStatus` result whose `value` carries `fullTableHandle` for the
  *  pFrameDriver. Lives here (next to readCell) since both consumers
  *  (useClusterAssignments, useRunSummaryAlerts) operate on the same handle. */
-export type ScoresTableOutput =
-  | { ok?: boolean; value?: { fullTableHandle?: unknown } }
-  | undefined;
+export type ScoresTableOutput = { ok?: boolean; value?: { fullTableHandle?: unknown } } | undefined;
