@@ -3,15 +3,13 @@
 Thresholds live in `data/thresholds.json` per spec line 142 (`R39`) so the
 calibration source + cohortSize travel with the values. Loaded once at
 import time; runtime threshold checks read from the parsed dict.
-Composite scoring (R41) mirrors `compute_developability_score` in the
-sequence-liabilities block: fixability_weight × region_weight × exposure
-for motifs, plus per-mode flag bumps (red=8, amber=3, green=0), plus the
-Cys contributions (8 × exposed_extra + 20 × broken_canonical + 20 ×
-missing_canonical).
-
-VHH PSH/PPC/PNC/totalCdrLength thresholds are deliberately omitted from
-the JSON — they need M1 calibration against the TNP source paper; the
-code below falls back to Fv values for those four metrics until then.
+Fv values come from Raybould 2019 Table 2 (cohortSize 242). VHH values
+come from the TNP source paper's `assign_flag()` function in
+oxpig/TNP `bin/TNP` (cohortSize 36). Composite scoring (R41) mirrors
+`compute_developability_score` in the sequence-liabilities block:
+fixability_weight × region_weight × exposure for motifs, plus per-mode
+flag bumps (red=8, amber=3, green=0), plus the Cys contributions
+(8 × exposed_extra + 20 × broken_canonical + 20 × missing_canonical).
 """
 
 import json
@@ -103,8 +101,9 @@ def compute_flags(surface_metrics: dict) -> dict[str, str]:
     if mode == "TAP":
         thresholds = _FV_THRESHOLDS
     elif mode == "TNP":
-        # Fall back to Fv thresholds for the four shared metrics; add VHH-specific.
-        thresholds = {**_FV_THRESHOLDS, **_VHH_THRESHOLDS}
+        # VHH is now fully populated from TNP source `assign_flag()`; use
+        # its own thresholds end-to-end (no Fv fallback needed).
+        thresholds = _VHH_THRESHOLDS
     else:
         return {}
 

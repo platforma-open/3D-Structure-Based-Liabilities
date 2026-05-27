@@ -1,5 +1,5 @@
 {
-  "_comment": "Spec R39 amber/red threshold bands per Raybould 2019 Table 2 (Fv mode) and Gordon 2025 (VHH mode CDRH3 compactness). cohortSize is the calibration-cohort size from the source paper; preserved here so downstream users can weigh the threshold's statistical confidence. VHH PSH/PPC/PNC/totalCdrLength thresholds are deliberately omitted — they need M1 calibration from the TNP source paper; the scoring code falls back to Fv values until then.",
+  "_comment": "Spec R39 amber/red threshold bands. Fv mode: Raybould 2019 Table 2 (cohortSize 242). VHH mode: Gordon 2025 TNP `assign_flag()` function in oxpig/TNP repo (cohortSize 36). cohortSize preserved so downstream users can weigh statistical confidence.",
   "fv": {
     "cohortSize": 242,
     "citation": "Raybould et al., PNAS 2019, vol. 116 no. 10, 4025-4030 (Table 2)",
@@ -30,12 +30,32 @@
   },
   "vhh": {
     "cohortSize": 36,
-    "citation": "Gordon et al., bioRxiv 2025, doi:10.1101/2025.08.11.669635 (TNP)",
+    "citation": "Gordon et al., bioRxiv 2025, doi:10.1101/2025.08.11.669635 (TNP); thresholds verbatim from oxpig/TNP `bin/TNP` assign_flag()",
     "thresholds": {
+      "totalCdrLength": {
+        "bidirectional": true,
+        "green": [25, 36],
+        "amber_lo": [20, 24],
+        "amber_hi": [37, 39]
+      },
+      "psh": {
+        "bidirectional": true,
+        "green": [79.60, 126.82],
+        "amber_lo": [73.40, 79.59],
+        "amber_hi": [126.83, 155.47]
+      },
+      "ppc": {
+        "direction": "high_bad",
+        "amber": [0.39, 1.18]
+      },
+      "pnc": {
+        "direction": "high_bad",
+        "amber": [1.47, 1.88]
+      },
       "cdrh3Compactness": {
         "bidirectional": true,
-        "green": [0.82, 1.57],
-        "amber_lo": [0.56, 0.82],
+        "green": [0.82, 1.56],
+        "amber_lo": [0.56, 0.81],
         "amber_hi": [1.57, 1.61]
       }
     }
