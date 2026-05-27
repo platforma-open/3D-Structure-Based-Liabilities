@@ -26,8 +26,25 @@ specs := import(":specs")
 liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-based-liabilities.software:liabilities")
 
 wf.prepare(func(args) {
+	// Anchor on the PDB column so upstream enrichments sharing the
+	// scClonotypeKey axis (R2) auto-discover. R5/R29: cdrh3Length from
+	// upstream feeds the R30 compactness numerator instead of our
+	// REMARK 99 / scheme-fallback count. Optional: when the prediction
+	// block in the chain is older and doesn't emit cdrh3Length, the
+	// bundle yields no column and Python falls back to its in-block count.
+	bb := wf.createPBundleBuilder()
+	bb.ignoreMissingDomains()
+	bb.addAnchor("pdb", args.primaryRef.column)
+	bb.addMulti(
+		{
+			axes: [{ anchor: "pdb", idx: 0 }],
+			name: "pl7.app/structure/cdrh3Length"
+		},
+		"cdrh3Length")
+
 	return {
-		resolvedPdb: wf.resolve(args.primaryRef.column, { errIfMissing: true })
+		resolvedPdb: wf.resolve(args.primaryRef.column, { errIfMissing: true }),
+		columns: bb.build()
 	}
 })
 
@@ -76,6 +93,18 @@ wf.body(func(args) {
 		arg("--output-tsv").arg("per_clonotype.tsv").
 		arg("--fr-confidence-gating-threshold").arg(string(args.frConfThresh)).
 		arg("--cdr-confidence-gating-threshold").arg(string(args.cdrConfThresh))
+
+	// R5/R29: stage upstream `pl7.app/structure/cdrh3Length` as a TSV sidecar
+	// so Python uses it as the R30 compactness numerator. Skip silently when
+	// no compatible column is in the result pool (the in-block REMARK 99 /
+	// scheme-fallback count remains the fallback).
+	cdrh3Cols := args.columns.getColumns("cdrh3Length")
+	if !is_undefined(cdrh3Cols) && len(cdrh3Cols) > 0 {
+		cdrh3Tsv := xsv.exportFrame([cdrh3Cols[0]], "tsv", { mem: "1GiB", cpu: 1 })
+		cmd = cmd.
+			addFile("cdrh3_lengths.tsv", cdrh3Tsv).
+			arg("--cdrh3-lengths").arg("cdrh3_lengths.tsv")
+	}
 
 	// Optional CLI knobs (R10 fallback path + R9 chain identity overrides).
 	// Empty strings are skipped so Python falls through to its defaults.

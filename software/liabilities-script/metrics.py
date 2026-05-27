@@ -364,11 +364,18 @@ def _total_cdr_length_for_chain(residues, regions) -> int:
     return sum(1 for region in regions if region in ("CDR1", "CDR2", "CDR3"))
 
 
-def _cdrh3_compactness_imgt(residues, chain_id_to_residues, h_chain_id, scheme) -> Optional[float]:
+def _cdrh3_compactness_imgt(
+    residues,
+    chain_id_to_residues,
+    h_chain_id,
+    scheme,
+    upstream_cdrh3_length: Optional[int] = None,
+) -> Optional[float]:
     """R30 compactness: cdrh3Length / ρ where ρ = ‖centroid(CDR3 Cα, IMGT
     105-117) − centroid(anchor Cα, IMGT 102+103+118+119)‖. IMGT-anchored;
     returns None for non-IMGT schemes (Chothia/Kabat lack a defined anchor
-    set in the spec)."""
+    set in the spec). When `upstream_cdrh3_length` is provided (R5/R29) it
+    is used as the numerator; otherwise the in-block CDR3 Cα count is."""
     if scheme != "imgt" or not h_chain_id:
         return None
     residues = chain_id_to_residues.get(h_chain_id)
@@ -396,7 +403,8 @@ def _cdrh3_compactness_imgt(residues, chain_id_to_residues, h_chain_id, scheme) 
     rho = math.sqrt((cx - ax) ** 2 + (cy - ay) ** 2 + (cz - az) ** 2)
     if rho == 0:
         return None
-    return len(cdr3_ca) / rho
+    numerator = upstream_cdrh3_length if upstream_cdrh3_length is not None else len(cdr3_ca)
+    return numerator / rho
 
 
 def _build_chain_context(
@@ -429,6 +437,7 @@ def compute_metrics(
     rsasa_buried_cutoff: float,
     fr_conf_thresh: float = 4.0,
     cdr_conf_thresh: float = 6.0,
+    upstream_cdrh3_length: Optional[int] = None,
 ):
     """Returns a dict suitable for JSON emission. Includes Fv metrics when
     both heavy + light are mapped; VHH metrics when only heavy is mapped
@@ -598,7 +607,8 @@ def compute_metrics(
          psh_contrib, ppc_contrib, pnc_contrib,
          h_res, h_aa, h_rsasa, h_bridge, h_regions) = _chain_metrics(heavy_chain_id, "H", True)
         compactness = _cdrh3_compactness_imgt(
-            None, chain_id_to_residues, heavy_chain_id, numbering_scheme
+            None, chain_id_to_residues, heavy_chain_id, numbering_scheme,
+            upstream_cdrh3_length=upstream_cdrh3_length,
         )
         cdr_indices = [i for i, region in enumerate(h_regions) if region in ("CDR1", "CDR2", "CDR3")]
         # CDRH3 compactness contributors: every CDR3 residue + the IMGT

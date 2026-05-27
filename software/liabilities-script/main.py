@@ -151,6 +151,7 @@ def analyze_pdb(
     rsasa_buried_cutoff: float,
     fr_conf_thresh: float,
     cdr_conf_thresh: float,
+    upstream_cdrh3_length: int | None = None,
 ) -> dict:
     """Run the full per-clonotype analysis on a single PDB. Returns a dict
     matching the TSV column set. Raises ValueError on R7 / R10 failures.
@@ -219,6 +220,7 @@ def analyze_pdb(
         rsasa_buried_cutoff=rsasa_buried_cutoff,
         fr_conf_thresh=fr_conf_thresh,
         cdr_conf_thresh=cdr_conf_thresh,
+        upstream_cdrh3_length=upstream_cdrh3_length,
     )
     developability = compute_developability(
         motif_hits, cys_hits, surface_metrics, rsasa_buried_cutoff
@@ -313,6 +315,13 @@ def main() -> None:
     ap.add_argument("--chain-l", default=None,
                     help="PDB chain ID treated as the light chain when REMARK "
                          "99 doesn't declare it.")
+    ap.add_argument("--cdrh3-lengths", type=Path, default=None,
+                    dest="cdrh3_lengths_tsv",
+                    help="Optional TSV exported from upstream's "
+                         "`pl7.app/structure/cdrh3Length` PColumn. When "
+                         "provided, the per-clonotype value overrides the "
+                         "in-block CDR3 Cα count as the R30 compactness "
+                         "numerator (R5 / R29).")
     args = ap.parse_args()
 
     if not args.pdb_dir.is_dir():
@@ -324,6 +333,26 @@ def main() -> None:
         index_rows = [tuple(line.rstrip("\n").split("\t")) for line in fh if line.strip()]
     if not index_rows:
         raise SystemExit(f"--pdb-index is empty: {args.pdb_index}")
+
+    upstream_cdrh3: dict[str, int] = {}
+    if args.cdrh3_lengths_tsv is not None and args.cdrh3_lengths_tsv.is_file():
+        with args.cdrh3_lengths_tsv.open() as fh:
+            reader = csv.DictReader(fh, delimiter="\t")
+            key_col = next((c for c in (reader.fieldnames or []) if "scClonotypeKey" in c), None)
+            val_col = next(
+                (c for c in (reader.fieldnames or [])
+                 if c != key_col and ("cdrh3Length" in c or c.endswith("Length"))),
+                None,
+            )
+            if key_col and val_col:
+                for r in reader:
+                    raw = r.get(val_col)
+                    if raw is None or raw == "":
+                        continue
+                    try:
+                        upstream_cdrh3[r[key_col]] = int(float(raw))
+                    except (TypeError, ValueError):
+                        continue
 
     out_buf = StringIO()
     writer = csv.writer(out_buf, delimiter="\t", lineterminator="\n")
@@ -350,6 +379,7 @@ def main() -> None:
                 rsasa_buried_cutoff=args.rsasa_buried_cutoff,
                 fr_conf_thresh=args.fr_conf_thresh,
                 cdr_conf_thresh=args.cdr_conf_thresh,
+                upstream_cdrh3_length=upstream_cdrh3.get(clonotype_key),
             )
         except ValueError as e:
             print(
