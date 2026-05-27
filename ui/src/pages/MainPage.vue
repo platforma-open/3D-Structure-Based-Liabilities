@@ -320,7 +320,7 @@ const modalTitle = computed(() => {
         v-model="scoresLocalState"
         :settings="scoresTableSettings"
         :show-cell-button-for-axis-id="clonotypeAxisId"
-        :cell-button-invoke-rows-on-double-click="false"
+        :cell-button-invoke-rows-on-double-click="true"
         not-ready-text="Run on a predicted-structures dataset to see per-clonotype scores"
         no-rows-text="No scored clonotypes"
         @cell-button-clicked="openViewerForRow"
