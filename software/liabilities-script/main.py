@@ -196,8 +196,9 @@ def analyze_pdb(
             f"or 2 (paired Fv/TAP) chains only (spec R7)"
         )
 
-    sasa_lookup = compute_sasa(pdb_path)
-
+    # R10 fail-fast: numbering source check must happen before FreeSASA so
+    # the run aborts cheaply when both REMARK 99 records and --numbering-scheme
+    # are missing.
     has_remark_cdrs = bool(parsed.platforma_cdrs)
     has_scheme = bool(numbering_scheme)
     if not has_remark_cdrs and not has_scheme:
@@ -206,6 +207,9 @@ def analyze_pdb(
             "CDR records and no --numbering-scheme was provided. Region "
             "tagging requires one of the two (spec R10)."
         )
+
+    sasa_lookup = compute_sasa(pdb_path)
+
     numbering_warning = ""
     if not has_remark_cdrs and has_scheme:
         numbering_warning = (
