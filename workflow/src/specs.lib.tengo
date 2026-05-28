@@ -107,7 +107,7 @@ scoresColumnSpecs := {
 		name: "pl7.app/liabilities/mode",
 		annotations: {
 			"pl7.app/label": "Mode (R7)",
-			"pl7.app/table/visibility": "default",
+			"pl7.app/table/visibility": "optional",
 			"pl7.app/table/orderPriority": "1100"
 		}
 	},
@@ -262,9 +262,21 @@ scoresColumnSpecs := {
 		"pl7.app/liabilities/cdrh3CompactnessLowConfidenceResidueFraction",
 		"CDRH3 compactness low-conf fraction", "740"),
 
-	// R39 three-band threshold flags. Visible by default per R51.
-	totalCdrLengthFlag: flagColumnSpec(
-		"pl7.app/liabilities/totalCdrLengthFlag", "Total CDR length flag", "930"),
+	// R39 three-band threshold flags. Visible by default per R51, except
+	// `totalCdrLengthFlag` which is not in the spec's default-visible list
+	// (totalCdrLength itself is "Hidden behind show all", and its flag
+	// follows the raw metric).
+	totalCdrLengthFlag: {
+		valueType: "String",
+		name: "pl7.app/liabilities/totalCdrLengthFlag",
+		annotations: {
+			"pl7.app/label": "Total CDR length flag",
+			"pl7.app/isScore": "true",
+			"pl7.app/description": _FLAG_DESCRIPTION,
+			"pl7.app/table/visibility": "optional",
+			"pl7.app/table/orderPriority": "930"
+		}
+	},
 	pshFlag: flagColumnSpec(
 		"pl7.app/liabilities/pshFlag", "PSH flag", "970"),
 	ppcFlag: flagColumnSpec(
