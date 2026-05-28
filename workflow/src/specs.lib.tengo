@@ -1,4 +1,3 @@
-// vim: filetype=go
 // PColumn spec setup for the scores PFrame, the single output of the
 // single-shot Python pipeline. One row per clonotype, ~25 columns
 // covering composite scoring, counts, raw metrics, threshold flags, and
@@ -73,12 +72,12 @@ lowConfFractionSpec := func(name, label, orderPriority) {
 }
 
 // R39 three-band flag column. Always String ("green" / "amber" / "red" /
-// "-" sentinel when inapplicable), always visible by default per R51,
-// always carries the apo-vs-bound tooltip and isScore so PlAgDataTable
-// styles the cell. Identical shape per flag; only label / orderPriority
-// differ.
+// "-" sentinel when inapplicable), carries the apo-vs-bound tooltip and
+// isScore so PlAgDataTable styles the cell. Visibility differs: PSH /
+// PPC / PNC / SFvCSP / CDRH3-compactness flags are default-visible per
+// R51, totalCdrLengthFlag is optional (follows totalCdrLength itself).
 _FLAG_DESCRIPTION := "Flag reflects predicted apo conformation; bound conformation may differ."
-flagColumnSpec := func(name, label, orderPriority) {
+flagColumnSpec := func(name, label, orderPriority, visibility) {
 	return {
 		valueType: "String",
 		name: name,
@@ -86,7 +85,23 @@ flagColumnSpec := func(name, label, orderPriority) {
 			"pl7.app/label": label,
 			"pl7.app/isScore": "true",
 			"pl7.app/description": _FLAG_DESCRIPTION,
-			"pl7.app/table/visibility": "default",
+			"pl7.app/table/visibility": visibility,
+			"pl7.app/table/orderPriority": orderPriority
+		}
+	}
+}
+
+// Long-valued count columns (cysteine + motif counts, plus pshPatchCount).
+// All share label / visibility / orderPriority shape; visibility flips
+// per R51 (exposedExtra, brokenCanonical, surfacedMotif are
+// default-visible; the rest sit behind "show all").
+countLongSpec := func(name, label, orderPriority, visibility) {
+	return {
+		valueType: "Long",
+		name: name,
+		annotations: {
+			"pl7.app/label": label,
+			"pl7.app/table/visibility": visibility,
 			"pl7.app/table/orderPriority": orderPriority
 		}
 	}
@@ -111,60 +126,21 @@ scoresColumnSpecs := {
 			"pl7.app/table/orderPriority": "1100"
 		}
 	},
-	extraCysCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/extraCysCount",
-		annotations: {
-			"pl7.app/label": "Extra cysteines",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "720"
-		}
-	},
-	exposedExtraCysCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/exposedExtraCysCount",
-		annotations: {
-			"pl7.app/label": "Exposed extra cysteines",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "990"
-		}
-	},
-	brokenCanonicalDisulfideCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/brokenCanonicalDisulfideCount",
-		annotations: {
-			"pl7.app/label": "Broken canonical disulfides",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "980"
-		}
-	},
-	missingCanonicalCysCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/missingCanonicalCysCount",
-		annotations: {
-			"pl7.app/label": "Missing canonical cysteines",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "710"
-		}
-	},
-	surfacedMotifCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/surfacedMotifCount",
-		annotations: {
-			"pl7.app/label": "Surfaced motifs",
-			"pl7.app/table/visibility": "default",
-			"pl7.app/table/orderPriority": "1000"
-		}
-	},
-	confidenceGatedMotifCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/confidenceGatedMotifCount",
-		annotations: {
-			"pl7.app/label": "Confidence-gated motifs",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "900"
-		}
-	},
+	extraCysCount: countLongSpec(
+		"pl7.app/liabilities/extraCysCount", "Extra cysteines", "720", "optional"),
+	exposedExtraCysCount: countLongSpec(
+		"pl7.app/liabilities/exposedExtraCysCount", "Exposed extra cysteines", "990", "default"),
+	brokenCanonicalDisulfideCount: countLongSpec(
+		"pl7.app/liabilities/brokenCanonicalDisulfideCount",
+		"Broken canonical disulfides", "980", "default"),
+	missingCanonicalCysCount: countLongSpec(
+		"pl7.app/liabilities/missingCanonicalCysCount",
+		"Missing canonical cysteines", "710", "optional"),
+	surfacedMotifCount: countLongSpec(
+		"pl7.app/liabilities/surfacedMotifCount", "Surfaced motifs", "1000", "default"),
+	confidenceGatedMotifCount: countLongSpec(
+		"pl7.app/liabilities/confidenceGatedMotifCount",
+		"Confidence-gated motifs", "900", "optional"),
 	motifStructuralRiskScore: {
 		valueType: "Double",
 		name: "pl7.app/liabilities/motifStructuralRiskScore",
@@ -220,15 +196,8 @@ scoresColumnSpecs := {
 		"pl7.app/liabilities/psh", "PSH", ".2f", "860",
 		[83.84, 100.71, 156.20, 173.85]),
 	// R25: diagnostic Long count of distinct patches discovered (not score).
-	pshPatchCount: {
-		valueType: "Long",
-		name: "pl7.app/liabilities/pshPatchCount",
-		annotations: {
-			"pl7.app/label": "PSH patch count",
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "850"
-		}
-	},
+	pshPatchCount: countLongSpec(
+		"pl7.app/liabilities/pshPatchCount", "PSH patch count", "850", "optional"),
 	// R26 PPC / PNC: positive / negative patch scores.
 	ppc: metricColumnSpec(
 		"pl7.app/liabilities/ppc", "PPC", ".2f", "840", [1.25, 3.16]),
@@ -262,31 +231,21 @@ scoresColumnSpecs := {
 		"pl7.app/liabilities/cdrh3CompactnessLowConfidenceResidueFraction",
 		"CDRH3 compactness low-conf fraction", "740"),
 
-	// R39 three-band threshold flags. Visible by default per R51, except
-	// `totalCdrLengthFlag` which is not in the spec's default-visible list
-	// (totalCdrLength itself is "Hidden behind show all", and its flag
-	// follows the raw metric).
-	totalCdrLengthFlag: {
-		valueType: "String",
-		name: "pl7.app/liabilities/totalCdrLengthFlag",
-		annotations: {
-			"pl7.app/label": "Total CDR length flag",
-			"pl7.app/isScore": "true",
-			"pl7.app/description": _FLAG_DESCRIPTION,
-			"pl7.app/table/visibility": "optional",
-			"pl7.app/table/orderPriority": "930"
-		}
-	},
+	// R39 three-band threshold flags. PSH / PPC / PNC / SFvCSP / CDRH3
+	// compactness are default-visible per R51; totalCdrLengthFlag follows
+	// the raw `totalCdrLength` metric to "show all" instead.
+	totalCdrLengthFlag: flagColumnSpec(
+		"pl7.app/liabilities/totalCdrLengthFlag", "Total CDR length flag", "930", "optional"),
 	pshFlag: flagColumnSpec(
-		"pl7.app/liabilities/pshFlag", "PSH flag", "970"),
+		"pl7.app/liabilities/pshFlag", "PSH flag", "970", "default"),
 	ppcFlag: flagColumnSpec(
-		"pl7.app/liabilities/ppcFlag", "PPC flag", "960"),
+		"pl7.app/liabilities/ppcFlag", "PPC flag", "960", "default"),
 	pncFlag: flagColumnSpec(
-		"pl7.app/liabilities/pncFlag", "PNC flag", "950"),
+		"pl7.app/liabilities/pncFlag", "PNC flag", "950", "default"),
 	sfvcspFlag: flagColumnSpec(
-		"pl7.app/liabilities/sfvcspFlag", "SFvCSP flag", "940"),
+		"pl7.app/liabilities/sfvcspFlag", "SFvCSP flag", "940", "default"),
 	cdrh3CompactnessFlag: flagColumnSpec(
-		"pl7.app/liabilities/cdrh3CompactnessFlag", "CDRH3 compactness flag", "940")
+		"pl7.app/liabilities/cdrh3CompactnessFlag", "CDRH3 compactness flag", "940", "default")
 }
 
 // Order in which `xsv.importFile` emits columns into the resulting PFrame.
