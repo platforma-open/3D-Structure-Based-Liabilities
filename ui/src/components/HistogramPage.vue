@@ -8,7 +8,7 @@ import { computed } from "vue";
 // Spec R54 distribution view. Renders one per-metric histogram via
 // graph-maker. Amber/red threshold lines come from the metric column's
 // `pl7.app/graph/thresholds` annotation, honored by the histogram
-// template after milaboratory/visualizations PR #87.
+// template (graph-maker 1.4.3+, miplots4 transitively).
 const props = defineProps<{
   title: string;
   description: string;
