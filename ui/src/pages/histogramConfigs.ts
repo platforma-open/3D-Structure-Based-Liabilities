@@ -1,3 +1,5 @@
+import type { GraphMakerState } from "@milaboratories/graph-maker";
+
 /**
  * Spec R54 per-metric distribution page configs.
  *
@@ -77,3 +79,15 @@ export const histogramConfigs = {
     fillColor: "#cf6e83",
   },
 } as const satisfies Record<string, HistogramConfig>;
+
+/** Seed a graph-maker `bins` template from a histogram config. The `bins`
+ * layer needs an explicit fillColor; the template's default ('white') is
+ * invisible against the chart background. */
+export function makeGraphState(cfg: HistogramConfig): GraphMakerState {
+  return {
+    template: "bins",
+    title: cfg.title,
+    currentTab: null,
+    layersSettings: { bins: { fillColor: cfg.fillColor } },
+  };
+}

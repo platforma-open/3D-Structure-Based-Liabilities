@@ -4,7 +4,7 @@ import { computed, ref } from "vue";
 import { useApp } from "../app";
 import HistogramPage from "../components/HistogramPage.vue";
 import { useDetectedMode } from "../composables/useDetectedMode";
-import { histogramConfigs } from "./histogramConfigs";
+import { histogramConfigs, makeGraphState } from "./histogramConfigs";
 
 const app = useApp();
 const scoresPf = computed(() => {
@@ -23,12 +23,7 @@ const valueSpec = computed(() =>
   mode.value === "TNP" ? app.model.outputs.cdrh3CompactnessSpec : app.model.outputs.sfvcspSpec,
 );
 
-const graphState = ref<GraphMakerState>({
-  template: "bins",
-  title: config.value.title,
-  currentTab: null,
-  layersSettings: { bins: { fillColor: config.value.fillColor } },
-});
+const graphState = ref<GraphMakerState>(makeGraphState(config.value));
 </script>
 
 <template>

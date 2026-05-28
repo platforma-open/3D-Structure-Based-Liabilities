@@ -43,10 +43,10 @@ const scoresLocalState = ref(createPlDataTableStateV2());
 const pdbsMap = computed(() => app.model.outputs.clonotypePdbsMap);
 const clonotypeAxisId = computed(() => app.model.outputs.clonotypeAxisId);
 
-// F2 pretty clonotype labels. Sourced from `scoresTable.fullPframeHandle`
-// (auto-joined `pl7.app/label` column); the dedicated `clonotypeLabelsPf`
-// output came up empty via `findDataWithCompatibleSpec` for
-// domain-bound axes.
+// F2 pretty clonotype labels. The PFrame driver auto-joins upstream's
+// `pl7.app/label` column into `scoresTable.fullPframeHandle` on the
+// shared scClonotypeKey axis; resolving labels through that handle
+// avoids a second result-pool query and stays in sync with the table.
 const clonotypeLabelsPf = computed(() => {
   const t = app.model.outputs.scoresTable;
   return t?.ok && t.value ? t.value.fullPframeHandle : undefined;
@@ -112,9 +112,7 @@ const numberingSchemeOptions = [
 
 const modalTitle = computed(() => {
   const k = selectedClonotypeKey.value;
-  if (!k) return "Clonotype detail";
-  const label = resolveLabel(k);
-  return label && label !== k ? `${label} · liabilities detail` : `${k} · liabilities detail`;
+  return k ? `${resolveLabel(k)} · liabilities detail` : "Clonotype detail";
 });
 </script>
 

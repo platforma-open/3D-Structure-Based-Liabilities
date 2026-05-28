@@ -9,6 +9,8 @@ import type {
   PColumnIdAndSpec,
   PFrameHandle,
   PObjectSpec,
+  PlRef,
+  ValueType,
 } from "@platforma-sdk/model";
 import {
   BlockModelV3,
@@ -83,6 +85,24 @@ function specFromScores(ctx: ScoresCtx, name: string): PColumnIdAndSpec | undefi
   return col ? { columnId: col.id, spec: col.spec } : undefined;
 }
 
+const SC_CLONOTYPE_AXIS = { type: "String", name: "pl7.app/vdj/scClonotypeKey" } as const;
+
+function findOnScClonotype(ctx: ScoresCtx, name: string, valueType: ValueType) {
+  return ctx.resultPool.findDataWithCompatibleSpec({
+    kind: "PColumn",
+    name,
+    valueType,
+    axesSpec: [SC_CLONOTYPE_AXIS],
+  });
+}
+
+function resolvePrimaryRef(ctx: {
+  args?: { primaryRef?: { column?: PlRef } };
+  data?: BlockData;
+}): PlRef | undefined {
+  return ctx.args?.primaryRef?.column ?? ctx.data?.dataset?.primary?.column;
+}
+
 export const platforma = BlockModelV3.create(dataModel)
   .args((data) => {
     // Spec R1 / R46. UI carries `dataset: DatasetSelection`; we unwrap
@@ -131,51 +151,23 @@ export const platforma = BlockModelV3.create(dataModel)
   .outputWithStatus("scoresTable", (ctx) => {
     const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
     if (pCols === undefined) return undefined;
-    const upstreamCdrh3 = ctx.resultPool.findDataWithCompatibleSpec({
-      kind: "PColumn",
-      name: "pl7.app/structure/cdrh3Length",
-      valueType: "Long",
-      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
-    });
-    // Upstream emits a single-axis String `pl7.app/label` column anchored
-    // on `scClonotypeKey`. PlAgDataTable's isLabelColumn picks it up and
-    // substitutes the label into the row-axis cell display, so opaque
-    // clonotype keys become readable clone names.
-    const upstreamLabel = ctx.resultPool.findDataWithCompatibleSpec({
-      kind: "PColumn",
-      name: "pl7.app/label",
-      valueType: "String",
-      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
-    });
-    // Spec R42 , surface the cluster axis when the 3D Structure Clustering
-    // block is upstream. The block emits these on the same scClonotypeKey
-    // axis, so the PFrame driver auto-joins them into per-clonotype rows.
-    // Users can then sort / filter / group by cluster in the table UI.
-    // No-op (empty join) when no clustering block is in the pipeline.
-    const clusterId = ctx.resultPool.findDataWithCompatibleSpec({
-      kind: "PColumn",
-      name: "pl7.app/clusterId",
-      valueType: "String",
-      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
-    });
-    const isCentroid = ctx.resultPool.findDataWithCompatibleSpec({
-      kind: "PColumn",
-      name: "pl7.app/structure/clustering/isCentroid",
-      valueType: "Int",
-      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
-    });
-    const tmDistance = ctx.resultPool.findDataWithCompatibleSpec({
-      kind: "PColumn",
-      name: "pl7.app/structure/clustering/tmDistanceToCentroid",
-      valueType: "Double",
-      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
-    });
-    const tmScore = ctx.resultPool.findDataWithCompatibleSpec({
-      kind: "PColumn",
-      name: "pl7.app/structure/clustering/tmScoreToCentroid",
-      valueType: "Double",
-      axesSpec: [{ type: "String", name: "pl7.app/vdj/scClonotypeKey" }],
-    });
+    // R5 sanity-check + R42 cluster enrichment + `pl7.app/label` for pretty
+    // row keys. PlAgDataTable auto-joins on the shared scClonotypeKey axis;
+    // missing matches simply stay as empty cells.
+    const upstreamCdrh3 = findOnScClonotype(ctx, "pl7.app/structure/cdrh3Length", "Long");
+    const upstreamLabel = findOnScClonotype(ctx, "pl7.app/label", "String");
+    const clusterId = findOnScClonotype(ctx, "pl7.app/clusterId", "String");
+    const isCentroid = findOnScClonotype(ctx, "pl7.app/structure/clustering/isCentroid", "Int");
+    const tmDistance = findOnScClonotype(
+      ctx,
+      "pl7.app/structure/clustering/tmDistanceToCentroid",
+      "Double",
+    );
+    const tmScore = findOnScClonotype(
+      ctx,
+      "pl7.app/structure/clustering/tmScoreToCentroid",
+      "Double",
+    );
     // Spec R51 , default-visible columns include the mode-appropriate
     // flag only. Mode lives on `BlockData.detectedMode`, filled by the UI
     // watcher after the first successful run. Until it is set, both
@@ -229,41 +221,17 @@ export const platforma = BlockModelV3.create(dataModel)
   .output("devScoreSpec", (ctx) =>
     specFromScores(ctx, "pl7.app/liabilities/structuralDevelopabilityScore"),
   )
-  // Upstream `pl7.app/label` column anchored on scClonotypeKey. Exposed as
-  // a standalone PFrame so the strip plot can resolve readable clone names
-  // for each dot; the scoresTable already auto-substitutes labels in its
-  // row-axis cell display via PlAgDataTable's isLabelColumn detection.
-  .output("clonotypeLabelsPf", (ctx): PFrameHandle | undefined => {
-    // Source from scoresData.getPColumns() instead of resultPool query.
-    // The PFrame driver auto-joins upstream `pl7.app/label` (and other
-    // scClonotypeKey-anchored columns) into scoresData's column set, but
-    // resultPool.findDataWithCompatibleSpec returns empty here in
-    // PrimaryRef-path runs. Mirrors 3d-structure-prediction's model
-    // pattern (structuresTable.getPColumns()).
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (!pCols) return undefined;
-    const labelCol = pCols.find(
-      (c) =>
-        c.spec.name === "pl7.app/label" &&
-        c.spec.axesSpec.length === 1 &&
-        c.spec.axesSpec[0].name === "pl7.app/vdj/scClonotypeKey",
-    );
-    if (!labelCol) return undefined;
-    return ctx.createPFrame([labelCol]);
-  })
   // Spec R52 , per-clonotype PDB ResourceMap exposed for the viewer modal.
   // Reads the upstream `pl7.app/structure/pdb` PColumn (axis:
   // scClonotypeKey, valueType File) and parses it into [{key, value}]
   // pairs; UI consumes via `entry.value.handle` (a RemoteBlobHandle) and
   // hands it to PlStructureViewer.
   .output("clonotypePdbsMap", (ctx) => {
-    // Resolve through the user-picked PlRef inside the PrimaryRef
-    // envelope rather than fuzzy-matching the result pool. The PlRef
-    // lives at `primaryRef.column` (spec R1); `findDataWithCompatibleSpec`
-    // was returning empty here even with name + valueType + axes + domain
-    // all aligned, so we use the canonical ref-based path , same as how
-    // the workflow accesses it.
-    const ref = ctx.args?.primaryRef?.column ?? ctx.data?.dataset?.primary?.column;
+    // Resolve through the user-picked PlRef inside the PrimaryRef envelope
+    // (spec R1) rather than fuzzy-matching the result pool ,
+    // `findDataWithCompatibleSpec` was returning empty here even with
+    // name + valueType + axes + domain all aligned.
+    const ref = resolvePrimaryRef(ctx);
     if (!ref) return undefined;
     const pdbCol = ctx.resultPool.getPColumnByRef(ref);
     if (!pdbCol) return undefined;
@@ -279,15 +247,12 @@ export const platforma = BlockModelV3.create(dataModel)
   // UI uses this to attach PlAgDataTable's `show-cell-button-for-axis-id`
   // so the viewer-trigger button renders on the clonotype-key column.
   .output("clonotypeAxisId", (ctx): AxisId | undefined => {
-    // Resolve through the user-picked PlRef inside the PrimaryRef envelope
-    // (spec R1), then read its spec.
-    const ref = ctx.args?.primaryRef?.column ?? ctx.data?.dataset?.primary?.column;
+    const ref = resolvePrimaryRef(ctx);
     if (!ref) return undefined;
     const pdbSpec = ctx.resultPool.getPColumnSpecByRef(ref);
     if (!pdbSpec) return undefined;
-    // The upstream PDB column carries [sampleId, scClonotypeKey] , match
-    // the clonotype axis by name rather than index, since `[0]` is
-    // sampleId here and the cell button must hang off the clonotype axis.
+    // Match the clonotype axis by name in case the upstream PDB column
+    // carries multiple axes (e.g. legacy [sampleId, scClonotypeKey] shape).
     const found = pdbSpec.axesSpec.find((a) => a.name === "pl7.app/vdj/scClonotypeKey");
     if (!found) return undefined;
     // Return a stripped AxisId , `PlAgDataTableV2` does an `isJsonEqual`

@@ -3,15 +3,10 @@ import type { GraphMakerState } from "@milaboratories/graph-maker";
 import { ref } from "vue";
 import { useApp } from "../app";
 import HistogramPage from "../components/HistogramPage.vue";
-import { histogramConfigs } from "./histogramConfigs";
+import { histogramConfigs, makeGraphState } from "./histogramConfigs";
 
 const app = useApp();
-const graphState = ref<GraphMakerState>({
-  template: "bins",
-  title: histogramConfigs.ppc.title,
-  currentTab: null,
-  layersSettings: { bins: { fillColor: histogramConfigs.ppc.fillColor } },
-});
+const graphState = ref<GraphMakerState>(makeGraphState(histogramConfigs.ppc));
 </script>
 
 <template>
