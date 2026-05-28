@@ -151,10 +151,10 @@ _RISK_ORDER = {n: i for i, n in enumerate(_RISK_LEVELS)}
 
 
 def _seq_risk_to_level(rc: str) -> str:
-    """R41a , sequence-side risk class → R41a level. Identity-ish mapping
-    that defends against unexpected `sequenceRiskClass` values by falling
-    through to "None"."""
-    return {"High": "High", "Medium": "Medium", "Low": "Low"}.get(rc, "None")
+    """R41a sequence-side risk class → ladder level. Identity for the four
+    known values; anything else (None, unexpected labels) falls through to
+    "None" so an upstream regression can't silently inflate a candidate."""
+    return rc if rc in _RISK_LEVELS else "None"
 
 
 def _developability_risk(motif_hits, flags: dict[str, str]) -> str:
@@ -241,9 +241,4 @@ def compute_developability(
         "structuralDevelopabilityScore": structural_developability_score,
         "structuralDevelopabilityRisk": base_level,
         "structuralIntegrityRisk": structural_integrity_risk,
-        "components": {
-            "motifContribution": motif_contrib,
-            "metricFlagContribution": flag_contrib,
-            "cysteineContribution": cys_contrib,
-        },
     }

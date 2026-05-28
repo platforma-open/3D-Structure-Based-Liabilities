@@ -184,7 +184,6 @@ class TestCompositeDevelopability:
     def test_motif_contribution_only(self):
         motif = _motif(weighted_score=3.0)
         result = compute_developability([motif], [], self._fv_green(), 0.075)
-        assert result["components"]["motifContribution"] == 3.0
         assert result["structuralDevelopabilityScore"] == 3.0
 
     def test_gated_motifs_excluded(self):
@@ -193,18 +192,21 @@ class TestCompositeDevelopability:
         confident = _motif(weighted_score=2.0, gated="no")
         gated = _motif(weighted_score=5.0, gated="yes")
         result = compute_developability([confident, gated], [], self._fv_green(), 0.075)
-        assert result["components"]["motifContribution"] == 2.0
+        # Only the confident motif's score lands in the composite.
+        assert result["structuralDevelopabilityScore"] == 2.0
 
     def test_metric_flag_bumps(self):
-        """R41: red=8, amber=3, green=0 per flag."""
+        """R41: red=8, amber=3, green=0 per flag. No motifs / cys → score
+        equals the flag-bump sum directly."""
         # psh red, totalCdrLength amber, others green
         metrics = self._fv_green(psh=200.0, totalCdrLength=55)
         result = compute_developability([], [], metrics, 0.075)
         # red(psh)=8 + amber(totalCdrLength)=3 = 11
-        assert result["components"]["metricFlagContribution"] == 11.0
+        assert result["structuralDevelopabilityScore"] == 11.0
 
     def test_cysteine_contributions(self):
-        """R41 Cys weights: exposed_extra=8, broken=20, missing=20."""
+        """R41 Cys weights: exposed_extra=8, broken=20, missing=20. No
+        motifs / flag bumps (Fv-green metrics) → score equals the cys sum."""
         exposed_extra = _cys("cys_extra", sidechain_rsasa=0.5)
         buried_extra = _cys("cys_extra", sidechain_rsasa=0.01)
         broken = _cys("disulfide_broken", sidechain_rsasa=0.3)
@@ -214,7 +216,7 @@ class TestCompositeDevelopability:
         )
         # buried_extra contributes 0 (sidechainRsasa < cutoff).
         # 8 (exposed) + 0 (buried) + 20 (broken) + 20 (missing) = 48
-        assert result["components"]["cysteineContribution"] == 48.0
+        assert result["structuralDevelopabilityScore"] == 48.0
 
 
 class TestR41aRiskClassification:

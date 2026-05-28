@@ -8,7 +8,7 @@ import re
 from dataclasses import dataclass
 from typing import Optional
 
-from structure import region_for, role_of_chain
+from structure import AA_THREE_TO_ONE, region_for, role_of_chain
 
 # name -> (regex pattern, risk_level, fixability)
 ORIG_REGEX_LIABILITIES = {
@@ -66,12 +66,13 @@ CHEMICALLY_RELEVANT_INDEX = {
     "Integrin binding": 0,
 }
 
-AA_THREE_TO_ONE = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-}
+# Pre-compiled regex set, built once at module import. Each entry is
+# `(motif_name, compiled_pattern, risk_level, fixability)` so the hot
+# loop in `detect_motifs` doesn't recompile on every call.
+_COMPILED_LIABILITIES = [
+    (name, re.compile(pat), risk, fix)
+    for name, (pat, risk, fix) in ORIG_REGEX_LIABILITIES.items()
+]
 
 
 @dataclass
@@ -229,15 +230,13 @@ def detect_motifs(
     is used.
     """
     hits: list[MotifHit] = []
-    compiled = {name: re.compile(pat) for name, (pat, _r, _f) in ORIG_REGEX_LIABILITIES.items()}
 
     for chain_id in parsed.chain_order:
         residues = parsed.residues_by_chain[chain_id]
         seq = _chain_letters(residues)
         chain_role = role_of_chain(chain_id, heavy_chain_id, light_chain_id)
 
-        for motif_name, regex in compiled.items():
-            _pat, risk, fixability = ORIG_REGEX_LIABILITIES[motif_name]
+        for motif_name, regex, risk, fixability in _COMPILED_LIABILITIES:
             # R17: the "chemically-relevant" residue is the position within
             # the motif that actually undergoes the modification (e.g. the
             # N in an N-G deamidation pair). Index is per-motif because some

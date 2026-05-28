@@ -317,10 +317,11 @@ def role_of_chain(
 _HALLMARK_IGG = (("V",), ("G",), ("L",), ("W",))
 _HALLMARK_VHH = (("F", "Y"), ("E", "Q"), ("R", "K"), ("G", "F"))
 
-# Three-letter → one-letter map; mirrors the same lookup used in motifs.py
-# and metrics.py. Kept local to avoid cross-module imports for what is
-# essentially a constant.
-_AA_THREE_TO_ONE = {
+# Three-letter → one-letter amino acid map. Single source of truth for
+# the whole package; `motifs.py` + `metrics.py` import from here too.
+# Non-standard / HETATM residues (MSE, modified residues, etc.) collapse
+# to "X" at call sites via `AA_THREE_TO_ONE.get(name, "X")`.
+AA_THREE_TO_ONE = {
     "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
     "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
     "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
@@ -380,7 +381,7 @@ def check_hallmark_tetrad(
     one_letters: list[Optional[str]] = []
     for p in positions:
         name = by_pos.get(p)
-        one = _AA_THREE_TO_ONE.get(name) if name else None
+        one = AA_THREE_TO_ONE.get(name) if name else None
         rows.append({"position": p, "resName": name, "oneLetter": one})
         one_letters.append(one)
         if name is None:

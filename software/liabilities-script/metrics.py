@@ -30,11 +30,11 @@ of *contributing* residues that exceed their region threshold (R36).
 """
 
 import math
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 from structure import (
+    AA_THREE_TO_ONE,
     CDRH3_COMPACTNESS_ANCHORS_IMGT,
     Residue,
     SCHEME_CDR_RANGES,
@@ -201,28 +201,6 @@ _PAIR_MAX_ANGSTROMS = 7.5
 _CDR_VICINITY_ANGSTROMS = 4.0
 
 
-@dataclass
-class FvMetrics:
-    """R24-R28 (Fv mode) , emitted only when 2 mapped chains and Fv-shape input."""
-    totalCdrLength: int
-    psh: float
-    pshPatchCount: int
-    ppc: float
-    pnc: float
-    sfvcsp: Optional[float]  # None when VHH mode
-
-
-@dataclass
-class VhhMetrics:
-    """R29-R33 (VHH mode) , single chain, type-restricted patches, CDRH3 compactness."""
-    totalCdrLength: int
-    psh: float
-    pshPatchCount: int
-    ppc: float
-    pnc: float
-    cdrh3Compactness: Optional[float]
-
-
 def _heavy_atom_min_distance(r_a, r_b) -> float:
     return min(
         math.dist((a.x, a.y, a.z), (b.x, b.y, b.z))
@@ -363,19 +341,6 @@ def _vdomain_surface_residues(
     return out
 
 
-def _three_one(res_name: str) -> str:
-    # local copy of the 3→1 letter mapping (avoid circular import with motifs.py)
-    return _AA_THREE_TO_ONE.get(res_name, "X")
-
-
-_AA_THREE_TO_ONE = {
-    "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D", "CYS": "C",
-    "GLN": "Q", "GLU": "E", "GLY": "G", "HIS": "H", "ILE": "I",
-    "LEU": "L", "LYS": "K", "MET": "M", "PHE": "F", "PRO": "P",
-    "SER": "S", "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-}
-
-
 def _hydrophobic(aa: str) -> bool:
     return aa in ("A", "I", "L", "M", "F", "V", "P", "W")
 
@@ -437,7 +402,7 @@ def _build_chain_context(
 ):
     """Pre-compute per-residue helpers used by every metric on a chain."""
     residues = parsed.residues_by_chain.get(chain_id, [])
-    aa_letters = [_three_one(r.res_name) for r in residues]
+    aa_letters = [AA_THREE_TO_ONE.get(r.res_name, "X") for r in residues]
     rsasa_lookup: dict[int, float] = {}
     in_bridge: dict[int, bool] = {}
     for i, r in enumerate(residues):
@@ -483,158 +448,185 @@ def compute_metrics(
         return {}
     mode = "TAP" if l_present else "TNP"
 
-    def _chain_metrics(chain_id, role, type_restricted_psh):
+    def _chain_ctx(chain_id, role):
+        """Per-chain residue list + rSASA / salt-bridge / region tagging.
+        Cheap; called once per mapped chain."""
         residues, aa_letters, rsasa_lookup, in_bridge = _build_chain_context(
             parsed, chain_id, sasa_lookup, salt_bridges
         )
-        regions = [region_for(role, r.res_seq, numbering_scheme, parsed.platforma_cdrs) for r in residues]
-        cdr_vic = _cdr_vicinity_residues(residues, regions, rsasa_lookup, rsasa_buried_cutoff)
-
-        h_weight, pos_charge_abs, neg_charge_abs = _weight_fns(in_bridge)
-
-        psh, psh_patches, psh_contrib = _residue_pair_sum(
-            cdr_vic, residues, aa_letters, h_weight,
-            same_type_pred=(lambda a, b: _hydrophobic(a) and _hydrophobic(b)) if type_restricted_psh else None,
-        )
-        ppc, _, ppc_contrib = _residue_pair_sum(
-            cdr_vic, residues, aa_letters, pos_charge_abs,
-            same_type_pred=(lambda a, b: _positive(a) and _positive(b)) if type_restricted_psh else None,
-        )
-        pnc, _, pnc_contrib = _residue_pair_sum(
-            cdr_vic, residues, aa_letters, neg_charge_abs,
-            same_type_pred=(lambda a, b: _negative(a) and _negative(b)) if type_restricted_psh else None,
-        )
+        regions = [
+            region_for(role, r.res_seq, numbering_scheme, parsed.platforma_cdrs)
+            for r in residues
+        ]
         total_cdr = _total_cdr_length_for_chain(residues, regions)
-        return (total_cdr, psh, psh_patches, ppc, pnc,
-                psh_contrib, ppc_contrib, pnc_contrib,
-                residues, aa_letters, rsasa_lookup, in_bridge, regions)
+        return residues, aa_letters, rsasa_lookup, in_bridge, regions, total_cdr
 
-    out: dict = {"mode": mode}
-
-    if mode == "TAP":
-        # Combine H and L into a single CDR-vicinity / pair pool , but the
-        # spec defines PSH/PPC/PNC over the *Fv* (both chains together).
-        # We compute per-chain CDR vicinities, then merge for inter-chain
-        # pair contributions.
-        (h_total_cdr, _, _, _, _,
-         _, _, _, h_res, h_aa, h_rsasa, h_bridge, h_regions) = _chain_metrics(heavy_chain_id, "H", False)
-        (l_total_cdr, _, _, _, _,
-         _, _, _, l_res, l_aa, l_rsasa, l_bridge, l_regions) = _chain_metrics(light_chain_id, "L", False)
-
-        # Build a unified residue list for the Fv (H then L) and re-derive
-        # CDR-vicinity over the joined list so cross-chain pairs are counted.
-        #
-        # Indexing convention for the unified list:
-        #
-        #   unified_idx ∈ [0, len(h_res))                  → heavy residue h_res[idx]
-        #   unified_idx ∈ [offset, offset + len(l_res))    → light residue l_res[idx - offset]
-        #     where offset = len(h_res)
-        #
-        # Per-chain rsasa_lookup / in_bridge dicts use chain-local indices;
-        # rebuilding them under the unified index lets us reuse the same
-        # `_residue_pair_sum` helper for both intra-chain AND cross-chain
-        # pairs without a separate "is this pair across chains?" check.
-        residues = h_res + l_res
-        aa_letters = h_aa + l_aa
-        rsasa_lookup: dict[int, float] = {}
-        in_bridge: dict[int, bool] = {}
-        regions: list[Optional[str]] = h_regions + l_regions
-        for i in range(len(h_res)):
-            if i in h_rsasa:
-                rsasa_lookup[i] = h_rsasa[i]
-            in_bridge[i] = h_bridge.get(i, False)
-        offset = len(h_res)
-        for i in range(len(l_res)):
-            if i in l_rsasa:
-                rsasa_lookup[offset + i] = l_rsasa[i]
-            in_bridge[offset + i] = l_bridge.get(i, False)
-
-        cdr_vic = _cdr_vicinity_residues(residues, regions, rsasa_lookup, rsasa_buried_cutoff)
-
-        h_weight, pos_charge_abs, neg_charge_abs = _weight_fns(in_bridge)
-
-        psh, psh_patches, psh_contrib = _residue_pair_sum(cdr_vic, residues, aa_letters, h_weight)
-        ppc, _, ppc_contrib = _residue_pair_sum(cdr_vic, residues, aa_letters, pos_charge_abs)
-        pnc, _, pnc_contrib = _residue_pair_sum(cdr_vic, residues, aa_letters, neg_charge_abs)
-
-        # SFvCSP: whole V-domain product of H and L surface-exposed charges
-        h_v_surf = _vdomain_surface_residues(
-            heavy_chain_id, h_res, h_aa, h_rsasa, "H", numbering_scheme, rsasa_buried_cutoff
+    if mode == "TNP":
+        return _compute_tnp(
+            heavy_chain_id, numbering_scheme, rsasa_buried_cutoff,
+            fr_conf_thresh, cdr_conf_thresh, upstream_cdrh3_length,
+            chain_id_to_residues, _chain_ctx,
         )
-        l_v_surf = _vdomain_surface_residues(
-            light_chain_id, l_res, l_aa, l_rsasa, "L", numbering_scheme, rsasa_buried_cutoff
+    return _compute_tap(
+        heavy_chain_id, light_chain_id, numbering_scheme,
+        rsasa_buried_cutoff, fr_conf_thresh, cdr_conf_thresh, _chain_ctx,
+    )
+
+
+def _bundle_low_conf_fractions(
+    contributors: dict,
+    residues,
+    regions,
+    fr_conf_thresh: float,
+    cdr_conf_thresh: float,
+) -> dict:
+    """R36 fractions per metric. `contributors` maps `<metric>` to its
+    contributing-residue index set; output keys are
+    `<metric>LowConfidenceResidueFraction`. Pulled out so each mode-
+    specific helper finishes with one loop instead of five identical
+    `_low_conf_fraction(...)` calls."""
+    return {
+        f"{name}LowConfidenceResidueFraction": _low_conf_fraction(
+            indices, residues, regions, fr_conf_thresh, cdr_conf_thresh,
         )
-        h_q = sum(charge_of(h_aa[i], h_bridge.get(i, False)) for i in h_v_surf)
-        l_q = sum(charge_of(l_aa[i], l_bridge.get(i, False)) for i in l_v_surf)
-        sfvcsp = h_q * l_q
+        for name, indices in contributors.items()
+    }
 
-        # R36 contributing-residue sets. totalCdrLength: every CDR residue.
-        # SFvCSP: V-domain surface residues with non-zero charge (the only
-        # residues that affect the H_q × L_q product).
-        cdr_indices = [i for i, region in enumerate(regions) if region in ("CDR1", "CDR2", "CDR3")]
-        sfvcsp_contrib = set()
-        for i in h_v_surf:
-            if charge_of(h_aa[i], h_bridge.get(i, False)) != 0.0:
-                sfvcsp_contrib.add(i)
-        for i in l_v_surf:
-            if charge_of(l_aa[i], l_bridge.get(i, False)) != 0.0:
-                sfvcsp_contrib.add(offset + i)
 
-        out.update({
-            "totalCdrLength": h_total_cdr + l_total_cdr,
-            "psh": psh,
-            "pshPatchCount": psh_patches,
-            "ppc": ppc,
-            "pnc": pnc,
-            "sfvcsp": sfvcsp,
-            "totalCdrLengthLowConfidenceResidueFraction":
-                _low_conf_fraction(cdr_indices, residues, regions, fr_conf_thresh, cdr_conf_thresh),
-            "pshLowConfidenceResidueFraction":
-                _low_conf_fraction(psh_contrib, residues, regions, fr_conf_thresh, cdr_conf_thresh),
-            "ppcLowConfidenceResidueFraction":
-                _low_conf_fraction(ppc_contrib, residues, regions, fr_conf_thresh, cdr_conf_thresh),
-            "pncLowConfidenceResidueFraction":
-                _low_conf_fraction(pnc_contrib, residues, regions, fr_conf_thresh, cdr_conf_thresh),
-            "sfvcspLowConfidenceResidueFraction":
-                _low_conf_fraction(sfvcsp_contrib, residues, regions, fr_conf_thresh, cdr_conf_thresh),
-        })
+def _compute_tnp(
+    heavy_chain_id,
+    numbering_scheme,
+    rsasa_buried_cutoff,
+    fr_conf_thresh,
+    cdr_conf_thresh,
+    upstream_cdrh3_length,
+    chain_id_to_residues,
+    chain_ctx,
+):
+    """VHH branch: type-restricted PSH/PPC/PNC on one chain + CDRH3 compactness."""
+    h_res, h_aa, h_rsasa, h_bridge, h_regions, h_total_cdr = chain_ctx(heavy_chain_id, "H")
+    cdr_vic = _cdr_vicinity_residues(h_res, h_regions, h_rsasa, rsasa_buried_cutoff)
+    h_weight, pos_charge_abs, neg_charge_abs = _weight_fns(h_bridge)
 
-    elif mode == "TNP":
-        (h_total_cdr, psh, psh_patches, ppc, pnc,
-         psh_contrib, ppc_contrib, pnc_contrib,
-         h_res, h_aa, h_rsasa, h_bridge, h_regions) = _chain_metrics(heavy_chain_id, "H", True)
-        compactness = _cdrh3_compactness_imgt(
-            None, chain_id_to_residues, heavy_chain_id, numbering_scheme,
-            upstream_cdrh3_length=upstream_cdrh3_length,
-        )
-        cdr_indices = [i for i, region in enumerate(h_regions) if region in ("CDR1", "CDR2", "CDR3")]
-        # CDRH3 compactness contributors: every CDR3 residue + the IMGT
-        # anchor residues (all are framework-adjacent or in CDR3).
-        compactness_contrib: set[int] = set()
-        if numbering_scheme == "imgt":
-            cdr3_range = SCHEME_CDR_RANGES["imgt"]["H"]["CDR3"]
-            for i, r in enumerate(h_res):
-                if cdr3_range[0] <= r.res_seq <= cdr3_range[1]:
-                    compactness_contrib.add(i)
-                elif r.res_seq in CDRH3_COMPACTNESS_ANCHORS_IMGT:
-                    compactness_contrib.add(i)
-        out.update({
-            "totalCdrLength": h_total_cdr,
-            "psh": psh,
-            "pshPatchCount": psh_patches,
-            "ppc": ppc,
-            "pnc": pnc,
-            "cdrh3Compactness": compactness,
-            "totalCdrLengthLowConfidenceResidueFraction":
-                _low_conf_fraction(cdr_indices, h_res, h_regions, fr_conf_thresh, cdr_conf_thresh),
-            "pshLowConfidenceResidueFraction":
-                _low_conf_fraction(psh_contrib, h_res, h_regions, fr_conf_thresh, cdr_conf_thresh),
-            "ppcLowConfidenceResidueFraction":
-                _low_conf_fraction(ppc_contrib, h_res, h_regions, fr_conf_thresh, cdr_conf_thresh),
-            "pncLowConfidenceResidueFraction":
-                _low_conf_fraction(pnc_contrib, h_res, h_regions, fr_conf_thresh, cdr_conf_thresh),
-            "cdrh3CompactnessLowConfidenceResidueFraction":
-                _low_conf_fraction(compactness_contrib, h_res, h_regions, fr_conf_thresh, cdr_conf_thresh),
-        })
+    psh, psh_patches, psh_contrib = _residue_pair_sum(
+        cdr_vic, h_res, h_aa, h_weight,
+        same_type_pred=lambda a, b: _hydrophobic(a) and _hydrophobic(b),
+    )
+    ppc, _, ppc_contrib = _residue_pair_sum(
+        cdr_vic, h_res, h_aa, pos_charge_abs,
+        same_type_pred=lambda a, b: _positive(a) and _positive(b),
+    )
+    pnc, _, pnc_contrib = _residue_pair_sum(
+        cdr_vic, h_res, h_aa, neg_charge_abs,
+        same_type_pred=lambda a, b: _negative(a) and _negative(b),
+    )
+    compactness = _cdrh3_compactness_imgt(
+        None, chain_id_to_residues, heavy_chain_id, numbering_scheme,
+        upstream_cdrh3_length=upstream_cdrh3_length,
+    )
+    cdr_indices = [i for i, r in enumerate(h_regions) if r in ("CDR1", "CDR2", "CDR3")]
+    # CDRH3 compactness contributors: every CDR3 residue + IMGT anchors.
+    compactness_contrib: set[int] = set()
+    if numbering_scheme == "imgt":
+        cdr3_lo, cdr3_hi = SCHEME_CDR_RANGES["imgt"]["H"]["CDR3"]
+        for i, r in enumerate(h_res):
+            if cdr3_lo <= r.res_seq <= cdr3_hi or r.res_seq in CDRH3_COMPACTNESS_ANCHORS_IMGT:
+                compactness_contrib.add(i)
 
+    out = {
+        "mode": "TNP",
+        "totalCdrLength": h_total_cdr,
+        "psh": psh, "pshPatchCount": psh_patches,
+        "ppc": ppc, "pnc": pnc,
+        "cdrh3Compactness": compactness,
+    }
+    out.update(_bundle_low_conf_fractions(
+        {
+            "totalCdrLength": cdr_indices,
+            "psh": psh_contrib,
+            "ppc": ppc_contrib,
+            "pnc": pnc_contrib,
+            "cdrh3Compactness": compactness_contrib,
+        },
+        h_res, h_regions, fr_conf_thresh, cdr_conf_thresh,
+    ))
+    return out
+
+
+def _compute_tap(
+    heavy_chain_id,
+    light_chain_id,
+    numbering_scheme,
+    rsasa_buried_cutoff,
+    fr_conf_thresh,
+    cdr_conf_thresh,
+    chain_ctx,
+):
+    """Fv branch: PSH/PPC/PNC over a unified H+L residue pool (cross-chain
+    pairs counted) plus SFvCSP product over the whole V-domain.
+
+    Unified-index convention (H residues first, then L):
+        unified[0 : len(h_res)]                     → heavy residue i
+        unified[offset : offset + len(l_res)]       → light residue (i - offset)
+      where `offset = len(h_res)`.
+    """
+    h_res, h_aa, h_rsasa, h_bridge, h_regions, h_total_cdr = chain_ctx(heavy_chain_id, "H")
+    l_res, l_aa, l_rsasa, l_bridge, l_regions, l_total_cdr = chain_ctx(light_chain_id, "L")
+
+    # Merge per-chain contexts under unified indices.
+    residues = h_res + l_res
+    aa_letters = h_aa + l_aa
+    regions: list[Optional[str]] = h_regions + l_regions
+    rsasa_lookup: dict[int, float] = {**h_rsasa}
+    in_bridge: dict[int, bool] = {i: h_bridge.get(i, False) for i in range(len(h_res))}
+    offset = len(h_res)
+    for i in range(len(l_res)):
+        if i in l_rsasa:
+            rsasa_lookup[offset + i] = l_rsasa[i]
+        in_bridge[offset + i] = l_bridge.get(i, False)
+
+    cdr_vic = _cdr_vicinity_residues(residues, regions, rsasa_lookup, rsasa_buried_cutoff)
+    h_weight, pos_charge_abs, neg_charge_abs = _weight_fns(in_bridge)
+    psh, psh_patches, psh_contrib = _residue_pair_sum(cdr_vic, residues, aa_letters, h_weight)
+    ppc, _, ppc_contrib = _residue_pair_sum(cdr_vic, residues, aa_letters, pos_charge_abs)
+    pnc, _, pnc_contrib = _residue_pair_sum(cdr_vic, residues, aa_letters, neg_charge_abs)
+
+    # SFvCSP: whole-V-domain product of H and L surface-exposed charges.
+    h_v_surf = _vdomain_surface_residues(
+        heavy_chain_id, h_res, h_aa, h_rsasa, "H", numbering_scheme, rsasa_buried_cutoff
+    )
+    l_v_surf = _vdomain_surface_residues(
+        light_chain_id, l_res, l_aa, l_rsasa, "L", numbering_scheme, rsasa_buried_cutoff
+    )
+    h_q = sum(charge_of(h_aa[i], h_bridge.get(i, False)) for i in h_v_surf)
+    l_q = sum(charge_of(l_aa[i], l_bridge.get(i, False)) for i in l_v_surf)
+    sfvcsp = h_q * l_q
+
+    # R36 contributors: SFvCSP is non-zero-charge V-domain residues.
+    cdr_indices = [i for i, r in enumerate(regions) if r in ("CDR1", "CDR2", "CDR3")]
+    sfvcsp_contrib: set[int] = set()
+    for i in h_v_surf:
+        if charge_of(h_aa[i], h_bridge.get(i, False)) != 0.0:
+            sfvcsp_contrib.add(i)
+    for i in l_v_surf:
+        if charge_of(l_aa[i], l_bridge.get(i, False)) != 0.0:
+            sfvcsp_contrib.add(offset + i)
+
+    out = {
+        "mode": "TAP",
+        "totalCdrLength": h_total_cdr + l_total_cdr,
+        "psh": psh, "pshPatchCount": psh_patches,
+        "ppc": ppc, "pnc": pnc,
+        "sfvcsp": sfvcsp,
+    }
+    out.update(_bundle_low_conf_fractions(
+        {
+            "totalCdrLength": cdr_indices,
+            "psh": psh_contrib,
+            "ppc": ppc_contrib,
+            "pnc": pnc_contrib,
+            "sfvcsp": sfvcsp_contrib,
+        },
+        residues, regions, fr_conf_thresh, cdr_conf_thresh,
+    ))
     return out

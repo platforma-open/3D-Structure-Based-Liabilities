@@ -268,15 +268,19 @@ def analyze_pdb(
     # returns None for every metric in that case.
     sm = surface_metrics
     flags = developability["flags"]
-    extra_cys = sum(1 for h in cys_hits if h.cysClass == "cys_extra")
+
+    def _count(klass):
+        return sum(1 for h in cys_hits if h.cysClass == klass)
+
+    extra_cys = _count("cys_extra")
     exposed_extra_cys = sum(
         1 for h in cys_hits
         if h.cysClass == "cys_extra"
         and h.sidechainRsasa is not None
         and h.sidechainRsasa >= rsasa_buried_cutoff
     )
-    broken_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_broken")
-    missing_canonical = sum(1 for h in cys_hits if h.cysClass == "disulfide_missing")
+    broken_canonical = _count("disulfide_broken")
+    missing_canonical = _count("disulfide_missing")
 
     return {
         "mode": mode,
