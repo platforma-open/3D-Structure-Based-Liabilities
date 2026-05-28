@@ -8,8 +8,6 @@ The block's distribution histograms consume APIs that have not yet landed in pub
 
 - **graph-maker + miplots4** ([milaboratory/visualizations#87](https://github.com/milaboratory/visualizations/pull/87)) , histogram threshold lines (`pl7.app/graph/thresholds` annotation, hard-narrow bounds with off-range expansion, numeric labels via `numberFormat`, `significantLinesStyle` object form).
 
-The structure-viewer dependency that was vendored against PR #89 has shipped as `@milaboratories/structure-viewer` 0.3.0 on npm; the tgz is gone and the catalog points at the published version.
-
 Tarballs were produced with `pnpm pack` from the visualizations PR branch and copied here so reviewers can `git checkout chore/update-sdk-deps && pnpm install` and reproduce the exact build the block is being reviewed against, without needing a clone of the visualizations repo.
 
 ## When To Drop This Folder
