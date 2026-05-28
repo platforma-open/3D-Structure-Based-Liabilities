@@ -9,7 +9,7 @@ packages:
 catalog:
   "@milaboratories/graph-maker": 1.4.0
   "@milaboratories/helpers": 1.14.2
-  "@milaboratories/structure-viewer": 0.2.0
+  "@milaboratories/structure-viewer": 0.3.0
   "@milaboratories/ts-builder": 1.5.0
   "@milaboratories/ts-configs": 1.2.3
   "@platforma-sdk/workflow-tengo": 5.25.0

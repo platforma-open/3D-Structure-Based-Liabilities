@@ -30,8 +30,7 @@
   "pnpm": {
     "overrides": {
       "@milaboratories/graph-maker": "file:./vendor/graph-maker.tgz",
-      "@milaboratories/miplots4": "file:./vendor/miplots4.tgz",
-      "@milaboratories/structure-viewer": "file:./vendor/structure-viewer.tgz"
+      "@milaboratories/miplots4": "file:./vendor/miplots4.tgz"
     }
   },
   "packageManager": "pnpm@9.12.0"
