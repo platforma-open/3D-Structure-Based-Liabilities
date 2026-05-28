@@ -140,15 +140,7 @@ const modalTitle = computed(() => {
         clearable
       />
 
-      <div
-        :style="{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '12px',
-          marginTop: '12px',
-          marginBottom: '4px',
-        }"
-      >
+      <div class="field-grid field-grid--settings">
         <PlDropdown
           v-model="app.model.data.numberingScheme"
           :options="numberingSchemeOptions"
@@ -165,7 +157,7 @@ const modalTitle = computed(() => {
           placeholder="auto from REMARK 99"
         />
       </div>
-      <p :style="{ fontSize: '12px', color: '#6b7280', marginTop: '0', marginBottom: '12px' }">
+      <p class="help-text help-text--tight">
         Heavy / light chain letters are auto-detected from each PDB's
         <code>REMARK 99 PLATFORMA CDR*</code> records (spec R9, emitted by upstream IMGT-numbered
         ImmuneBuilder PDBs). Set the override fields to a single chain letter (e.g. <code>A</code>)
@@ -173,14 +165,7 @@ const modalTitle = computed(() => {
       </p>
 
       <PlAccordionSection label="Advanced thresholds">
-        <div
-          :style="{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: '12px',
-            marginBottom: '8px',
-          }"
-        >
+        <div class="field-grid">
           <PlNumberField
             v-model="app.model.data.frConfThresh"
             label="FR confidence threshold (Å, R34)"
@@ -196,7 +181,7 @@ const modalTitle = computed(() => {
             :step="0.5"
           />
         </div>
-        <p :style="{ fontSize: '12px', color: '#6b7280', margin: '0 0 12px' }">
+        <p class="help-text">
           Defaults (4.0 / 6.0) are calibrated for ImmuneBuilder-predicted PDBs (R34). Raise the
           confidence thresholds when running on experimental crystal structures whose B-factors are
           Å² temperature factors rather than predicted error. rSASA cutoff is hardcoded at 0.075 per
@@ -208,34 +193,9 @@ const modalTitle = computed(() => {
     <!-- Empty-state CTA when no input is configured. Settings auto-opens
          on first load (see `settingsOpen` ref); this is for the case
          where the user closed the modal without picking a dataset. -->
-    <div
-      v-if="!app.model.data.dataset?.primary?.column"
-      :style="{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '48px 24px',
-        marginTop: '24px',
-        background: 'rgba(148, 163, 184, 0.06)',
-        border: '1px dashed rgba(148, 163, 184, 0.4)',
-        borderRadius: '8px',
-        gap: '12px',
-      }"
-    >
-      <div :style="{ fontSize: '15px', fontWeight: 600, color: '#374151' }">
-        No predicted structures selected
-      </div>
-      <p
-        :style="{
-          fontSize: '13px',
-          color: '#6b7280',
-          textAlign: 'center',
-          maxWidth: '480px',
-          margin: '0',
-          lineHeight: '1.5',
-        }"
-      >
+    <div v-if="!app.model.data.dataset?.primary?.column" class="empty-state">
+      <div class="empty-state__title">No predicted structures selected</div>
+      <p class="empty-state__body">
         Pick a dataset from an upstream 3D Structure Prediction block in
         <strong>Settings</strong> (top-right). The block runs per clonotype and emits motif /
         cysteine / surface-metric PColumns plus the composite developability score.
@@ -251,10 +211,10 @@ const modalTitle = computed(() => {
     <!-- Spec R44 , run-summary alert: >10% of clonotypes have any red flag. -->
     <PlAlert
       v-if="showRedAlert && runSummary"
+      class="run-alert"
       type="warn"
       label="Red-flag clonotypes exceed 10% (spec R44)"
       icon
-      :style="{ marginTop: '12px' }"
     >
       {{ runSummary.redClonotypes }} of {{ runSummary.total }} clonotypes ({{
         Math.round(runSummary.redFraction * 100)
@@ -264,10 +224,10 @@ const modalTitle = computed(() => {
     <!-- Spec R45 , run-summary alert: >25% confidence-gated motifs. -->
     <PlAlert
       v-if="showGatedAlert && runSummary"
+      class="run-alert"
       type="warn"
       label="Confidence-gated motifs exceed 25% (spec R45)"
       icon
-      :style="{ marginTop: '12px' }"
     >
       {{ runSummary.gatedClonotypes }} of {{ runSummary.total }} clonotypes ({{
         Math.round(runSummary.gatedFraction * 100)
@@ -285,10 +245,7 @@ const modalTitle = computed(() => {
          are hidden behind AG-Grid's "Columns" panel. The open button on
          the clonotype-axis cell fires `@cell-button-clicked`, which
          seeds the row's PDB handle into `viewer` and pops the modal. -->
-    <div
-      v-if="app.model.data.dataset?.primary?.column"
-      :style="{ marginTop: '12px', height: '720px' }"
-    >
+    <div v-if="app.model.data.dataset?.primary?.column" class="scores-table">
       <PlAgDataTableV2
         v-model="scoresLocalState"
         :settings="scoresTableSettings"
@@ -313,58 +270,116 @@ const modalTitle = computed(() => {
     >
       <template #title>{{ modalTitle }}</template>
 
-      <div
-        v-if="viewer && selectedClusterAssignment"
-        :style="{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          padding: '6px 12px',
-          marginBottom: '12px',
-          background: 'rgba(99, 102, 241, 0.08)',
-          border: '1px solid rgba(99, 102, 241, 0.25)',
-          borderRadius: '6px',
-          fontSize: '13px',
-          color: '#3730a3',
-        }"
-      >
-        <span :style="{ fontWeight: '600' }">
-          Cluster {{ selectedClusterAssignment.clusterId }}
-        </span>
-        <span
-          v-if="selectedClusterAssignment.isCentroid"
-          :style="{
-            fontSize: '11px',
-            fontWeight: 600,
-            padding: '1px 8px',
-            borderRadius: '10px',
-            background: '#3730a322',
-            color: '#3730a3',
-          }"
-        >
+      <div v-if="viewer && selectedClusterAssignment" class="cluster-badge">
+        <span class="cluster-badge__name"> Cluster {{ selectedClusterAssignment.clusterId }} </span>
+        <span v-if="selectedClusterAssignment.isCentroid" class="cluster-badge__pill">
           CENTROID
         </span>
         <span
           v-else-if="selectedClusterAssignment.tmScoreToCentroid !== null"
-          :style="{ color: '#4f46e5', fontSize: '12px' }"
+          class="cluster-badge__tm"
         >
           TM-score to centroid {{ selectedClusterAssignment.tmScoreToCentroid.toFixed(3) }}
         </span>
       </div>
 
-      <div
-        v-if="viewer"
-        :style="{
-          height: '720px',
-          display: 'flex',
-          padding: '12px',
-          border: '1px solid #e5e7eb',
-          borderRadius: '6px',
-          background: '#fff',
-        }"
-      >
+      <div v-if="viewer" class="viewer-frame">
         <PlStructureViewer v-bind="viewer" initial-color-scheme="uncertainty" />
       </div>
     </PlSlideModal>
   </PlBlockPage>
 </template>
+
+<style scoped>
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.field-grid--settings {
+  margin-top: 12px;
+  margin-bottom: 4px;
+}
+
+.help-text {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0 0 12px;
+}
+.help-text--tight {
+  margin-top: 0;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  margin-top: 24px;
+  background: rgba(148, 163, 184, 0.06);
+  border: 1px dashed rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  gap: 12px;
+}
+.empty-state__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #374151;
+}
+.empty-state__body {
+  font-size: 13px;
+  color: #6b7280;
+  text-align: center;
+  max-width: 480px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.run-alert {
+  margin-top: 12px;
+}
+
+.scores-table {
+  margin-top: 12px;
+  height: 720px;
+}
+
+.cluster-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.25);
+  border-radius: 6px;
+  font-size: 13px;
+  color: #3730a3;
+}
+.cluster-badge__name {
+  font-weight: 600;
+}
+.cluster-badge__pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: #3730a322;
+  color: #3730a3;
+}
+.cluster-badge__tm {
+  color: #4f46e5;
+  font-size: 12px;
+}
+
+.viewer-frame {
+  height: 720px;
+  display: flex;
+  padding: 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #fff;
+}
+</style>
