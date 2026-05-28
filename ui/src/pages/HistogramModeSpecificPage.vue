@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import type { GraphMakerState } from "@milaboratories/graph-maker";
+import type { PFrameHandle } from "@platforma-sdk/model";
 import { computed, ref } from "vue";
 import { useApp } from "../app";
 import HistogramPage from "../components/HistogramPage.vue";
 import { useDetectedMode } from "../composables/useDetectedMode";
+import { pfHandleFrom } from "../composables/ptableCell";
 import { histogramConfigs, makeGraphState } from "./histogramConfigs";
 
 const app = useApp();
-const scoresPf = computed(() => {
-  const t = app.model.outputs.scoresTable;
-  return t?.ok && t.value ? t.value.fullPframeHandle : undefined;
-});
+const scoresPf = computed(
+  () => pfHandleFrom(app.model.outputs.scoresTable) as PFrameHandle | undefined,
+);
 const { mode } = useDetectedMode(scoresPf);
 
 const config = computed(() =>

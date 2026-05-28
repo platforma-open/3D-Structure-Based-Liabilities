@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { PlStructureViewerProps } from "@milaboratories/structure-viewer";
 import { PlStructureViewer } from "@milaboratories/structure-viewer";
-import type { PTableKey } from "@platforma-sdk/model";
+import type { PFrameHandle, PTableKey } from "@platforma-sdk/model";
 import { createPlDataTableStateV2 } from "@platforma-sdk/model";
 import {
   PlAccordionSection,
@@ -24,6 +24,7 @@ import { useClonotypeLabels } from "../composables/useClonotypeLabels";
 import { useDetectedMode } from "../composables/useDetectedMode";
 import { useClusterAssignments } from "../composables/useClusterAssignments";
 import { useRunSummaryAlerts } from "../composables/useRunSummaryAlerts";
+import { pfHandleFrom } from "../composables/ptableCell";
 
 const app = useApp();
 
@@ -47,10 +48,9 @@ const clonotypeAxisId = computed(() => app.model.outputs.clonotypeAxisId);
 // `pl7.app/label` column into `scoresTable.fullPframeHandle` on the
 // shared scClonotypeKey axis; resolving labels through that handle
 // avoids a second result-pool query and stays in sync with the table.
-const clonotypeLabelsPf = computed(() => {
-  const t = app.model.outputs.scoresTable;
-  return t?.ok && t.value ? t.value.fullPframeHandle : undefined;
-});
+const clonotypeLabelsPf = computed(
+  () => pfHandleFrom(app.model.outputs.scoresTable) as PFrameHandle | undefined,
+);
 const { resolveLabel } = useClonotypeLabels(clonotypeLabelsPf, clonotypeAxisId);
 
 // Dataset-level mode (uniform per R7) resolved from the per-clonotype
@@ -97,10 +97,6 @@ function handleViewerVisibility(open: boolean) {
     viewer.value = undefined;
     selectedClonotypeKey.value = null;
   }
-}
-
-function pct(value: number): string {
-  return `${Math.round(value * 100)}%`;
 }
 
 const numberingSchemeOptions = [
@@ -261,8 +257,8 @@ const modalTitle = computed(() => {
       :style="{ marginTop: '12px' }"
     >
       {{ runSummary.redClonotypes }} of {{ runSummary.total }} clonotypes ({{
-        pct(runSummary.redFraction)
-      }}) carry at least one red Raybould threshold flag. Inspect the table below for which metrics
+        Math.round(runSummary.redFraction * 100)
+      }}%) carry at least one red Raybould threshold flag. Inspect the table below for which metrics
       are driving this.
     </PlAlert>
     <!-- Spec R45 , run-summary alert: >25% confidence-gated motifs. -->
@@ -274,8 +270,8 @@ const modalTitle = computed(() => {
       :style="{ marginTop: '12px' }"
     >
       {{ runSummary.gatedClonotypes }} of {{ runSummary.total }} clonotypes ({{
-        pct(runSummary.gatedFraction)
-      }}) have at least one motif gated by the per-residue confidence cutoff. Either ImmuneBuilder
+        Math.round(runSummary.gatedFraction * 100)
+      }}%) have at least one motif gated by the per-residue confidence cutoff. Either ImmuneBuilder
       is uncertain about these regions or the gating thresholds (FR
       {{ app.model.data.frConfThresh }} Å / CDR {{ app.model.data.cdrConfThresh }} Å) are too tight
       for this dataset.

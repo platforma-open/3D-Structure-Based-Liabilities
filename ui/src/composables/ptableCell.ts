@@ -46,7 +46,19 @@ export function readNullableNumber(col: PTableColumn, i: number): number | null 
 }
 
 /** Shape of the `scoresTable` output as seen from a Vue composable: a wrapped
- *  `outputWithStatus` result whose `value` carries `fullTableHandle` for the
- *  pFrameDriver. Lives here (next to readCell) since both consumers
- *  (useClusterAssignments, useRunSummaryAlerts) operate on the same handle. */
-export type ScoresTableOutput = { ok?: boolean; value?: { fullTableHandle?: unknown } } | undefined;
+ *  `outputWithStatus` result whose `value` carries the two driver handles.
+ *  `fullTableHandle` is for pFrameDriver scans (useClusterAssignments,
+ *  useRunSummaryAlerts); `fullPframeHandle` is for the SDK column lookups
+ *  used by useClonotypeLabels / useDetectedMode. */
+export type ScoresTableOutput =
+  | { ok?: boolean; value?: { fullTableHandle?: unknown; fullPframeHandle?: unknown } }
+  | undefined;
+
+/** Pull `fullPframeHandle` out of a `scoresTable` output, returning
+ *  `undefined` until the output is ready. Used by composables that go
+ *  through `getColumnsFull` / `getSingleColumnData` rather than the
+ *  pFrameDriver. Typed as `unknown` here because the actual `PFrameHandle`
+ *  brand lives in the SDK; callers narrow it at the use site. */
+export function pfHandleFrom(out: ScoresTableOutput): unknown {
+  return out?.ok && out.value ? out.value.fullPframeHandle : undefined;
+}
