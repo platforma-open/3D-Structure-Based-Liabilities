@@ -101,7 +101,7 @@ domain on every output.
    clonotype filter (R1 subset).
 3. **Python** (`software/liabilities-script/`):
    - Parses PDB (`structure.py`): v3.30 fixed-column parser; pulls
-     ATOM / HETATM / SSBOND / `REMARK 99 PLATFORMA CDR*` records.
+     ATOM / HETATM / `REMARK 99 PLATFORMA CDR*` records.
    - Runs FreeSASA against in-block Ala-X-Ala heavy-atom references
      (`data/heavy_atom_max_sasa.tsv`, spec R11).
    - Detects motifs (`motifs.py`): 11 patterns from

@@ -36,22 +36,7 @@ def _motif(
 
 
 def _cys(cys_class="cys_extra", sidechain_rsasa=0.5) -> CysteineHit:
-    return CysteineHit(
-        chainId="H",
-        resSeq=100,
-        iCode="",
-        resName="CYS",
-        chainRole="H",
-        cysClass=cys_class,
-        bondingState="unbonded",
-        sasa=80.0,
-        rsasa=0.5,
-        sidechainSasa=40.0,
-        sidechainRsasa=sidechain_rsasa,
-        partnerChainId="",
-        partnerResSeq=None,
-        partnerIcode="",
-    )
+    return CysteineHit(cysClass=cys_class, sidechainRsasa=sidechain_rsasa)
 
 
 class TestComputeFlagsFv:

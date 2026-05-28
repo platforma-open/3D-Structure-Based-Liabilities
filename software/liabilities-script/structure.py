@@ -4,8 +4,8 @@ Consolidated per spec Module Layout: PDB parsing (R9-R10), REMARK 99
 PLATFORMA CDR record extraction, FreeSASA wrapper output normalization
 at the caller, B-factor read-through, the numbering-scheme constants
 (R14: canonical Cys positions, CDR ranges, hallmark tetrad, CDRH3
-compactness anchors), `region_for` resolution, plus the spec defensive
-checks (R21 SSBOND cross-check, R33 hallmark tetrad re-check).
+compactness anchors), `region_for` resolution, plus the R33 hallmark
+tetrad defensive check.
 """
 
 import re
@@ -47,20 +47,9 @@ class Residue:
 
 
 @dataclass
-class Ssbond:
-    chain1: str
-    res1: int
-    i_code1: str
-    chain2: str
-    res2: int
-    i_code2: str
-
-
-@dataclass
 class Parsed:
     chain_order: List[str] = field(default_factory=list)
     residues_by_chain: Dict[str, List[Residue]] = field(default_factory=dict)
-    ssbonds: List[Ssbond] = field(default_factory=list)
     # Spec R10 , CDR ranges from `REMARK 99 PLATFORMA CDR*` records emitted
     # by the Structure Prediction block. Shape: {"H": {"CDR1": (start, end),
     # "CDR2": (...), "CDR3": (...)}, "L": {...}}. Empty when not present;
@@ -125,29 +114,6 @@ def parse_pdb(text: str) -> Parsed:
                     out.chain_role_to_pdb_chain[role] = chain_start
                 elif existing.upper() != chain_start.upper():
                     out.chain_role_to_pdb_chain.pop(role, None)
-        elif tag == "SSBOND":
-            # SSBOND record fixed offsets (PDB v3.30):
-            #   col 15 = chainID1, 17-20 = resSeq1, 21 = iCode1
-            #   col 29 = chainID2, 31-34 = resSeq2, 35 = iCode2
-            try:
-                chain1 = line[15:16]
-                res1 = int(line[17:21].strip())
-                i_code1 = line[21:22].strip()
-                chain2 = line[29:30]
-                res2 = int(line[31:35].strip())
-                i_code2 = line[35:36].strip()
-            except ValueError:
-                continue
-            out.ssbonds.append(
-                Ssbond(
-                    chain1=chain1,
-                    res1=res1,
-                    i_code1=i_code1,
-                    chain2=chain2,
-                    res2=res2,
-                    i_code2=i_code2,
-                )
-            )
         elif tag in ("ATOM", "HETATM"):
             if not in_first_model:
                 continue
@@ -338,7 +304,7 @@ def role_of_chain(
 
 
 # ---------------------------------------------------------------------------
-# Section 3: defensive checks (R21 SSBOND cross-check, R33 hallmark tetrad)
+# Section 3: R33 hallmark tetrad defensive check
 # ---------------------------------------------------------------------------
 
 
@@ -373,81 +339,6 @@ def _match_score(observed_one_letter: list[Optional[str]], canonical: tuple) -> 
         if obs in canonical[i]:
             score += 1
     return score
-
-
-def _norm_icode(s: Optional[str]) -> str:
-    """Normalize iCode for comparison. Both the empty-string convention (PDB
-    SSBOND records) and the `"-"` sentinel (cysteines.py emits this so PColumn
-    String axes accept the value) collapse to empty-string here so the two
-    sides of the cross-check actually meet."""
-    if not s:
-        return ""
-    t = s.strip()
-    if t in ("", "-"):
-        return ""
-    return t
-
-
-def _pair_key(chain_a, res_a, icode_a, chain_b, res_b, icode_b):
-    """Order-independent key for a Cys pair (sorted by chain+resSeq)."""
-    a = (chain_a, res_a, _norm_icode(icode_a))
-    b = (chain_b, res_b, _norm_icode(icode_b))
-    return tuple(sorted([a, b]))
-
-
-def cross_check_ssbonds(ssbonds, cys_hits) -> dict:
-    """Compare PDB SSBOND records with geometry-detected disulfide bonds.
-
-    Returns a dict suitable for JSON emission:
-      {
-        "headerBondCount": int,
-        "geometryBondCount": int,
-        "matched": int,
-        "headerOnly": [...],     # SSBOND declared, geometry rejected
-        "geometryOnly": [...],   # geometry found, no SSBOND
-      }
-    """
-    header_pairs: set = set()
-    for s in ssbonds:
-        header_pairs.add(
-            _pair_key(s.chain1, s.res1, s.i_code1, s.chain2, s.res2, s.i_code2)
-        )
-
-    # Each disulfide is represented twice in cys_hits (once per partner). De-dup.
-    geom_pairs: set = set()
-    for h in cys_hits:
-        if h.cysClass not in ("disulfide", "disulfide_broken"):
-            continue
-        if h.partnerChainId is None or h.partnerResSeq is None:
-            continue
-        if h.cysClass == "disulfide_broken":
-            # geometry rejected this; it stays under headerOnly, not geometryOnly.
-            continue
-        geom_pairs.add(
-            _pair_key(
-                h.chainId, h.resSeq, h.iCode,
-                h.partnerChainId, h.partnerResSeq, h.partnerIcode,
-            )
-        )
-
-    matched = header_pairs & geom_pairs
-    header_only = header_pairs - geom_pairs
-    geometry_only = geom_pairs - header_pairs
-
-    def _fmt(pair):
-        a, b = pair
-        return {
-            "chain1": a[0], "resSeq1": a[1], "iCode1": a[2] or "",
-            "chain2": b[0], "resSeq2": b[1], "iCode2": b[2] or "",
-        }
-
-    return {
-        "headerBondCount": len(header_pairs),
-        "geometryBondCount": len(geom_pairs),
-        "matched": len(matched),
-        "headerOnly": [_fmt(p) for p in sorted(header_only)],
-        "geometryOnly": [_fmt(p) for p in sorted(geometry_only)],
-    }
 
 
 def check_hallmark_tetrad(

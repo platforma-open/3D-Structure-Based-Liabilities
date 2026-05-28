@@ -23,7 +23,7 @@ from cysteines import detect_cysteines
 from metrics import compute_metrics
 from motifs import detect_motifs
 from scoring import compute_developability
-from structure import check_hallmark_tetrad, cross_check_ssbonds, parse_pdb
+from structure import check_hallmark_tetrad, parse_pdb
 
 
 # Heavy-atom Ala-X-Ala SASA references (R11), loaded from
@@ -253,9 +253,7 @@ def analyze_pdb(
     )
     mode = "TAP" if n_chains == 2 else "TNP"
 
-    # R21 SSBOND cross-check + R33 hallmark tetrad. Hallmark mismatch
-    # surfaces in the TSV; SSBOND mismatches stay stderr-only.
-    cross_check_ssbonds(parsed.ssbonds, cys_hits)
+    # R33 hallmark tetrad re-check; mismatch surfaces as a TSV warning column.
     hallmark = check_hallmark_tetrad(
         parsed, numbering_scheme, heavy_chain_id, chain_count_mode=mode
     )
