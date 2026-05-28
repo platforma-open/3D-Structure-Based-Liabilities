@@ -88,16 +88,15 @@ def _classify_cys(
     role: Optional[str],
     bonded: bool,
     canonical_keys: set[tuple[str, int]],
-    canonical_positions: dict,
 ) -> str:
     """R23 four-state classification. Falls back to raw bonding state
-    when numbering isn't wired (no role / no canonical positions for the
-    scheme), so the hit is still classified usefully in the auto-detect-only
-    case (though the resulting "bonded"/"unbonded" values are inert
-    downstream)."""
+    when numbering isn't wired (no role, or no canonical Cys positions
+    known for the scheme), so the hit is still classified usefully in
+    the auto-detect-only case (though the resulting "bonded"/"unbonded"
+    values are inert downstream)."""
     if role is not None and (role, res_seq) in canonical_keys:
         return "disulfide" if bonded else "disulfide_broken"
-    if role is not None and canonical_positions:
+    if role is not None and canonical_keys:
         return "cys_extra"
     return "bonded" if bonded else "unbonded"
 
@@ -138,9 +137,7 @@ def detect_cysteines(
         bonded = partner_of.get(idx) is not None
         hits.append(
             CysteineHit(
-                cysClass=_classify_cys(
-                    r.res_seq, role, bonded, canonical_keys, canonical_positions
-                ),
+                cysClass=_classify_cys(r.res_seq, role, bonded, canonical_keys),
                 sidechainRsasa=sasa_info.get("sideChainRsasa"),
             )
         )

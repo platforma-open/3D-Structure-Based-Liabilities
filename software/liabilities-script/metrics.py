@@ -474,17 +474,14 @@ def compute_metrics(
     salt_bridges = detect_salt_bridges(parsed)
     chain_id_to_residues = dict(parsed.residues_by_chain)
 
+    # R7 mode dispatch: heavy must be mapped (TNP = VHH heavy-only;
+    # TAP = paired Fv with light also mapped). Light-only is an
+    # antigen-chain / mislabelled-input case; no metrics emitted.
     h_present = heavy_chain_id and heavy_chain_id in chain_id_to_residues
     l_present = light_chain_id and light_chain_id in chain_id_to_residues
-    if not h_present and not l_present:
+    if not h_present:
         return {}
-
-    if h_present and l_present:
-        mode = "TAP"
-    elif h_present and not l_present:
-        mode = "TNP"
-    else:
-        return {}
+    mode = "TAP" if l_present else "TNP"
 
     def _chain_metrics(chain_id, role, type_restricted_psh):
         residues, aa_letters, rsasa_lookup, in_bridge = _build_chain_context(

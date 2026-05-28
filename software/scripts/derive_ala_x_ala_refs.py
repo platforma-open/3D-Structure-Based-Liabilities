@@ -2,30 +2,28 @@
 per spec R11.
 
 For each amino acid X, build an extended Ala-X-Ala tripeptide with
-PeptideBuilder (φ=ψ=180°), run FreeSASA on the heavy-atom-only structure
-(matches the ImmuneBuilder input shape per spec R15), and record the
-central residue's total SASA and side-chain SASA.
+PeptideBuilder, run FreeSASA on the heavy-atom-only structure (matches
+the ImmuneBuilder input shape per spec R15), and record the central
+residue's total SASA and side-chain SASA.
 
-The output JSON is committed to `software/src/ala_x_ala_refs.json`. The
-runtime `main.py` loads it and divides per-residue SASA by these references
-to compute rSASA — replacing FreeSASA's Naccess-derived default references.
+Output is a TSV at `software/liabilities-script/data/heavy_atom_max_sasa.tsv`
+(three columns: residue, total, sidechain). The runtime `main.py`
+loads it and divides per-residue SASA by these references to compute
+rSASA, replacing FreeSASA's Naccess-derived defaults.
 
 Run inside the block's Docker image (FreeSASA already there):
-  docker run --rm -v "$(pwd)/scripts:/work" <liabilities-image> sh -c '
+  docker run --rm -v "$(pwd)/software:/work" <liabilities-image> sh -c '
     pip install --quiet PeptideBuilder
-    python /work/derive_ala_x_ala_refs.py /work/../src/ala_x_ala_refs.json
+    python /work/scripts/derive_ala_x_ala_refs.py \
+      /work/liabilities-script/data/heavy_atom_max_sasa.tsv
   '
 
-PeptideBuilder + Biopython are NOT in the runtime requirements — they're
-needed only for this one-shot derivation.
-
-Methodology mirrors Yang & Blundell 1996 / Shrake-Rupley 1973 as cited by
-spec R11. Hydrogens absent by construction (PeptideBuilder writes heavy
-atoms only). Probe radius = FreeSASA default (1.4 Å).
+PeptideBuilder + Biopython are NOT in the runtime requirements; they're
+needed only for this one-shot derivation. Methodology mirrors Yang &
+Blundell 1996 / Shrake-Rupley 1973 (probe radius 1.4 Å), per spec R11.
 """
 
 import io
-import json
 import sys
 from pathlib import Path
 
@@ -92,37 +90,37 @@ def derive_one(x_three: str, tmpdir: Path) -> dict:
 
 def main() -> None:
     if len(sys.argv) != 2:
-        print("usage: derive_ala_x_ala_refs.py <output.json>", file=sys.stderr)
+        print("usage: derive_ala_x_ala_refs.py <output.tsv>", file=sys.stderr)
         sys.exit(2)
     out_path = Path(sys.argv[1])
 
     tmpdir = Path("/tmp/axa-deriv")
     tmpdir.mkdir(exist_ok=True)
 
-    results: dict[str, dict[str, float]] = {}
+    rows: list[tuple[str, float | None, float | None]] = []
     for x in AMINO_ACIDS_3:
         try:
-            results[x] = derive_one(x, tmpdir)
-            print(f"  {x}: total={results[x]['total']:7.2f}  side={results[x]['sidechain']:7.2f}")
+            r = derive_one(x, tmpdir)
+            rows.append((x, r["total"], r["sidechain"]))
+            print(f"  {x}: total={r['total']:7.2f}  side={r['sidechain']:7.2f}")
         except Exception as e:
-            print(f"  {x}: FAILED — {e}", file=sys.stderr)
-            results[x] = {"total": None, "sidechain": None}
+            print(f"  {x}: FAILED , {e}", file=sys.stderr)
+            rows.append((x, None, None))
 
-    payload = {
-        "_provenance": {
-            "method": "Ala-X-Ala extended tripeptide, heavy atoms only, "
-                      "FreeSASA default classifier + probe radius 1.4 Å "
-                      "(Shrake-Rupley). Per spec R11 / Yang & Blundell 1996.",
-            "generator": "software/scripts/derive_ala_x_ala_refs.py",
-        },
-        "references": results,
-    }
-    out_path.write_text(json.dumps(payload, indent=2))
+    lines = [
+        "# Heavy-atom-only Ala-X-Ala reference SASAs (R11), Yang & Blundell 1996",
+        "# Re-derived via software/scripts/derive_ala_x_ala_refs.py.",
+        "# residue, total (A^2), sidechain (A^2)",
+        "residue\ttotal\tsidechain",
+    ]
+    for name, total, side in rows:
+        lines.append(f"{name}\t{total if total is not None else ''}\t{side if side is not None else ''}")
+    out_path.write_text("\n".join(lines) + "\n")
     print(f"\nwrote {out_path}")
 
     # When running inside the block's Docker (root) but mounting host paths,
     # the output ends up root-owned. Match the bind-mount's owner so the host
-    # user can re-edit the JSON without a chown dance.
+    # user can re-edit the TSV without a chown dance.
     import os
     try:
         mount_stat = os.stat(out_path.parent)
