@@ -7,7 +7,7 @@ packages:
   - software
 
 catalog:
-  "@milaboratories/graph-maker": 1.4.0
+  "@milaboratories/graph-maker": 1.4.3
   "@milaboratories/helpers": 1.14.2
   "@milaboratories/structure-viewer": 0.3.0
   "@milaboratories/ts-builder": 1.5.0
