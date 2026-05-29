@@ -2,7 +2,6 @@ import type {
   AxisId,
   BlockRenderCtx,
   DatasetOption,
-  DatasetSelection,
   InferOutputsType,
   PColumn,
   PColumnDataUniversal,
@@ -13,65 +12,51 @@ import type {
   ValueType,
 } from "@platforma-sdk/model";
 import {
+  ArrayColumnProvider,
   BlockModelV3,
   buildDatasetOptions,
-  createPlDataTableV2,
+  createPlDataTableV3,
   DataModelBuilder,
   getAxisId,
   isPColumnSpec,
   parseResourceMap,
 } from "@platforma-sdk/model";
+import type { BlockArgs, BlockData, DetectedMode } from "./types";
 
-/** Spec R14 / R10: numbering schemes supported for region tagging. */
-export type NumberingScheme = "imgt" | "chothia" | "kabat";
-
-export type BlockData = {
-  /** Spec R1 / R46 dataset envelope picked via `PlDatasetSelector`.
-   * `.args()` unwraps `dataset.primary` back into the `PrimaryRef`
-   * shape the workflow's `wf.prepare` already knows how to resolve. */
-  dataset?: DatasetSelection;
-  /** R14 / R10 numbering scheme: empty string means unknown (motif
-   * scoring then falls back to neutral region weights). */
-  numberingScheme: NumberingScheme | "";
-  /** R9 heavy / light chain overrides. Auto-detected from REMARK 99
-   * PLATFORMA CDR records; these fields are populated only when the
-   * user needs to override the detected mapping (e.g. on PDBs without
-   * REMARK 99 records). */
-  heavyChainId: string;
-  lightChainId: string;
-  /** R34 region-aware confidence gating thresholds (Å). Calibrated for
-   * ImmuneBuilder per-atom predicted error; raise for crystal PDBs
-   * whose B-factor column carries Å² temperature factors. */
-  frConfThresh: number;
-  cdrConfThresh: number;
-  /** Spec BlockData.detectedMode: dataset-level TAP / TNP resolved by
-   * the UI after the first successful run from the per-clonotype
-   * `pl7.app/liabilities/mode` column (uniform by R7). Drives R51
-   * mode-specific column visibility, R54 mode-specific histogram
-   * dispatch, and the R55 subtitle prefix. */
-  detectedMode?: "TAP" | "TNP";
-};
+export type { NumberingScheme, DetectedMode, BlockData, BlockArgs } from "./types";
 
 const dataModel = new DataModelBuilder().from<BlockData>("v1").init(() => ({
   dataset: undefined,
-  // R14 default scheme: upstream's 3D Structure Prediction block always
-  // produces IMGT-numbered PDBs (the `pl7.app/structure/numbering`
-  // domain we match on already requires `imgt`), so defaulting here
-  // saves the first-run user a dropdown click.
+  // Upstream 3D Structure Prediction always emits IMGT-numbered PDBs, so
+  // default to imgt and save the first-run user a dropdown click.
   numberingScheme: "imgt",
   heavyChainId: "",
   lightChainId: "",
   frConfThresh: 4.0,
   cdrConfThresh: 6.0,
+  customBlockLabel: "",
 }));
 
-// Helpers for the per-metric histogram output pairs below. Each pair
-// resolves a single `scoresData` PColumn by name; `pfFromScores` wraps
-// it in a single-column PFrame for graph-maker binding, `specFromScores`
-// returns the `{columnId, spec}` pair the HistogramPage default options
-// bind to.
-type ScoresPColumn = PColumn<PColumnDataUniversal | undefined>;
 type ScoresCtx = BlockRenderCtx<unknown, unknown>;
+type ScoresPColumn = PColumn<PColumnDataUniversal | undefined>;
+
+/** Dataset-level mode emitted by the workflow as a scalar block output. */
+function resolveMode(ctx: ScoresCtx): DetectedMode | undefined {
+  const m = ctx.outputs?.resolve("detectedMode")?.getDataAsJson<string>();
+  return m === "TAP" || m === "TNP" ? m : undefined;
+}
+
+/** Block label derived from mode + cutoffs when the user hasn't set one. */
+export function defaultBlockLabelFor(data: Partial<BlockData>, mode?: DetectedMode): string {
+  const fmt = (v?: number) => (v === undefined ? "?" : Number.isInteger(v) ? `${v}` : v.toFixed(1));
+  const tail = `rSASA<0.075, confidence-gated FR>${fmt(data.frConfThresh)} Å / CDR>${fmt(data.cdrConfThresh)} Å`;
+  return mode ? `${mode}, ${tail}` : tail;
+}
+
+// Helpers for the per-metric histogram output pairs. Each resolves a single
+// `scoresData` PColumn by name; `pfFromScores` wraps it in a single-column
+// PFrame for graph-maker, `specFromScores` returns the {columnId, spec} pair
+// the histogram pages bind to.
 function findScoresCol(ctx: ScoresCtx, name: string): ScoresPColumn | undefined {
   const cols = ctx.outputs?.resolve("scoresData")?.getPColumns() as ScoresPColumn[] | undefined;
   return cols?.find((c) => c.spec.name === name);
@@ -93,24 +78,17 @@ function findOnScClonotype(ctx: ScoresCtx, name: string, valueType: ValueType) {
     name,
     valueType,
     axesSpec: [SC_CLONOTYPE_AXIS],
-  });
+  }) as ScoresPColumn[];
 }
 
-function resolvePrimaryRef(ctx: {
-  args?: { primaryRef?: { column?: PlRef } };
-  data?: BlockData;
-}): PlRef | undefined {
+function resolvePrimaryRef(ctx: { args?: BlockArgs; data?: BlockData }): PlRef | undefined {
   return ctx.args?.primaryRef?.column ?? ctx.data?.dataset?.primary?.column;
 }
 
 export const platforma = BlockModelV3.create(dataModel)
-  .args((data) => {
-    // Spec R1 / R46. UI carries `dataset: DatasetSelection`; we unwrap
-    // back to the PrimaryRef envelope the workflow already knows how to
-    // resolve (`wf.prepare` reads `args.primaryRef.column` for the PDB
-    // PColumn, `.filter` for the optional clonotype subset).
+  .args<BlockArgs>((data) => {
     if (!data.dataset?.primary?.column) {
-      throw new Error("Pick a predicted structures dataset");
+      throw new Error("Pick a 3D structures dataset");
     }
     return {
       primaryRef: data.dataset.primary,
@@ -121,13 +99,9 @@ export const platforma = BlockModelV3.create(dataModel)
       cdrConfThresh: data.cdrConfThresh,
     };
   })
-  // Spec R1 / R46. `buildDatasetOptions` surfaces anchor-marked PColumns
-  // (`pl7.app/isAnchor: "true"`) from the result pool as datasets the UI
-  // shows in `PlDatasetSelector`. We accept anchors whose name is
-  // `pl7.app/structure/pdb` (the 3D Structure Prediction block emits this
-  // since v1.0.11). Filter predicate identifies the Boolean/Int subset
-  // columns the user can pick to narrow the clonotype set per R47
-  // (predictionSuccessful, confident).
+  // Surface anchor-marked `pl7.app/structure/pdb` PColumns as selectable
+  // datasets; the filter predicate exposes the Boolean/Int columns the user
+  // can pick to narrow the clonotype set.
   .output("datasetOptions", (ctx): DatasetOption[] | undefined =>
     buildDatasetOptions(ctx, {
       primary: (spec: PObjectSpec): boolean =>
@@ -140,67 +114,57 @@ export const platforma = BlockModelV3.create(dataModel)
           spec.name === "pl7.app/structure/confident"),
     }),
   )
-  // Spec R51 , per-clonotype scalar metrics table. PColumns come from the
-  // `scoresData` PFrame (axes: [scClonotypeKey]); enriched with upstream
-  // `cdrh3Length` (R5 sanity-check column), upstream `pl7.app/label` for
-  // pretty row keys, and `pl7.app/clusterId` etc. when the 3D Structure
-  // Clustering block is upstream. Joined on the shared scClonotypeKey
-  // axis by the PFrame driver. `tableState` is passed as `undefined` so
-  // AG-Grid state writes don't trigger model re-runs (avoids the
-  // model→UI→model feedback loop via v-model).
+  // Dataset-level mode, consumed by the mode-specific histogram page and the
+  // default block label.
+  .output("detectedMode", (ctx): DetectedMode | undefined => resolveMode(ctx))
+  // Per-clonotype scalar metrics table. Score columns are primary; upstream
+  // label / cdrh3Length / cluster columns join on the shared scClonotypeKey
+  // axis. Mode-specific flag columns default-visible only in their mode.
   .outputWithStatus("scoresTable", (ctx) => {
-    const pCols = ctx.outputs?.resolve("scoresData")?.getPColumns();
-    if (pCols === undefined) return undefined;
-    // R5 sanity-check + R42 cluster enrichment + `pl7.app/label` for pretty
-    // row keys. PlAgDataTable auto-joins on the shared scClonotypeKey axis;
-    // missing matches simply stay as empty cells.
-    const upstreamCdrh3 = findOnScClonotype(ctx, "pl7.app/structure/cdrh3Length", "Long");
-    const upstreamLabel = findOnScClonotype(ctx, "pl7.app/label", "String");
-    const clusterId = findOnScClonotype(ctx, "pl7.app/clusterId", "String");
-    const isCentroid = findOnScClonotype(ctx, "pl7.app/structure/clustering/isCentroid", "Int");
-    const tmDistance = findOnScClonotype(
-      ctx,
-      "pl7.app/structure/clustering/tmDistanceToCentroid",
-      "Double",
-    );
-    const tmScore = findOnScClonotype(
-      ctx,
-      "pl7.app/structure/clustering/tmScoreToCentroid",
-      "Double",
-    );
-    // Spec R51 , default-visible columns include the mode-appropriate
-    // flag only. Mode lives on `BlockData.detectedMode`, filled by the UI
-    // watcher after the first successful run. Until it is set, both
-    // flags fall through to their workflow-side default (visible).
-    const mode = ctx.data?.detectedMode;
-    const modeSpecific: Record<string, "TAP" | "TNP"> = {
-      "pl7.app/liabilities/sfvcspFlag": "TAP",
-      "pl7.app/liabilities/cdrh3CompactnessFlag": "TNP",
-    };
-    const pColsForMode = pCols.map((c) => {
-      const owner = modeSpecific[c.spec.name];
-      if (!owner || !mode) return c;
-      const annotations = { ...(c.spec.annotations ?? {}) };
-      annotations["pl7.app/table/visibility"] = owner === mode ? "default" : "optional";
-      return { ...c, spec: { ...c.spec, annotations } };
-    });
-    const allCols = [
-      ...pColsForMode,
-      ...(upstreamCdrh3 as typeof pCols),
-      ...(upstreamLabel as typeof pCols),
-      ...(clusterId as typeof pCols),
-      ...(isCentroid as typeof pCols),
-      ...(tmDistance as typeof pCols),
-      ...(tmScore as typeof pCols),
+    const scoreCols = ctx.outputs?.resolve("scoresData")?.getPColumns() as
+      | ScoresPColumn[]
+      | undefined;
+    if (scoreCols === undefined) return undefined;
+
+    const enrich = [
+      findOnScClonotype(ctx, "pl7.app/structure/cdrh3Length", "Long"),
+      findOnScClonotype(ctx, "pl7.app/label", "String"),
+      findOnScClonotype(ctx, "pl7.app/clusterId", "String"),
+      findOnScClonotype(ctx, "pl7.app/structure/clustering/isCentroid", "Int"),
+      findOnScClonotype(ctx, "pl7.app/structure/clustering/tmDistanceToCentroid", "Double"),
+      findOnScClonotype(ctx, "pl7.app/structure/clustering/tmScoreToCentroid", "Double"),
+    ].flat();
+
+    const variants = [
+      ...new ArrayColumnProvider(scoreCols).getAllColumns().map((column) => ({
+        column,
+        isPrimary: true,
+      })),
+      ...new ArrayColumnProvider(enrich).getAllColumns().map((column) => ({ column })),
     ];
-    return createPlDataTableV2(ctx, allCols, undefined);
+
+    const mode = resolveMode(ctx);
+    return createPlDataTableV3(ctx, {
+      columns: variants,
+      displayOptions: mode
+        ? {
+            visibility: [
+              {
+                match: (s) => s.name === "pl7.app/liabilities/sfvcspFlag",
+                visibility: mode === "TAP" ? "default" : "optional",
+              },
+              {
+                match: (s) => s.name === "pl7.app/liabilities/cdrh3CompactnessFlag",
+                visibility: mode === "TNP" ? "default" : "optional",
+              },
+            ],
+          }
+        : undefined,
+    });
   })
-  // Spec R54 , per-metric histograms. One PFrame + Spec output pair per
-  // metric, all built from `scoresData` via `findScoresCol` (declared at
-  // module scope). `ctx.createPFrame([col])` is used over
-  // `createPFrameForGraphs` because the latter pulls every column
-  // sharing the scClonotypeKey axis, which would let graph-maker pick
-  // an unrelated numeric column over the one bound by `defaultOptions`.
+  // Per-metric histograms. Each pair is a single-column PFrame + its spec.
+  // `ctx.createPFrame([col])` over `createPFrameForGraphs` so graph-maker
+  // binds the bound column rather than an unrelated sibling.
   .outputWithStatus("pshPf", (ctx) => pfFromScores(ctx, "pl7.app/liabilities/psh"))
   .output("pshSpec", (ctx) => specFromScores(ctx, "pl7.app/liabilities/psh"))
   .outputWithStatus("ppcPf", (ctx) => pfFromScores(ctx, "pl7.app/liabilities/ppc"))
@@ -221,51 +185,31 @@ export const platforma = BlockModelV3.create(dataModel)
   .output("devScoreSpec", (ctx) =>
     specFromScores(ctx, "pl7.app/liabilities/structuralDevelopabilityScore"),
   )
-  // Spec R52 , per-clonotype PDB ResourceMap exposed for the viewer modal.
-  // Reads the upstream `pl7.app/structure/pdb` PColumn (axis:
-  // scClonotypeKey, valueType File) and parses it into [{key, value}]
-  // pairs; UI consumes via `entry.value.handle` (a RemoteBlobHandle) and
-  // hands it to PlStructureViewer.
+  // Per-clonotype PDB ResourceMap from the workflow's `pdbsMap` output;
+  // parsed into [{key, value}] pairs the viewer modal consumes via
+  // `entry.value.handle`.
   .output("clonotypePdbsMap", (ctx) => {
-    // Resolve through the user-picked PlRef inside the PrimaryRef envelope
-    // (spec R1) rather than fuzzy-matching the result pool ,
-    // `findDataWithCompatibleSpec` was returning empty here even with
-    // name + valueType + axes + domain all aligned.
-    const ref = resolvePrimaryRef(ctx);
-    if (!ref) return undefined;
-    const pdbCol = ctx.resultPool.getPColumnByRef(ref);
-    if (!pdbCol) return undefined;
-    const parsed = parseResourceMap(
-      (pdbCol as unknown as { data: unknown }).data as never,
-      (acc) => acc.getRemoteFileHandle(),
-      false,
-    );
+    const pCols = ctx.outputs?.resolve("pdbsMap")?.getPColumns();
+    if (pCols === undefined || pCols.length === 0) return undefined;
+    const parsed = parseResourceMap(pCols[0].data, (acc) => acc.getRemoteFileHandle(), false);
     if (!parsed.isComplete) return undefined;
     return parsed.data;
   })
-  // Spec R52 , axis identifier for the scClonotypeKey axis on the scoresTable.
-  // UI uses this to attach PlAgDataTable's `show-cell-button-for-axis-id`
-  // so the viewer-trigger button renders on the clonotype-key column.
+  // Axis id of the scClonotypeKey axis, used to attach the viewer-trigger
+  // button to that column in the table.
   .output("clonotypeAxisId", (ctx): AxisId | undefined => {
     const ref = resolvePrimaryRef(ctx);
     if (!ref) return undefined;
     const pdbSpec = ctx.resultPool.getPColumnSpecByRef(ref);
     if (!pdbSpec) return undefined;
-    // Match the clonotype axis by name in case the upstream PDB column
-    // carries multiple axes (e.g. legacy [sampleId, scClonotypeKey] shape).
     const found = pdbSpec.axesSpec.find((a) => a.name === "pl7.app/vdj/scClonotypeKey");
     if (!found) return undefined;
-    // Return a stripped AxisId , `PlAgDataTableV2` does an `isJsonEqual`
-    // against its own column's axisId (run through `getAxisId`, dropping
-    // `annotations` etc). Returning the raw `AxisSpec` with extra fields
-    // silently breaks the deep-equal check → no open button renders.
+    // Strip to an AxisId — PlAgDataTableV2 deep-equals against its own
+    // column's AxisId (via getAxisId), so extra fields break the match.
     return getAxisId(found);
   })
   .sections((ctx) => {
-    const mode = ctx.data?.detectedMode;
-    // Spec R54 mode-specific slot. Before the first successful run the
-    // mode is undefined and the slot label is generic; once resolved it
-    // names the active metric so the sidebar reads as the slot's content.
+    const mode = resolveMode(ctx);
     const modeSpecificLabel =
       mode === "TNP"
         ? "CDRH3 compactness (VHH)"
@@ -282,19 +226,7 @@ export const platforma = BlockModelV3.create(dataModel)
     ];
   })
   .title(() => "3D Structure-Based Liabilities")
-  // Spec R55 , active-parameter summary at the block header. Mode prefix
-  // comes from BlockData.detectedMode; before the first successful run it
-  // is omitted (the field is undefined and we just show the cutoffs).
-  // Format: "TAP, rSASA<0.075, confidence-gated FR>4 Å / CDR>6 Å".
-  .subtitle((ctx) => {
-    if (!ctx.args) return "";
-    const a = ctx.args;
-    const mode = ctx.data?.detectedMode;
-    const fr = Number.isInteger(a.frConfThresh) ? a.frConfThresh : a.frConfThresh.toFixed(1);
-    const cdr = Number.isInteger(a.cdrConfThresh) ? a.cdrConfThresh : a.cdrConfThresh.toFixed(1);
-    const tail = `rSASA<0.075, confidence-gated FR>${fr} Å / CDR>${cdr} Å`;
-    return mode ? `${mode}, ${tail}` : tail;
-  })
+  .subtitle((ctx) => ctx.data.customBlockLabel || defaultBlockLabelFor(ctx.data, resolveMode(ctx)))
   .done();
 
 export type BlockOutputs = InferOutputsType<typeof platforma>;
