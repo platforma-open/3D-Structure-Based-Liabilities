@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milabs.3d-structure-based-liabilities",
+  "name": "@platforma-open/milaboratories.3d-structure-based-liabilities",
   "version": "1.0.0",
   "scripts": {
     "build": "shx rm -rf ./block-pack && block-tools pack",
@@ -13,18 +13,18 @@
   ],
   "dependencies": {
     "@platforma-sdk/model": "catalog:",
-    "@platforma-open/milabs.3d-structure-based-liabilities.workflow": "workspace:*",
-    "@platforma-open/milabs.3d-structure-based-liabilities.model": "workspace:*",
-    "@platforma-open/milabs.3d-structure-based-liabilities.ui": "workspace:*"
+    "@platforma-open/milaboratories.3d-structure-based-liabilities.workflow": "workspace:*",
+    "@platforma-open/milaboratories.3d-structure-based-liabilities.model": "workspace:*",
+    "@platforma-open/milaboratories.3d-structure-based-liabilities.ui": "workspace:*"
   },
   "block": {
     "components": {
-      "workflow": "@platforma-open/milabs.3d-structure-based-liabilities.workflow/dist/tengo/tpl/main.plj.gz",
-      "model": "@platforma-open/milabs.3d-structure-based-liabilities.model/dist/model.json",
-      "ui": "@platforma-open/milabs.3d-structure-based-liabilities.ui/dist"
+      "workflow": "@platforma-open/milaboratories.3d-structure-based-liabilities.workflow/dist/tengo/tpl/main.plj.gz",
+      "model": "@platforma-open/milaboratories.3d-structure-based-liabilities.model/dist/model.json",
+      "ui": "@platforma-open/milaboratories.3d-structure-based-liabilities.ui/dist"
     },
     "meta": {
-      "title": "3D-Structure-Based-Liabilities",
+      "title": "3D Structure-Based Liabilities",
       "logo": "file:../logos/block-logo.png",
       "url": "https://github.com/platforma-open/3D-Structure-Based-Liabilities",
       "support": "mailto:support@milaboratories.com",

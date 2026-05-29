@@ -84,13 +84,13 @@ importers:
 
   block:
     dependencies:
-      '@platforma-open/milabs.3d-structure-based-liabilities.model':
+      '@platforma-open/milaboratories.3d-structure-based-liabilities.model':
         specifier: workspace:*
         version: link:../model
-      '@platforma-open/milabs.3d-structure-based-liabilities.ui':
+      '@platforma-open/milaboratories.3d-structure-based-liabilities.ui':
         specifier: workspace:*
         version: link:../ui
-      '@platforma-open/milabs.3d-structure-based-liabilities.workflow':
+      '@platforma-open/milaboratories.3d-structure-based-liabilities.workflow':
         specifier: workspace:*
         version: link:../workflow
       '@platforma-sdk/model':
@@ -141,7 +141,7 @@ importers:
   test:
     dependencies:
       this-block:
-        specifier: workspace:@platforma-open/milabs.3d-structure-based-liabilities@*
+        specifier: workspace:@platforma-open/milaboratories.3d-structure-based-liabilities@*
         version: link:../block
       typescript:
         specifier: '*'
@@ -162,7 +162,7 @@ importers:
       '@milaboratories/structure-viewer':
         specifier: 'catalog:'
         version: 0.3.0(@platforma-sdk/model@1.77.4)(@platforma-sdk/ui-vue@1.77.4(@bytecodealliance/preview2-shim@0.17.8)(typescript@5.6.3))(@types/react@19.2.15)(fp-ts@2.16.11)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(vue@3.5.24(typescript@5.6.3))
-      '@platforma-open/milabs.3d-structure-based-liabilities.model':
+      '@platforma-open/milaboratories.3d-structure-based-liabilities.model':
         specifier: workspace:*
         version: link:../model
       '@platforma-sdk/model':
@@ -193,7 +193,7 @@ importers:
 
   workflow:
     dependencies:
-      '@platforma-open/milabs.3d-structure-based-liabilities.software':
+      '@platforma-open/milaboratories.3d-structure-based-liabilities.software':
         specifier: workspace:*
         version: link:../software
       '@platforma-sdk/workflow-tengo':

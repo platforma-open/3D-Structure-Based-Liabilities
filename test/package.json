@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milabs.3d-structure-based-liabilities.test",
+  "name": "@platforma-open/milaboratories.3d-structure-based-liabilities.test",
   "version": "1.0.0",
   "private": true,
   "description": "Block tests",
@@ -10,7 +10,7 @@
     "test": "vitest --passWithNoTests"
   },
   "dependencies": {
-    "this-block": "workspace:@platforma-open/milabs.3d-structure-based-liabilities@*"
+    "this-block": "workspace:@platforma-open/milaboratories.3d-structure-based-liabilities@*"
   },
   "devDependencies": {
     "@platforma-sdk/test": "catalog:"
