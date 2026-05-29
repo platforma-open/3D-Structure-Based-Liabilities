@@ -5,10 +5,9 @@ import type { OutputWithStatus, PColumnIdAndSpec, PFrameHandle } from "@platform
 import { PlBlockPage } from "@platforma-sdk/ui-vue";
 import { computed } from "vue";
 
-// Spec R54 distribution view. Renders one per-metric histogram via
-// graph-maker. Amber/red threshold lines come from the metric column's
-// `pl7.app/graph/thresholds` annotation, honored by the histogram
-// template (graph-maker 1.4.3+, miplots4 transitively).
+// Renders one per-metric histogram via graph-maker. Amber/red threshold
+// lines come from the metric column's `pl7.app/graph/thresholds` annotation,
+// honored by the histogram template.
 const props = defineProps<{
   title: string;
   description: string;
@@ -34,22 +33,9 @@ const defaultOptions = computed<PredefinedGraphOption<"histogram">[] | undefined
 
 <template>
   <PlBlockPage :title="title">
-    <p :style="{ fontSize: '13px', color: '#374151', marginTop: '8px', lineHeight: '1.5' }">
-      {{ description }}
-    </p>
-    <p
-      v-if="thresholds"
-      :style="{
-        fontSize: '12px',
-        color: '#6b7280',
-        marginTop: '4px',
-        fontStyle: 'italic',
-        lineHeight: '1.5',
-      }"
-    >
-      <strong>Thresholds:</strong> {{ thresholds }}
-    </p>
-    <div :style="{ height: '500px', marginTop: '12px' }">
+    <p class="description">{{ description }}</p>
+    <p v-if="thresholds" class="thresholds"><strong>Thresholds:</strong> {{ thresholds }}</p>
+    <div class="chart">
       <GraphMaker
         v-model="graphStateModel"
         chartType="histogram"
@@ -57,10 +43,27 @@ const defaultOptions = computed<PredefinedGraphOption<"histogram">[] | undefined
         :default-options="defaultOptions"
         :status-text="{
           noPframe: {
-            title: notReadyTitle ?? 'Run on a predicted-structures dataset to see the distribution',
+            title: notReadyTitle ?? 'Run on a 3D structures dataset to see the distribution',
           },
         }"
       />
     </div>
   </PlBlockPage>
 </template>
+
+<style scoped>
+.description {
+  margin-top: 8px;
+  line-height: 1.5;
+}
+.thresholds {
+  margin-top: 4px;
+  font-style: italic;
+  line-height: 1.5;
+  color: var(--txt-mask, #6b7280);
+}
+.chart {
+  height: 500px;
+  margin-top: 12px;
+}
+</style>

@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import type { GraphMakerState } from "@milaboratories/graph-maker";
-import type { PFrameHandle } from "@platforma-sdk/model";
 import { computed, ref } from "vue";
 import { useApp } from "../app";
 import HistogramPage from "../components/HistogramPage.vue";
-import { useDetectedMode } from "../composables/useDetectedMode";
-import { pfHandleFrom } from "../composables/ptableCell";
 import { histogramConfigs, makeGraphState } from "./histogramConfigs";
 
 const app = useApp();
-const scoresPf = computed(
-  () => pfHandleFrom(app.model.outputs.scoresTable) as PFrameHandle | undefined,
-);
-const { mode } = useDetectedMode(scoresPf);
+const mode = computed(() => app.model.outputs.detectedMode);
 
 const config = computed(() =>
   mode.value === "TNP" ? histogramConfigs.cdrh3Compactness : histogramConfigs.sfvcsp,

@@ -49,7 +49,7 @@ export function readNullableNumber(col: PTableColumn, i: number): number | null 
  *  `outputWithStatus` result whose `value` carries the two driver handles.
  *  `fullTableHandle` is for pFrameDriver scans (useClusterAssignments,
  *  useRunSummaryAlerts); `fullPframeHandle` is for the SDK column lookups
- *  used by useClonotypeLabels / useDetectedMode. */
+ *  used by useClonotypeLabels. */
 export type ScoresTableOutput =
   | { ok?: boolean; value?: { fullTableHandle?: unknown; fullPframeHandle?: unknown } }
   | undefined;

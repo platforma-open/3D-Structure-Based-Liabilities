@@ -3,13 +3,12 @@ import { computed, ref, watchEffect, type ComputedRef } from "vue";
 import { readNumber, type ScoresTableOutput } from "./ptableCell";
 
 /**
- * Spec R44 / R45 run-summary alert source. Reads `*Flag` columns and
+ * Run-summary alert source. Reads `*Flag` columns and
  * `confidenceGatedMotifCount` from the scoresTable PTable and computes:
  *
- *   R44 , fraction of clonotypes with ANY red metric flag (PSH/PPC/PNC/
- *         SFvCSP/CDRH3-compactness/totalCdrLength). Alert fires above 10%.
- *   R45 , fraction of clonotypes with at least one confidence-gated motif.
- *         Alert fires above 25%.
+ *   - fraction of clonotypes with ANY red metric flag. Alert fires above 10%.
+ *   - fraction of clonotypes with at least one confidence-gated motif.
+ *     Alert fires above 25%.
  */
 export type RunSummary = {
   total: number;
@@ -71,8 +70,8 @@ export function useRunSummaryAlerts(scoresTable: ComputedRef<ScoresTableOutput>)
     });
     const rowCount = shape.rows;
 
-    // R44: any-red-flag-per-row. String columns come back as plain arrays,
-    // so a tight Array.isArray check stays cheap.
+    // Any-red-flag-per-row. String columns come back as plain arrays, so a
+    // tight Array.isArray check stays cheap.
     let redClonotypes = 0;
     for (let row = 0; row < rowCount; row++) {
       for (let k = 0; k < flagIndices.length; k++) {
@@ -85,7 +84,7 @@ export function useRunSummaryAlerts(scoresTable: ComputedRef<ScoresTableOutput>)
       }
     }
 
-    // R45: gated-motif-count > 0. confidenceGatedMotifCount is Long-typed,
+    // Gated-motif-count > 0. confidenceGatedMotifCount is Long-typed,
     // which means BigInts inside a numeric-indexed wrapper object; readNumber
     // normalises that to a plain number. The gated column rides at the end
     // of `requestIndices` (after all flag indices), so its data slot is at
