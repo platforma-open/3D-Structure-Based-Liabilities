@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milabs.3d-structure-based-liabilities.software",
+  "name": "@platforma-open/milaboratories.3d-structure-based-liabilities.software",
   "version": "0.1.0",
   "scripts": {
     "build": "pl-pkg build",

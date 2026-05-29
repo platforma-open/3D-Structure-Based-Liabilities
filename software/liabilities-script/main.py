@@ -327,6 +327,11 @@ def main() -> None:
                          "filenames are resolved relative to --pdb-dir.")
     ap.add_argument("--output-tsv", required=True, type=Path,
                     help="Output TSV path. One row per clonotype.")
+    ap.add_argument("--mode-output", type=Path, default=None,
+                    help="Optional path for a JSON file holding the "
+                         "dataset-level mode (\"TAP\" or \"TNP\"). The mode is "
+                         "uniform across the dataset (one chain-count regime "
+                         "per upstream PDB set).")
     ap.add_argument("--rsasa-buried-cutoff", type=float, default=0.075,
                     help="Spec R12 default 0.075 (Raybould 2019 canonical).")
     ap.add_argument("--fr-confidence-gating-threshold", type=float, default=4.0,
@@ -430,6 +435,7 @@ def main() -> None:
     writer = csv.writer(out_buf, delimiter="\t", lineterminator="\n")
     writer.writerow(_TSV_COLUMNS)
 
+    dataset_mode: str | None = None
     for entry in index_rows:
         if len(entry) != 2:
             raise SystemExit(
@@ -463,11 +469,18 @@ def main() -> None:
             )
             continue
         row["clonotypeKey"] = clonotype_key
+        if dataset_mode is None:
+            dataset_mode = row.get("mode")
         writer.writerow([_tsv_value(row.get(c)) for c in _TSV_COLUMNS])
 
     args.output_tsv.parent.mkdir(parents=True, exist_ok=True)
     args.output_tsv.write_text(out_buf.getvalue())
     chown_to_host(args.output_tsv)
+
+    if args.mode_output is not None:
+        args.mode_output.parent.mkdir(parents=True, exist_ok=True)
+        args.mode_output.write_text(json.dumps(dataset_mode))
+        chown_to_host(args.mode_output)
 
 
 if __name__ == "__main__":
