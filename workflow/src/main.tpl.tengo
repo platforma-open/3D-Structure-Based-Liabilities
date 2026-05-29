@@ -1,18 +1,12 @@
 // vim: filetype=go
 //
-// 3D Structure-Based Liabilities , workflow entry point.
+// 3D Structure-Based Liabilities, workflow entry point.
 //
-// Single-shot architecture per the refreshed spec Software Interface +
-// Processing Pipeline. The workflow root resolves the upstream
-// `pl7.app/structure/pdb` PColumn from the PrimaryRef envelope (R1),
-// stages every PDB blob into one exec call, builds a 2-column
-// `pdb_index.tsv` (clonotypeKey, filename), runs `python /app/main.py`
-// once against the whole dataset, and imports the resulting
-// `per_clonotype.tsv` via `xsv.importFile` to produce per-clonotype
-// scalar PColumns (R38) with axes inherited from the upstream PDB
-// column. Optional sidecars: upstream `cdrh3Length` (R5/R29 numerator),
-// `confidence/perResidue` JSON (R4 fallback), and the user-picked
-// `PrimaryRef.filter` Boolean/Int PColumn (R1 subset).
+// Resolves the upstream PDB column from the picked dataset, stages every
+// PDB blob into one exec call, builds a 2-column pdb_index.tsv
+// (clonotypeKey, filename), runs the Python tool once over the whole
+// dataset, and imports the resulting per_clonotype.tsv into per-clonotype
+// scalar PColumns keyed on the upstream scClonotypeKey axis.
 
 wf := import("@platforma-sdk/workflow-tengo:workflow")
 assets := import("@platforma-sdk/workflow-tengo:assets")
@@ -27,15 +21,14 @@ json := import("json")
 
 specs := import(":specs")
 
-liabilitiesSw := assets.importSoftware("@platforma-open/milabs.3d-structure-based-liabilities.software:liabilities")
+liabilitiesSw := assets.importSoftware("@platforma-open/milaboratories.3d-structure-based-liabilities.software:liabilities")
 
 wf.prepare(func(args) {
 	// Anchor on the PDB column so upstream enrichments sharing the
-	// scClonotypeKey axis (R2) auto-discover. R5/R29: cdrh3Length feeds
-	// the R30 compactness numerator. R1 PrimaryRef.filter: when the
-	// user picks a filter PlRef, resolve it as a Single so wf.body can
-	// export it to a TSV sidecar; Python then skips clonotypes whose
-	// filter value is falsy.
+	// scClonotypeKey axis auto-discover. cdrh3Length feeds the compactness
+	// numerator; perResidueConfidence is a fallback when the PDB B-factor
+	// column carries no predicted error. The optional filter, when picked,
+	// is resolved as a Single so the body can export it to a TSV sidecar.
 	bb := wf.createPBundleBuilder()
 	bb.ignoreMissingDomains()
 	bb.addAnchor("pdb", args.primaryRef.column)
@@ -45,9 +38,6 @@ wf.prepare(func(args) {
 			name: "pl7.app/structure/cdrh3Length"
 		},
 		"cdrh3Length")
-	// R4: per-residue confidence JSON column. Fallback for when PDB
-	// B-factor is missing (e.g. PDBs synthesized without ImmuneBuilder's
-	// error-as-B-factor convention). Optional, in practice rarely needed.
 	bb.addMulti(
 		{
 			axes: [{ anchor: "pdb", idx: 0 }],
@@ -74,10 +64,10 @@ wf.body(func(args) {
 	}
 	scClonotypeAxis := pdbAxes[0]
 
-	// Iterate the upstream ResourceMap entries: each key is a JSON-encoded
-	// 1-element `[scClonotypeKey]` array, each value is a Blob ref to a PDB
-	// file. Build the spec's `pdb_index.tsv` (clonotypeKey \t pdb_filename)
-	// and the per-PDB `addFile` calls in the same loop.
+	// Each ResourceMap key is a JSON-encoded [scClonotypeKey] array; each
+	// value is a Blob ref to a PDB file. Build pdb_index.tsv and the per-PDB
+	// addFile calls in one sorted pass (sorted keys keep the exec input
+	// canonical so the pure step dedups).
 	inputsMap := pdbCol.data.inputs()
 	indexLines := []
 	cmd := exec.builder().
@@ -98,14 +88,13 @@ wf.body(func(args) {
 		arg("--pdb-dir").arg("pdbs").
 		arg("--pdb-index").arg("pdb_index.tsv").
 		arg("--output-tsv").arg("per_clonotype.tsv").
+		arg("--mode-output").arg("mode.json").
 		arg("--fr-confidence-gating-threshold").arg(string(args.frConfThresh)).
 		arg("--cdr-confidence-gating-threshold").arg(string(args.cdrConfThresh))
 
-	// Optional enrichment sidecars. Each takes the first column matching
-	// the bundle key (xsv.exportFrame to a TSV, then `addFile` + CLI flag).
-	// Skipped silently when the bundle yields no match, so the block runs
-	// against older upstreams that don't emit the column. Returns the
-	// possibly-extended `cmd` so callers can chain.
+	// Optional enrichment sidecars: each exports the first matching column
+	// to a TSV and passes it via a CLI flag. Skipped when the bundle yields
+	// no match, so the block runs against older upstreams.
 	withSidecar := func(c, bundleKey, filename, cliFlag) {
 		cols := args.columns.getColumns(bundleKey)
 		if is_undefined(cols) || len(cols) == 0 {
@@ -114,14 +103,12 @@ wf.body(func(args) {
 		sidecarTsv := xsv.exportFrame([cols[0]], "tsv", { mem: "1GiB", cpu: 1 })
 		return c.addFile(filename, sidecarTsv).arg(cliFlag).arg(filename)
 	}
-	cmd = withSidecar(cmd, "cdrh3Length", "cdrh3_lengths.tsv", "--cdrh3-lengths")                    // R5/R29 numerator
-	cmd = withSidecar(cmd, "perResidueConfidence", "per_residue_confidence.tsv", "--per-residue-confidence") // R4 fallback
+	cmd = withSidecar(cmd, "cdrh3Length", "cdrh3_lengths.tsv", "--cdrh3-lengths")
+	cmd = withSidecar(cmd, "perResidueConfidence", "per_residue_confidence.tsv", "--per-residue-confidence")
 
-	// R1 PrimaryRef.filter: single column (vs the multi-column lookups
-	// above), so use the `getColumn` accessor. The bundle only carries
-	// "filter" when wf.prepare actually addSingle'd it, so we gate on the
-	// same `primaryRef.filter` undefined check; `getColumn` panics if the
-	// key isn't in the pool.
+	// Optional clonotype subset filter (single column, picked via the
+	// dataset selector). getColumn panics if the key is absent, so gate on
+	// the same undefined check prepare used to addSingle it.
 	if !is_undefined(args.primaryRef.filter) {
 		filterTsv := xsv.exportFrame([args.columns.getColumn("filter")], "tsv", { mem: "1GiB", cpu: 1 })
 		cmd = cmd.
@@ -129,8 +116,7 @@ wf.body(func(args) {
 			arg("--clonotype-filter").arg("clonotype_filter.tsv")
 	}
 
-	// Optional CLI knobs (R10 fallback path + R9 chain identity overrides).
-	// Empty strings are skipped so Python falls through to its defaults.
+	// Empty strings fall through to the Python defaults.
 	withOptArg := func(c, flag, value) {
 		if is_undefined(value) || value == "" {
 			return c
@@ -141,21 +127,19 @@ wf.body(func(args) {
 	cmd = withOptArg(cmd, "--chain-h", args.heavyChainId)
 	cmd = withOptArg(cmd, "--chain-l", args.lightChainId)
 
-	result := cmd.saveFile("per_clonotype.tsv").run()
+	result := cmd.
+		saveFile("per_clonotype.tsv").
+		saveFileContent("mode.json").
+		run()
 	scoresTsv := result.getFile("per_clonotype.tsv")
 
-	// Spec R38 / R39: import the per_clonotype.tsv as PColumns. Axes come
-	// straight from the upstream PDB column so downstream blocks auto-join
-	// against the upstream scClonotypeKey axis.
+	// Import per_clonotype.tsv as PColumns. Axes come from the upstream PDB
+	// column so downstream blocks auto-join on the shared scClonotypeKey axis.
 	xsvSettings := specs.buildScoresXsvSettings(blockId, scClonotypeAxis)
-	// `splitDataAndSpec: true` makes the returned map yield `{spec, data}`
-	// per entry, which the trace-injection loop below needs. Default `false`
-	// returns flat resource refs and `v.spec` would not resolve.
 	scoresXsvPf := xsv.importFile(scoresTsv, "tsv", xsvSettings, { splitDataAndSpec: true })
 
-	// Spec R43: derive the trace chain from the upstream PDB column and
-	// stamp every emitted PColumn so downstream consumers see the full
-	// block lineage (upstream blocks plus this one).
+	// Stamp every emitted column with the trace chain derived from the
+	// upstream PDB column so downstream consumers see the full lineage.
 	trace := pSpec.makeTrace(pdbCol.spec, {
 		type: "milaboratories.3d-structure-based-liabilities",
 		id: blockId,
@@ -168,10 +152,21 @@ wf.body(func(args) {
 	}
 	scoresPf := scoresPfBuilder.build()
 
+	// Re-emit the upstream PDB ResourceMap as our own output so the model
+	// resolves the blob handles directly for the structure-viewer modal
+	// instead of round-tripping through the result pool.
+	pdbsPfBuilder := pframes.pFrameBuilder()
+	pdbsPfBuilder.add("pdb", trace.inject(pdbCol.spec), pdbCol.data)
+	pdbsPf := pdbsPfBuilder.build()
+
 	return {
 		outputs: {
-			scoresData: pframes.exportFrame(scoresPf)
+			scoresData: pframes.exportFrame(scoresPf),
+			pdbsMap: pframes.exportFrame(pdbsPf),
+			detectedMode: result.getFileContent("mode.json")
 		},
-		exports: {}
+		exports: {
+			scores: scoresPf
+		}
 	}
 })

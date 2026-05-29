@@ -3,9 +3,8 @@
 // covering composite scoring, counts, raw metrics, threshold flags, and
 // low-confidence-residue fractions.
 //
-// The motif and cysteine PFrames are out of scope in the refreshed spec
-// (see block-structure-liabilities.md "Out of scope"); this file used
-// to declare their column specs and is now scores-only.
+// The motif and cysteine PFrames are out of scope; this file used to
+// declare their column specs and is now scores-only.
 //
 // `xsv.importFile` in main.tpl.tengo reads the TSV per_clonotype.tsv;
 // the upstream PDB column's `pl7.app/vdj/scClonotypeKey` axis is
@@ -14,8 +13,8 @@
 ll := import("@platforma-sdk/workflow-tengo:ll")
 json := import("json")
 
-// Spec R39 / R54: Raybould 2019 + Gordon 2025 amber/red threshold values.
-// Encoded as a `pl7.app/graph/thresholds` annotation on the metric
+// Raybould 2019 + Gordon 2025 amber/red threshold values. Encoded as a
+// `pl7.app/graph/thresholds` annotation on the metric
 // columns so GraphMaker draws them as dashed lines on histograms.
 thresholdsFor := func(colName, values) {
 	entries := []
@@ -38,9 +37,8 @@ thresholdsFor := func(colName, values) {
 // sites instead of buried in 10 lines of dict-per-column boilerplate.
 
 // Raw Double surface metric (PSH, PPC, PNC, SFvCSP, CDRH3 compactness).
-// Always hidden by default per R51 ("show all" reveals); carries the
-// Raybould 2019 / Gordon 2025 amber/red threshold values as a graph
-// annotation (R39 / R54).
+// Hidden by default ("show all" reveals); carries the Raybould 2019 /
+// Gordon 2025 amber/red threshold values as a graph annotation.
 metricColumnSpec := func(name, label, format, orderPriority, thresholdValues) {
 	return {
 		valueType: "Double",
@@ -55,9 +53,9 @@ metricColumnSpec := func(name, label, format, orderPriority, thresholdValues) {
 	}
 }
 
-// R36 per-metric low-confidence-residue fraction. Always Double, always
-// hidden by default, never carries threshold annotations (fractions don't
-// have Raybould bands).
+// Per-metric low-confidence-residue fraction. Always Double, always hidden
+// by default, never carries threshold annotations (fractions don't have
+// Raybould bands).
 lowConfFractionSpec := func(name, label, orderPriority) {
 	return {
 		valueType: "Double",
@@ -71,11 +69,11 @@ lowConfFractionSpec := func(name, label, orderPriority) {
 	}
 }
 
-// R39 three-band flag column. Always String ("green" / "amber" / "red" /
-// "-" sentinel when inapplicable), carries the apo-vs-bound tooltip and
-// isScore so PlAgDataTable styles the cell. Visibility differs: PSH /
-// PPC / PNC / SFvCSP / CDRH3-compactness flags are default-visible per
-// R51, totalCdrLengthFlag is optional (follows totalCdrLength itself).
+// Three-band flag column. Always String ("green" / "amber" / "red" / "-"
+// sentinel when inapplicable), carries the apo-vs-bound tooltip and isScore
+// so PlAgDataTable styles the cell. Visibility differs: PSH / PPC / PNC /
+// SFvCSP / CDRH3-compactness flags are default-visible, totalCdrLengthFlag
+// is optional (follows totalCdrLength itself).
 _FLAG_DESCRIPTION := "Flag reflects predicted apo conformation; bound conformation may differ."
 flagColumnSpec := func(name, label, orderPriority, visibility) {
 	return {
@@ -93,7 +91,7 @@ flagColumnSpec := func(name, label, orderPriority, visibility) {
 
 // Long-valued count columns (cysteine + motif counts, plus pshPatchCount).
 // All share label / visibility / orderPriority shape; visibility flips
-// per R51 (exposedExtra, brokenCanonical, surfacedMotif are
+// per column (exposedExtra, brokenCanonical, surfacedMotif are
 // default-visible; the rest sit behind "show all").
 countLongSpec := func(name, label, orderPriority, visibility) {
 	return {
@@ -108,7 +106,7 @@ countLongSpec := func(name, label, orderPriority, visibility) {
 }
 
 // ──────────────── Scores PFrame ────────────────
-// Default visibility + orderPriority per spec R51:
+// Default visibility + orderPriority:
 //   Default visible: mode, structuralDevelopabilityRisk, structuralIntegrityRisk,
 //     structuralDevelopabilityScore, surfacedMotifCount, exposedExtraCysCount,
 //     brokenCanonicalDisulfideCount, PSH/PPC/PNC flags, mode-specific flag.
@@ -121,7 +119,7 @@ scoresColumnSpecs := {
 		valueType: "String",
 		name: "pl7.app/liabilities/mode",
 		annotations: {
-			"pl7.app/label": "Mode (R7)",
+			"pl7.app/label": "Mode",
 			"pl7.app/table/visibility": "optional",
 			"pl7.app/table/orderPriority": "1100"
 		}
@@ -179,8 +177,8 @@ scoresColumnSpecs := {
 			"pl7.app/table/orderPriority": "1040"
 		}
 	},
-	// R24/R29: total CDR length. Long-valued (residue count), so it
-	// can't use metricColumnSpec which is Double-only.
+	// Total CDR length. Long-valued (residue count), so it can't use
+	// metricColumnSpec which is Double-only.
 	totalCdrLength: {
 		valueType: "Long",
 		name: "pl7.app/liabilities/totalCdrLength",
@@ -191,27 +189,27 @@ scoresColumnSpecs := {
 			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/totalCdrLength", [54, 60])
 		}
 	},
-	// R25 PSH: surface-hydrophobicity patch score; Raybould 2019 Table 2.
+	// PSH: surface-hydrophobicity patch score; Raybould 2019 Table 2.
 	psh: metricColumnSpec(
 		"pl7.app/liabilities/psh", "PSH", ".2f", "860",
 		[83.84, 100.71, 156.20, 173.85]),
-	// R25: diagnostic Long count of distinct patches discovered (not score).
+	// Diagnostic Long count of distinct patches discovered (not score).
 	pshPatchCount: countLongSpec(
 		"pl7.app/liabilities/pshPatchCount", "PSH patch count", "850", "optional"),
-	// R26 PPC / PNC: positive / negative patch scores.
+	// PPC / PNC: positive / negative patch scores.
 	ppc: metricColumnSpec(
 		"pl7.app/liabilities/ppc", "PPC", ".2f", "840", [1.25, 3.16]),
 	pnc: metricColumnSpec(
 		"pl7.app/liabilities/pnc", "PNC", ".2f", "830", [1.84, 3.50]),
-	// R28 SFvCSP: paired-Fv only. Lower = worse (asymmetric charges to viscosity).
+	// SFvCSP: paired-Fv only. Lower = worse (asymmetric charges to viscosity).
 	sfvcsp: metricColumnSpec(
 		"pl7.app/liabilities/sfvcsp", "SFvCSP", ".2f", "820", [-20.40, -6.30]),
-	// R30 CDRH3 compactness: VHH only. Bidirectional risk.
+	// CDRH3 compactness: VHH only. Bidirectional risk.
 	cdrh3Compactness: metricColumnSpec(
 		"pl7.app/liabilities/cdrh3Compactness", "CDRH3 compactness", ".3f", "810",
 		[0.56, 0.82, 1.57, 1.61]),
 
-	// R36 per-metric low-confidence residue fractions.
+	// Per-metric low-confidence residue fractions.
 	totalCdrLengthLowConfidenceResidueFraction: lowConfFractionSpec(
 		"pl7.app/liabilities/totalCdrLengthLowConfidenceResidueFraction",
 		"Total CDR length low-conf fraction", "790"),
@@ -231,9 +229,9 @@ scoresColumnSpecs := {
 		"pl7.app/liabilities/cdrh3CompactnessLowConfidenceResidueFraction",
 		"CDRH3 compactness low-conf fraction", "740"),
 
-	// R39 three-band threshold flags. PSH / PPC / PNC / SFvCSP / CDRH3
-	// compactness are default-visible per R51; totalCdrLengthFlag follows
-	// the raw `totalCdrLength` metric to "show all" instead.
+	// Three-band threshold flags. PSH / PPC / PNC / SFvCSP / CDRH3
+	// compactness are default-visible; totalCdrLengthFlag follows the raw
+	// `totalCdrLength` metric to "show all" instead.
 	totalCdrLengthFlag: flagColumnSpec(
 		"pl7.app/liabilities/totalCdrLengthFlag", "Total CDR length flag", "930", "optional"),
 	pshFlag: flagColumnSpec(
@@ -270,7 +268,7 @@ scoresColumnIds := [
 ]
 
 // Build the Xsv column[] entries with `pl7.app/blockId` injected into
-// each column spec's domain so R43 traceability reaches downstream blocks.
+// each column spec's domain so traceability reaches downstream blocks.
 buildXsvColumns := func(blockId) {
 	out := []
 	for id in scoresColumnIds {
