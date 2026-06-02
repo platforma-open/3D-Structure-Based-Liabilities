@@ -49,7 +49,8 @@ function resolveMode(ctx: ScoresCtx): DetectedMode | undefined {
 /** Block label derived from mode + cutoffs when the user hasn't set one. */
 export function defaultBlockLabelFor(data: Partial<BlockData>, mode?: DetectedMode): string {
   const fmt = (v?: number) => (v === undefined ? "?" : Number.isInteger(v) ? `${v}` : v.toFixed(1));
-  const tail = `rSASA<0.075, confidence-gated FR>${fmt(data.frConfThresh)} Å / CDR>${fmt(data.cdrConfThresh)} Å`;
+  // No angle brackets: they break rendering in the block-list subtitle.
+  const tail = `rSASA 0.075, FR ${fmt(data.frConfThresh)} Å / CDR ${fmt(data.cdrConfThresh)} Å`;
   return mode ? `${mode}, ${tail}` : tail;
 }
 
