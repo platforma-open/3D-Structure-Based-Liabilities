@@ -86,16 +86,17 @@ def _safe_float(value) -> float | None:
 
 def _iter_clonotype_keyed_tsv(path: Path) -> Iterator[tuple[str, str]]:
     """Yield (clonotype_key, raw_value) for each row of an xsv-exported TSV
-    with a `pl7.app/vdj/scClonotypeKey`-named first column and exactly one
-    value column. Skips rows with empty value. Used by the three sidecar
-    loaders below."""
+    with the clonotype key in the first column and the value in the second.
+    The key column name varies by dataset type (single-cell vs bulk), so we
+    take it positionally rather than matching a fixed axis name. Skips rows
+    with empty value. Used by the three sidecar loaders below."""
     with path.open() as fh:
         reader = csv.DictReader(fh, delimiter="\t")
         fields = reader.fieldnames or []
-        key_col = next((c for c in fields if "scClonotypeKey" in c), None)
-        val_col = next((c for c in fields if c != key_col), None)
-        if not key_col or not val_col:
+        if len(fields) < 2:
             return
+        key_col = fields[0]
+        val_col = fields[1]
         for r in reader:
             raw = r.get(val_col)
             if raw is None or raw == "":
