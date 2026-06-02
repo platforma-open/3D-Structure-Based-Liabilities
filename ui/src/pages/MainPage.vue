@@ -185,22 +185,6 @@ const modalTitle = computed(() => {
       </PlAccordionSection>
     </PlSlideModal>
 
-    <!-- Shown when the user closed Settings without picking a dataset. -->
-    <div v-if="!app.model.data.dataset?.primary?.column" class="empty-state">
-      <div class="empty-state__title">No 3D structures selected</div>
-      <p class="empty-state__body">
-        Pick a dataset from an upstream 3D Structure Prediction block in
-        <strong>Settings</strong> (top-right). The block runs per clonotype and emits motif /
-        cysteine / surface-metric columns plus a composite developability score.
-      </p>
-      <PlBtnGhost @click.stop="() => (settingsOpen = true)">
-        Open Settings
-        <template #append>
-          <PlMaskIcon24 name="settings" />
-        </template>
-      </PlBtnGhost>
-    </div>
-
     <PlAlert
       v-if="showRedAlert && runSummary"
       class="run-alert"
@@ -230,18 +214,16 @@ const modalTitle = computed(() => {
 
     <!-- One row per clonotype. The open button on the clonotype-key cell pops
          the structure-viewer modal for that row. -->
-    <div v-if="app.model.data.dataset?.primary?.column" class="scores-table">
-      <PlAgDataTableV2
-        v-model="scoresLocalState"
-        :settings="scoresTableSettings"
-        :show-cell-button-for-axis-id="clonotypeAxisId"
-        :cell-button-invoke-rows-on-double-click="true"
-        not-ready-text="Run on a 3D structures dataset to see per-clonotype scores"
-        no-rows-text="No scored clonotypes"
-        @cell-button-clicked="openViewerForRow"
-        @row-double-clicked="openViewerForRow"
-      />
-    </div>
+    <PlAgDataTableV2
+      v-model="scoresLocalState"
+      :settings="scoresTableSettings"
+      :show-cell-button-for-axis-id="clonotypeAxisId"
+      :cell-button-invoke-rows-on-double-click="true"
+      not-ready-text="Run on a 3D structures dataset to see per-clonotype scores"
+      no-rows-text="No scored clonotypes"
+      @cell-button-clicked="openViewerForRow"
+      @row-double-clicked="openViewerForRow"
+    />
 
     <PlSlideModal
       :model-value="viewer !== undefined"
@@ -282,34 +264,8 @@ const modalTitle = computed(() => {
   margin-top: 12px;
 }
 
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  margin-top: 24px;
-  border: 1px dashed var(--border-color-default, rgba(148, 163, 184, 0.4));
-  border-radius: 8px;
-  gap: 12px;
-}
-.empty-state__title {
-  font-weight: 600;
-}
-.empty-state__body {
-  text-align: center;
-  max-width: 480px;
-  margin: 0;
-  line-height: 1.5;
-}
-
 .run-alert {
   margin-top: 12px;
-}
-
-.scores-table {
-  margin-top: 12px;
-  height: 720px;
 }
 
 .cluster-badge {
