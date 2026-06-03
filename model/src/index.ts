@@ -40,9 +40,20 @@ const dataModel = new DataModelBuilder().from<BlockData>("v1").init(() => ({
 type ScoresCtx = BlockRenderCtx<unknown, unknown>;
 type ScoresPColumn = PColumn<PColumnDataUniversal | undefined>;
 
-/** Dataset-level mode emitted by the workflow as a scalar block output. */
+/** Dataset-level mode emitted by the workflow as a scalar block output.
+ *
+ * `ctx.outputs` throws "Staging context not available" when called from
+ * the middle layer's args-only context (used to render the block-overview
+ * sidebar's subtitle), so guard the read. Optional chaining on
+ * `ctx.outputs?` doesn't help , the throw happens inside the getter,
+ * before the chain can short-circuit. */
 function resolveMode(ctx: ScoresCtx): DetectedMode | undefined {
-  const m = ctx.outputs?.resolve("detectedMode")?.getDataAsJson<string>();
+  let m: string | undefined;
+  try {
+    m = ctx.outputs?.resolve("detectedMode")?.getDataAsJson<string>();
+  } catch {
+    return undefined;
+  }
   return m === "TAP" || m === "TNP" ? m : undefined;
 }
 
