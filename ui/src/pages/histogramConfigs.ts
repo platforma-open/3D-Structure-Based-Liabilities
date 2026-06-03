@@ -4,10 +4,21 @@ import type { GraphMakerState } from "@milaboratories/graph-maker";
  * Per-metric distribution page configs.
  *
  * The six histogram routes render the same `HistogramPage` component with a
- * different title, fill color, and which scoresTable column to read.
- * `notReadyTitle` is set on the two mode-specific pages to explain why the
- * chart is empty when the dataset is in the other mode.
+ * different title, fill color, threshold legend, and which scoresTable column
+ * to read. `notReadyTitle` is set on the two mode-specific pages to explain
+ * why the chart is empty when the dataset is in the other mode.
+ *
+ * `thresholds` is a small color-keyed legend rendered above the chart so the
+ * reader can interpret the dashed threshold lines graph-maker draws from
+ * the column's `pl7.app/graph/thresholds` annotation. Optional , the
+ * developability score has no fixed band cuts (R41 composite is for ranking).
  */
+export type ThresholdBands = {
+  green?: string;
+  amber?: string;
+  red?: string;
+};
+
 export type HistogramConfig = {
   title: string;
   columnName: string;
@@ -16,6 +27,7 @@ export type HistogramConfig = {
   // template's default fillColor is 'white' when no grouping is set,
   // which renders as invisible bars on the chart background.
   fillColor: string;
+  thresholds?: ThresholdBands;
 };
 
 export const histogramConfigs = {
@@ -23,16 +35,31 @@ export const histogramConfigs = {
     title: "Patches of Surface Hydrophobicity",
     columnName: "pl7.app/liabilities/psh",
     fillColor: "#7da3d1",
+    thresholds: {
+      green: "100 to 156",
+      amber: "84 to 100 or 156 to 174",
+      red: "below 84 or above 174",
+    },
   },
   ppc: {
     title: "Patches of Positive Charge",
     columnName: "pl7.app/liabilities/ppc",
     fillColor: "#e5a06f",
+    thresholds: {
+      green: "≤ 1.25",
+      amber: "1.25 to 3.16",
+      red: "above 3.16",
+    },
   },
   pnc: {
     title: "Patches of Negative Charge",
     columnName: "pl7.app/liabilities/pnc",
     fillColor: "#82c79c",
+    thresholds: {
+      green: "≤ 1.84",
+      amber: "1.84 to 3.50",
+      red: "above 3.50",
+    },
   },
   sfvcsp: {
     title: "Symmetry of Fv Charges Product",
@@ -40,6 +67,11 @@ export const histogramConfigs = {
       "SFvCSP is only computed in paired-Fv (TAP) mode. Run the block on a paired-Fv dataset to populate this distribution.",
     columnName: "pl7.app/liabilities/sfvcsp",
     fillColor: "#bb86d6",
+    thresholds: {
+      green: "≥ -6.3",
+      amber: "-20.4 to -6.3",
+      red: "below -20.4",
+    },
   },
   cdrh3Compactness: {
     title: "CDRH3 compactness",
@@ -47,6 +79,11 @@ export const histogramConfigs = {
       "CDRH3 compactness is only computed in VHH (TNP) mode. Run the block on a VHH dataset to populate this distribution.",
     columnName: "pl7.app/liabilities/cdrh3Compactness",
     fillColor: "#d6b06b",
+    thresholds: {
+      green: "0.82 to 1.57",
+      amber: "0.56 to 0.82 or 1.57 to 1.61",
+      red: "below 0.56 or above 1.61",
+    },
   },
   developability: {
     title: "Developability score",
