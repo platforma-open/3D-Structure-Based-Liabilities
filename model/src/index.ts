@@ -46,12 +46,20 @@ function resolveMode(ctx: ScoresCtx): DetectedMode | undefined {
   return m === "TAP" || m === "TNP" ? m : undefined;
 }
 
-/** Block label derived from mode + cutoffs when the user hasn't set one. */
-export function defaultBlockLabelFor(data: Partial<BlockData>, mode?: DetectedMode): string {
+/** Block label derived from mode + cutoffs when the user hasn't set one.
+ * `data` is optional so this is safe to call from contexts where block
+ * storage hasn't been parsed yet (the middle-layer args-only context
+ * surfaces `ctx.data` as undefined during early renders; an unguarded
+ * deref throws and the platform falls back to the literal string
+ * "Invalid subtitle" in the block-overview sidebar). */
+export function defaultBlockLabelFor(
+  data: Partial<BlockData> | undefined,
+  mode?: DetectedMode,
+): string {
   const fmt = (v?: number) => (v === undefined ? "?" : Number.isInteger(v) ? `${v}` : v.toFixed(1));
-  // Use U+2264 / U+2265 instead of the ASCII `<` / `>` , the block-list
-  // subtitle parses bare angle brackets as HTML tags and loses the value.
-  const tail = `rSASA ≤ 0.075, gating FR ≥ ${fmt(data.frConfThresh)} Å / CDR ≥ ${fmt(data.cdrConfThresh)} Å`;
+  const fr = fmt(data?.frConfThresh);
+  const cdr = fmt(data?.cdrConfThresh);
+  const tail = `rSASA ≤ 0.075, gating FR ≥ ${fr} Å / CDR ≥ ${cdr} Å`;
   return mode ? `${mode}, ${tail}` : tail;
 }
 
@@ -228,7 +236,13 @@ export const platforma = BlockModelV3.create(dataModel)
     ];
   })
   .title(() => "3D Structure-Based Liabilities")
-  .subtitle((ctx) => ctx.data.customBlockLabel || defaultBlockLabelFor(ctx.data, resolveMode(ctx)))
+  .subtitle(
+    // Optional-chain `ctx.data`: the args-only context the middle layer
+    // uses for sidebar rendering can surface `data` as undefined before
+    // block storage is parsed. An unguarded deref throws and the
+    // platform substitutes "Invalid subtitle" as the visible string.
+    (ctx) => ctx.data?.customBlockLabel || defaultBlockLabelFor(ctx.data, resolveMode(ctx)),
+  )
   .done();
 
 export type BlockOutputs = InferOutputsType<typeof platforma>;
