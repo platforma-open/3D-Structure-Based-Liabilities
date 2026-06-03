@@ -40,13 +40,13 @@ const hasLegend = computed(() => {
   <PlBlockPage :title="title">
     <div v-if="hasLegend && thresholds" class="threshold-legend" aria-label="Threshold bands">
       <span v-if="thresholds.green" class="threshold-pill threshold-pill--green">
-        Green: {{ thresholds.green }}
+        Pass: {{ thresholds.green }}
       </span>
       <span v-if="thresholds.amber" class="threshold-pill threshold-pill--amber">
-        Amber: {{ thresholds.amber }}
+        Borderline: {{ thresholds.amber }}
       </span>
       <span v-if="thresholds.red" class="threshold-pill threshold-pill--red">
-        Red: {{ thresholds.red }}
+        Fail: {{ thresholds.red }}
       </span>
     </div>
 
