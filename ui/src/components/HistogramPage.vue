@@ -7,9 +7,9 @@ import { computed } from "vue";
 import type { ThresholdBands } from "../pages/histogramConfigs";
 
 const props = defineProps<{
-  // `title` is declared so it is consumed from the spread config rather than
-  // falling through onto PlBlockPage; the title shows on the chart itself
-  // (via the graph state), not as a page header.
+  // `title` is shown by PlBlockPage as the page heading. Each per-metric page
+  // sets the chart's own title to "" via makeGraphState so it doesn't show
+  // twice.
   title: string;
   notReadyTitle?: string;
   thresholds?: ThresholdBands;
@@ -37,7 +37,7 @@ const hasLegend = computed(() => {
 </script>
 
 <template>
-  <PlBlockPage>
+  <PlBlockPage :title="title">
     <div v-if="hasLegend && thresholds" class="threshold-legend" aria-label="Threshold bands">
       <span v-if="thresholds.green" class="threshold-pill threshold-pill--green">
         Green: {{ thresholds.green }}

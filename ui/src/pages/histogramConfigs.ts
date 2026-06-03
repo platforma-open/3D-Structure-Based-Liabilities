@@ -94,11 +94,12 @@ export const histogramConfigs = {
 
 /** Seed a graph-maker `bins` template from a histogram config. The `bins`
  * layer needs an explicit fillColor; the template's default ('white') is
- * invisible against the chart background. */
+ * invisible against the chart background. Title is left blank because the
+ * page heading is rendered by PlBlockPage in HistogramPage.vue. */
 export function makeGraphState(cfg: HistogramConfig): GraphMakerState {
   return {
     template: "bins",
-    title: cfg.title,
+    title: "",
     currentTab: null,
     layersSettings: { bins: { fillColor: cfg.fillColor } },
   };
