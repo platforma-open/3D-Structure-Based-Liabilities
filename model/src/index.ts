@@ -217,16 +217,21 @@ export const platforma = BlockModelV3.create(dataModel)
     return parsed.data;
   })
   // Axis id of the scClonotypeKey axis, used to attach the viewer-trigger
-  // button to that column in the table.
+  // button to that column in the table. Derive from the actual scoresData
+  // column (which is what populates the table), so the AxisId matches the
+  // table column's id byte-for-byte. Deriving from the PDB col's spec
+  // produced false negatives when its axis carried a domain that the
+  // table column did not.
   .output("clonotypeAxisId", (ctx): AxisId | undefined => {
-    const ref = resolvePrimaryRef(ctx);
-    if (!ref) return undefined;
-    const pdbSpec = ctx.resultPool.getPColumnSpecByRef(ref);
-    if (!pdbSpec) return undefined;
-    const found = pdbSpec.axesSpec.find((a) => a.name === "pl7.app/vdj/scClonotypeKey");
+    let cols: ScoresPColumn[] | undefined;
+    try {
+      cols = ctx.outputs?.resolve("scoresData")?.getPColumns() as ScoresPColumn[] | undefined;
+    } catch {
+      return undefined;
+    }
+    const first = cols?.[0];
+    const found = first?.spec.axesSpec.find((a) => a.name === "pl7.app/vdj/scClonotypeKey");
     if (!found) return undefined;
-    // Strip to an AxisId — PlAgDataTableV2 deep-equals against its own
-    // column's AxisId (via getAxisId), so extra fields break the match.
     return getAxisId(found);
   })
   .sections((ctx) => {
