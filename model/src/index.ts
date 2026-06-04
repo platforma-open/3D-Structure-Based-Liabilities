@@ -8,7 +8,6 @@ import type {
   PColumnIdAndSpec,
   PFrameHandle,
   PObjectSpec,
-  PlRef,
   ValueType,
 } from "@platforma-sdk/model";
 import {
@@ -100,10 +99,6 @@ function findOnScClonotype(ctx: ScoresCtx, name: string, valueType: ValueType) {
     valueType,
     axesSpec: [SC_CLONOTYPE_AXIS],
   }) as ScoresPColumn[];
-}
-
-function resolvePrimaryRef(ctx: { args?: BlockArgs; data?: BlockData }): PlRef | undefined {
-  return ctx.args?.primaryRef?.column ?? ctx.data?.dataset?.primary?.column;
 }
 
 export const platforma = BlockModelV3.create(dataModel)
