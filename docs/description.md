@@ -1,10 +1,11 @@
 # Overview
 
 Per-clonotype structural developability analysis for antibody candidates.
-Consumes PDB structures from the **3D Structure Prediction** block upstream
-and emits per-clonotype liability calls, surface developability metrics, and
-composite developability costs that downstream blocks (Lead Selection)
-can rank candidates on.
+Consumes PDB structures from the
+[**3D Structure Prediction**](https://github.com/platforma-open/3d-structure-prediction)
+block upstream and emits per-clonotype liability calls, surface
+developability metrics, and composite developability costs that
+downstream blocks (Lead Selection) can rank candidates on.
 
 ## What it does
 
