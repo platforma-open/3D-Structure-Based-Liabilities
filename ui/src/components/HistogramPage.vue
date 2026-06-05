@@ -7,9 +7,9 @@ import { computed } from "vue";
 import type { ThresholdBands } from "../pages/histogramConfigs";
 
 const props = defineProps<{
-  // No page heading rendered. The chart title comes from graph-maker
-  // (set via makeGraphState in histogramConfigs.ts), so the heading sits
-  // next to the chart instead of stacked above it.
+  // No page heading rendered. The section nav already labels the page;
+  // the threshold legend lives inside graph-maker's titleLineSlot so it
+  // sits next to the chart title bar instead of pushing the chart down.
   notReadyTitle?: string;
   thresholds?: ThresholdBands;
   pFrame: OutputWithStatus<PFrameHandle>;
@@ -37,18 +37,6 @@ const hasLegend = computed(() => {
 
 <template>
   <PlBlockPage>
-    <div v-if="hasLegend && thresholds" class="threshold-legend" aria-label="Threshold bands">
-      <span v-if="thresholds.none" class="threshold-pill threshold-pill--none">
-        None: {{ thresholds.none }}
-      </span>
-      <span v-if="thresholds.medium" class="threshold-pill threshold-pill--medium">
-        Medium: {{ thresholds.medium }}
-      </span>
-      <span v-if="thresholds.high" class="threshold-pill threshold-pill--high">
-        High: {{ thresholds.high }}
-      </span>
-    </div>
-
     <GraphMaker
       v-model="graphStateModel"
       chart-type="histogram"
@@ -60,7 +48,21 @@ const hasLegend = computed(() => {
           title: notReadyTitle ?? 'Run on a 3D structures dataset to see the distribution',
         },
       }"
-    />
+    >
+      <template #titleLineSlot>
+        <div v-if="hasLegend && thresholds" class="threshold-legend" aria-label="Threshold bands">
+          <span v-if="thresholds.none" class="threshold-pill threshold-pill--none">
+            None: {{ thresholds.none }}
+          </span>
+          <span v-if="thresholds.medium" class="threshold-pill threshold-pill--medium">
+            Medium: {{ thresholds.medium }}
+          </span>
+          <span v-if="thresholds.high" class="threshold-pill threshold-pill--high">
+            High: {{ thresholds.high }}
+          </span>
+        </div>
+      </template>
+    </GraphMaker>
   </PlBlockPage>
 </template>
 
@@ -69,7 +71,6 @@ const hasLegend = computed(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
   font-size: 12px;
 }
 
