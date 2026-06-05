@@ -1,10 +1,9 @@
-"""Derive heavy-atom Ala-X-Ala SASA reference values for all 20 amino acids
-per spec R11.
+"""Derive heavy-atom Ala-X-Ala SASA reference values for all 20 amino acids.
 
 For each amino acid X, build an extended Ala-X-Ala tripeptide with
 PeptideBuilder, run FreeSASA on the heavy-atom-only structure (matches
-the ImmuneBuilder input shape per spec R15), and record the central
-residue's total SASA and side-chain SASA.
+the ImmuneBuilder input shape), and record the central residue's total
+SASA and side-chain SASA.
 
 Output is a TSV at `software/liabilities-script/data/heavy_atom_max_sasa.tsv`
 (three columns: residue, total, sidechain). The runtime `main.py`
@@ -20,7 +19,7 @@ Run inside the block's Docker image (FreeSASA already there):
 
 PeptideBuilder + Biopython are NOT in the runtime requirements; they're
 needed only for this one-shot derivation. Methodology mirrors Yang &
-Blundell 1996 / Shrake-Rupley 1973 (probe radius 1.4 Å), per spec R11.
+Blundell 1996 / Shrake-Rupley 1973 (probe radius 1.4 A).
 """
 
 import io
@@ -108,7 +107,7 @@ def main() -> None:
             rows.append((x, None, None))
 
     lines = [
-        "# Heavy-atom-only Ala-X-Ala reference SASAs (R11), Yang & Blundell 1996.",
+        "# Heavy-atom-only Ala-X-Ala reference SASAs, Yang & Blundell 1996.",
         "# Computed with FreeSASA + Shrake-Rupley (1.4 A probe), matching the",
         "# runtime's algorithm so rSASA = SASA / ref stays consistent.",
         "# Re-derived via software/scripts/derive_ala_x_ala_refs.py.",

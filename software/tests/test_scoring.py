@@ -1,5 +1,5 @@
-"""Tests for `scoring.py` , R39 threshold flagging (Fv + VHH), R41
-composite developability score, R41a categorical risk classification.
+"""Tests for `scoring.py`: threshold flagging (Fv + VHH), the
+composite developability score, and categorical risk classification.
 
 All inputs are synthesized dicts and dataclasses , no PDB, no FreeSASA."""
 
@@ -40,7 +40,7 @@ def _cys(cys_class="cys_extra", sidechain_rsasa=0.5) -> CysteineHit:
 
 
 class TestComputeFlagsFv:
-    """Spec R39 Fv thresholds verbatim from Raybould 2019 Table 2."""
+    """Fv thresholds verbatim from Raybould 2019 Table 2."""
 
     def _fv_metrics(self, **overrides):
         base = {
@@ -87,7 +87,7 @@ class TestComputeFlagsFv:
 
 
 class TestComputeFlagsVhh:
-    """Spec R39 VHH thresholds, pinned verbatim from oxpig/TNP `bin/TNP`
+    """VHH thresholds, pinned verbatim from oxpig/TNP `bin/TNP`
     `assign_flag()` (cohortSize 36)."""
 
     def _vhh_metrics(self, **overrides):
@@ -160,7 +160,7 @@ class TestEmptyAndInvalidMetrics:
 
 
 class TestCompositeDevelopability:
-    """Spec R41 composite: motifContribution + metricFlagContribution +
+    """Composite score: motifContribution + metricFlagContribution +
     cysContribution. Each tested in isolation, then combined."""
 
     def _fv_green(self, **overrides):
@@ -187,7 +187,7 @@ class TestCompositeDevelopability:
         assert result["structuralDevelopabilityScore"] == 3.0
 
     def test_gated_motifs_excluded(self):
-        """R35: confidence-gated motifs stay in the table but don't
+        """Confidence-gated motifs stay in the table but don't
         contribute to motifStructuralRiskScore."""
         confident = _motif(weighted_score=2.0, gated="no")
         gated = _motif(weighted_score=5.0, gated="yes")
@@ -196,7 +196,7 @@ class TestCompositeDevelopability:
         assert result["structuralDevelopabilityScore"] == 2.0
 
     def test_metric_flag_bumps(self):
-        """R41: red=8, amber=3, green=0 per flag. No motifs / cys → score
+        """High=8, Medium=3, None=0 per flag. No motifs / cys → score
         equals the flag-bump sum directly."""
         # psh red, totalCdrLength amber, others green
         metrics = self._fv_green(psh=200.0, totalCdrLength=55)
@@ -205,7 +205,7 @@ class TestCompositeDevelopability:
         assert result["structuralDevelopabilityScore"] == 11.0
 
     def test_cysteine_contributions(self):
-        """R41 Cys weights: exposed_extra=8, broken=20, missing=20. No
+        """Cys weights: exposed_extra=8, broken=20, missing=20. No
         motifs / flag bumps (Fv-green metrics) → score equals the cys sum."""
         exposed_extra = _cys("cys_extra", sidechain_rsasa=0.5)
         buried_extra = _cys("cys_extra", sidechain_rsasa=0.01)
@@ -220,7 +220,7 @@ class TestCompositeDevelopability:
 
 
 class TestR41aRiskClassification:
-    """Spec R41a: structuralDevelopabilityRisk over engineering-fixable
+    """structuralDevelopabilityRisk over engineering-fixable
     items, promoted by amber/red flags. structuralIntegrityRisk Present
     when any cys defect or hard_to_fix/structural motif exists."""
 
@@ -291,7 +291,7 @@ class TestR41aRiskClassification:
         assert result["structuralIntegrityRisk"] == "Present"
 
     def test_gated_structural_motif_doesnt_trigger_integrity_risk(self):
-        """R35: gated motifs are excluded from scoring side; integrity check
+        """Gated motifs are excluded from scoring side; integrity check
         also skips them (same `confidenceGated == "yes"` guard)."""
         motif = _motif(fixability="structural", risk="High", gated="yes")
         result = compute_developability([motif], [], self._fv_metrics(), 0.075)

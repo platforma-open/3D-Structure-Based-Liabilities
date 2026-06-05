@@ -2,8 +2,8 @@
 these out explicitly (block-structure-liabilities.md:330):
 
   - PDB has 3+ chains  → reject with explicit error
-  - Single chain > 180 aa  → reject as suspected scFv (R7)
-  - REMARK 99 absent + no --numbering-scheme → fail-fast (R10)
+  - Single chain > 180 aa  → reject as suspected scFv 
+  - REMARK 99 absent + no --numbering-scheme → fail-fast 
 
 All three rejections fire before FreeSASA runs, so the tests can use
 minimal synthetic PDBs without worrying about SASA compatibility."""
@@ -33,7 +33,7 @@ def _common_args(pdb_path):
 
 
 class TestR7ChainCount:
-    """Spec R7: chain count determines mode. 0 chains, 3+ chains, and
+    """ chain count determines mode. 0 chains, 3+ chains, and
     suspected scFv (single chain > 180 aa) are explicit rejections."""
 
     def test_zero_chains_rejected(self, tmp_path):
@@ -72,15 +72,15 @@ class TestR7ChainCount:
 
 
 class TestR10NumberingSource:
-    """Spec R10: numbering source must be available. With neither REMARK 99
+    """ numbering source must be available. With neither REMARK 99
     records nor a `--numbering-scheme` value, the run fails fast (before
     FreeSASA so the rejection is cheap)."""
 
     def test_no_remark_no_scheme_rejected(self, tmp_path):
-        # Two-chain PDB so the R7 check passes; no REMARK 99 lines.
+        # Two-chain PDB so the chain-count check passes; no REMARK 99 lines.
         text = make_pdb([("A", 1, "ALA", 20.0), ("B", 1, "GLY", 20.0)])
         path = _write(tmp_path, text)
         args = _common_args(path)
         args["numbering_scheme"] = None
-        with pytest.raises(ValueError, match="spec R10"):
+        with pytest.raises(ValueError, match="numbering source"):
             analyze_pdb(**args)

@@ -1,32 +1,32 @@
-"""Spec R24-R33 surface developability metrics + R15a salt-bridge prep.
+"""Surface developability metrics + salt-bridge prep.
 
 Section 1 carries the Raybould 2019 / Gordon 2025 hydrophobicity and
-charge constants plus the R15a salt-bridge detector that runs before
-charge assignment. Section 2 is the patch detector + per-mode metric
+charge constants plus the salt-bridge detector that runs before charge
+assignment. Section 2 is the patch detector + per-mode metric
 implementations.
 
-Fv (TAP) , Raybould 2019:
-  R24  totalCdrLength  : sum of CDR loop lengths from numbering
-  R25  PSH             : Σ H(R₁)·H(R₂)/r² over surface CDR-vicinity pairs
-                         within 7.5 Å heavy-atom distance, no type restriction
-  R26  PPC             : same pair formula with |Q(R₁)·Q(R₂)|, K/R/H signs only
-  R26  PNC             : same with D/E signs only
-  R28  SFvCSP          : [Σ_RH Q(RH)] × [Σ_RL Q(RL)] over surface-exposed
+Fv (TAP), Raybould 2019:
+  totalCdrLength       : sum of CDR loop lengths from numbering
+  surfaceHydrophobicity: sum H(R1)*H(R2)/r^2 over surface CDR-vicinity pairs
+                         within 7.5 A heavy-atom distance, no type restriction
+  positiveChargePatches: same pair formula with |Q(R1)*Q(R2)|, K/R/H signs only
+  negativeChargePatches: same with D/E signs only
+  fvChargeSymmetry     : [sum_RH Q(RH)] * [sum_RL Q(RL)] over surface-exposed
                          whole-V-domain residues (NOT CDR-restricted)
 
-VHH (TNP) , Gordon 2025:
-  R29  totalCdrLength  : sum of three CDR lengths (single chain)
-  R31  PSH/PPC/PNC     : same algorithms applied to one chain, but with
-                         same-type-pair restriction (PSH: H-H pairs only;
-                         PPC: K/R/H-K/R/H pairs only; PNC: D/E-D/E pairs only)
-  R30  CDRH3 compact.  : cdrh3Length / ‖centroid(CDR3 Cα) − centroid(anchor Cα)‖
+VHH (TNP), Gordon 2025:
+  totalCdrLength       : sum of three CDR lengths (single chain)
+  patch metrics        : same algorithms applied to one chain. Surface
+                         hydrophobicity sums all pairs; PPC/PNC restrict to
+                         same-charge pairs only.
+  cdrh3Compactness     : cdrh3Length / ||centroid(CDR3 Calpha) - centroid(anchor Calpha)||
                          IMGT anchors 102, 103, 118, 119
 
-Per R34/R36 the residue's local positional uncertainty is the parser's
-mean heavy-atom B-factor, gated region-aware against `frConfidenceGatingThreshold`
+The residue's local positional uncertainty is the parser's mean
+heavy-atom B-factor, gated region-aware against `frConfidenceGatingThreshold`
 (framework) or `cdrConfidenceGatingThreshold` (CDR). For each metric we
-emit a parallel `<metric>LowConfidenceResidueFraction` Double , fraction
-of *contributing* residues that exceed their region threshold (R36).
+emit a parallel `<metric>LowConfidenceResidueFraction` Double: fraction
+of *contributing* residues that exceed their region threshold.
 """
 
 import math
@@ -44,13 +44,13 @@ from structure import (
 
 
 # ---------------------------------------------------------------------------
-# Section 1: biochemistry constants + R15a salt-bridge detection
+# Section 1: biochemistry constants + salt-bridge detection
 # ---------------------------------------------------------------------------
 
 # Kyte-Doolittle hydrophobicity values loaded from `data/Hydrophobics.txt`
 # (KD 1982 raw values, one residue per line as `<letter><whitespace><value>`).
-# Raybould 2019 PSH (R25) is defined on KD min-max-normalized to [1.0, 2.0];
-# the spec locks this in at the Concept level so there is no scale selector.
+# Raybould 2019 PSH is defined on KD min-max-normalized to [1.0, 2.0];
+# the formula is fixed across both papers, so no scale selector.
 _HYDRO_PATH = Path(__file__).parent / "data" / "Hydrophobics.txt"
 
 
@@ -79,7 +79,7 @@ KD_HYDROPHOBICITY: dict[str, float] = _minmax_to_range(_KD_RAW, 1.0, 2.0)
 GLYCINE_HYDROPHOBICITY: float = KD_HYDROPHOBICITY["G"]
 
 
-# R26 charge assignment per Raybould 2019. H carries 0.1 (rounded from the
+# Charge assignment per Raybould 2019. H carries 0.1 (rounded from the
 # literal H-H Henderson-Hasselbalch contribution at physiological pH).
 CHARGES: dict[str, float] = {
     "D": -1.0, "E": -1.0,
@@ -87,7 +87,7 @@ CHARGES: dict[str, float] = {
     "H": 0.1,
 }
 
-# Side-chain heavy atoms that participate in the salt-bridge test (R15a).
+# Side-chain heavy atoms that participate in the salt-bridge test.
 SALT_BRIDGE_DONOR_ATOMS: dict[str, tuple[str, ...]] = {
     "LYS": ("NZ",),
     "ARG": ("NH1", "NH2", "NE"),
@@ -114,8 +114,8 @@ def _centroid(atoms) -> tuple[float, float, float]:
 
 def _weight_fns(in_bridge: dict):
     """Build the three PSH / PPC / PNC weight closures over a shared
-    `in_bridge` map (R15a: salt-bridged residues take the glycine
-    hydrophobicity and zero charge). The same three are needed by both
+    `in_bridge` map (salt-bridged residues take the glycine hydrophobicity
+    and zero charge). The same three are needed by both
     `_chain_metrics` (per-chain, VHH mode) and the TAP-mode Fv pool
     built from H+L; centralising avoids triple-duplicating them."""
     def hydrophobicity(i, aa):
@@ -135,7 +135,7 @@ def _weight_fns(in_bridge: dict):
 
 def detect_salt_bridges(parsed) -> set[tuple[str, int, str]]:
     """Walk every K/R + D/E pair, return the set of residue keys that are in
-    a salt bridge. R15a uses N+ ↔ O- atom-pair distance ≤ 3.2 Å. Returned
+    a salt bridge. salt-bridge uses N+ ↔ O- atom-pair distance ≤ 3.2 Å. Returned
     keys are (chain_id, res_seq, i_code). Both partners are marked.
     """
     donors: list[tuple[str, Residue, object]] = []
@@ -171,16 +171,16 @@ def hydrophobicity_of(
     scale: dict[str, float] = KD_HYDROPHOBICITY,
     glycine_value: float = GLYCINE_HYDROPHOBICITY,
 ) -> Optional[float]:
-    """R15a: residues engaged in a salt bridge get the scale's glycine
-    value so they don't contribute the hydrophobicity of their full
-    charged side chain."""
+    """Residues engaged in a salt bridge get the scale's glycine value so
+    they don't contribute the hydrophobicity of their full charged side
+    chain."""
     if in_salt_bridge:
         return glycine_value
     return scale.get(aa_letter)
 
 
 def charge_of(aa_letter: str, in_salt_bridge: bool) -> float:
-    """R26 charge lookup. R15a zeroes residues already engaged in a salt
+    """Charge lookup. Salt-bridge logic zeroes residues already engaged in a salt
     bridge so they don't count toward PPC/PNC/SFvCSP."""
     if in_salt_bridge:
         return 0.0
@@ -192,11 +192,11 @@ def charge_of(aa_letter: str, in_salt_bridge: bool) -> float:
 # ---------------------------------------------------------------------------
 
 
-# Spec R25 pair filter: heavy-atom distance < 7.5 Å AND both residues are
+# Pair filter: heavy-atom distance < 7.5 Å AND both residues are
 # surface-exposed (rSASA ≥ buried cutoff).
 _PAIR_MAX_ANGSTROMS = 7.5
 
-# Spec R25 CDR-vicinity: surface-exposed CDR/anchor residues + other surface
+# CDR-vicinity: surface-exposed CDR/anchor residues + other surface
 # residues within this heavy-atom distance to any CDR residue.
 _CDR_VICINITY_ANGSTROMS = 4.0
 
@@ -210,7 +210,7 @@ def _heavy_atom_min_distance(r_a, r_b) -> float:
 
 
 def _cdr_vicinity_residues(residues, regions, rsasa_lookup, buried_cutoff):
-    """R25 CDR vicinity: surface-exposed CDR residues + surface residues
+    """CDR vicinity: surface-exposed CDR residues + surface residues
     with a heavy atom within _CDR_VICINITY_ANGSTROMS of any CDR residue.
     """
     cdr_residues = [r for r, region in zip(residues, regions) if region in ("CDR1", "CDR2", "CDR3")]
@@ -250,7 +250,7 @@ def _residue_pair_sum(
     """Generic pair-sum: Σ w(R₁) · w(R₂) / r² over surface CDR-vicinity
     residue pairs within 7.5 Å. `same_type_pred(aa1, aa2)` lets VHH mode
     restrict to same-type pairs. Also returns the set of unified-index
-    residues that contributed at least one non-zero pair (R36 confidence
+    residues that contributed at least one non-zero pair (confidence
     fraction denominator)."""
     total = 0.0
     patch_count = 0
@@ -279,7 +279,7 @@ def _residue_pair_sum(
 
 
 def _mean_b_factor(residue) -> Optional[float]:
-    """Residue mean heavy-atom B-factor (per R34). None when no atoms carry it."""
+    """Residue mean heavy-atom B-factor. None when no atoms carry it."""
     if not residue.atoms:
         return None
     vals = [a.b_factor for a in residue.atoms if a.b_factor > 0]
@@ -295,7 +295,7 @@ def _low_conf_fraction(
     fr_thresh: float,
     cdr_thresh: float,
 ) -> Optional[float]:
-    """R36: fraction of *contributing* residues whose mean B-factor exceeds
+    """Fraction of *contributing* residues whose mean B-factor exceeds
     the region-aware threshold. None when no residue carries a B-factor
     (the JSON-side reader can drop the field on the UI). Empty contributor
     set returns None as well."""
@@ -327,7 +327,7 @@ def _vdomain_surface_residues(
     scheme,
     buried_cutoff,
 ):
-    """Whole-V-domain surface-exposed residues for SFvCSP (R28). Range
+    """Whole-V-domain surface-exposed residues for Fv charge symmetry. Range
     bounded by SCHEME_VDOMAIN_END."""
     v_end = SCHEME_VDOMAIN_END.get(scheme, {}).get(role) if scheme else None
     out = []
@@ -364,10 +364,10 @@ def _cdrh3_compactness_imgt(
     scheme,
     upstream_cdrh3_length: Optional[int] = None,
 ) -> Optional[float]:
-    """R30 compactness: cdrh3Length / ρ where ρ = ‖centroid(CDR3 Cα, IMGT
+    """Compactness: cdrh3Length / ρ where ρ = ‖centroid(CDR3 Cα, IMGT
     105-117) − centroid(anchor Cα, IMGT 102+103+118+119)‖. IMGT-anchored;
     returns None for non-IMGT schemes (Chothia/Kabat lack a defined anchor
-    set in the spec). When `upstream_cdrh3_length` is provided (R5/R29) it
+    set). When `upstream_cdrh3_length` is provided it
     is used as the numerator; otherwise the in-block CDR3 Cα count is."""
     if scheme != "imgt" or not h_chain_id:
         return None
@@ -430,8 +430,8 @@ def compute_metrics(
     both heavy + light are mapped; VHH metrics when only heavy is mapped
     (and chain length sanity-checks). Returns empty dict when neither.
 
-    Type-restricted patches: R31 (VHH mode) only counts same-type pairs.
-    Fv mode (R25/R26) counts all pairs with non-zero weights.
+    Type-restricted patches: VHH mode only counts same-type pairs.
+    Fv mode counts all pairs with non-zero weights.
     """
     if not numbering_scheme:
         return {}
@@ -439,7 +439,7 @@ def compute_metrics(
     salt_bridges = detect_salt_bridges(parsed)
     chain_id_to_residues = dict(parsed.residues_by_chain)
 
-    # R7 mode dispatch: heavy must be mapped (TNP = VHH heavy-only;
+    # Mode dispatch: heavy must be mapped (TNP = VHH heavy-only;
     # TAP = paired Fv with light also mapped). Light-only is an
     # antigen-chain / mislabelled-input case; no metrics emitted.
     h_present = heavy_chain_id and heavy_chain_id in chain_id_to_residues
@@ -480,7 +480,7 @@ def _bundle_low_conf_fractions(
     fr_conf_thresh: float,
     cdr_conf_thresh: float,
 ) -> dict:
-    """R36 fractions per metric. `contributors` maps `<metric>` to its
+    """Fractions per metric. `contributors` maps `<metric>` to its
     contributing-residue index set; output keys are
     `<metric>LowConfidenceResidueFraction`. Pulled out so each mode-
     specific helper finishes with one loop instead of five identical
@@ -605,7 +605,7 @@ def _compute_tap(
     l_q = sum(charge_of(l_aa[i], l_bridge.get(i, False)) for i in l_v_surf)
     sfvcsp = h_q * l_q
 
-    # R36 contributors: SFvCSP is non-zero-charge V-domain residues.
+    # Fv charge symmetry contributors: non-zero-charge V-domain residues.
     cdr_indices = [i for i, r in enumerate(regions) if r in ("CDR1", "CDR2", "CDR3")]
     sfvcsp_contrib: set[int] = set()
     for i in h_v_surf:

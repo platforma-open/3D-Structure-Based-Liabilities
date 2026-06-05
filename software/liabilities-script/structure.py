@@ -1,11 +1,10 @@
 """Structure-side data, parsing, and defensive checks.
 
-Consolidated per spec Module Layout: PDB parsing (R9-R10), REMARK 99
-PLATFORMA CDR record extraction, FreeSASA wrapper output normalization
-at the caller, B-factor read-through, the numbering-scheme constants
-(R14: canonical Cys positions, CDR ranges, hallmark tetrad, CDRH3
-compactness anchors), `region_for` resolution, plus the R33 hallmark
-tetrad defensive check.
+PDB parsing, REMARK 99 PLATFORMA CDR record extraction, FreeSASA wrapper
+output normalization at the caller, B-factor read-through, the
+numbering-scheme constants (canonical Cys positions, CDR ranges,
+hallmark tetrad, CDRH3 compactness anchors), `region_for` resolution,
+plus the hallmark-tetrad defensive check.
 """
 
 import re
@@ -15,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 
 
 # ---------------------------------------------------------------------------
-# Section 1: PDB parsing (R9, R10 preferred path)
+# Section 1: PDB parsing
 # ---------------------------------------------------------------------------
 
 
@@ -26,9 +25,9 @@ class Atom:
     y: float
     z: float
     # PDB B-factor (temperature factor). ImmuneBuilder repurposes this column
-    # to carry per-atom predicted positional error in Angstroms (R29 upstream
+    # to carry per-atom predicted positional error in Angstroms (upstream
     # guarantee). For experimental crystal structures it stays the literal
-    # B-factor; the spec treats both interchangeably for R34 gating.
+    # B-factor; both are treated interchangeably for confidence gating.
     b_factor: float = 0.0
 
 
@@ -50,12 +49,12 @@ class Residue:
 class Parsed:
     chain_order: List[str] = field(default_factory=list)
     residues_by_chain: Dict[str, List[Residue]] = field(default_factory=dict)
-    # Spec R10 , CDR ranges from `REMARK 99 PLATFORMA CDR*` records emitted
+    # CDR ranges from `REMARK 99 PLATFORMA CDR*` records emitted
     # by the Structure Prediction block. Shape: {"H": {"CDR1": (start, end),
     # "CDR2": (...), "CDR3": (...)}, "L": {...}}. Empty when not present;
     # downstream code falls back to scheme-aware fixed ranges.
     platforma_cdrs: Dict[str, Dict[str, Tuple[int, int]]] = field(default_factory=dict)
-    # Spec R9 , REMARK 99 chain identity is authoritative. Maps role ("H"/"L")
+    # REMARK 99 chain identity is authoritative. Maps role ("H"/"L")
     # to the physical PDB chain letter the records reference. e.g. given
     # `REMARK 99 PLATFORMA CDRH1 B27-B38`, this becomes {"H": "B"}. Caller
     # uses this to override the user's heavy/light chain dropdowns when
@@ -63,9 +62,9 @@ class Parsed:
     chain_role_to_pdb_chain: Dict[str, str] = field(default_factory=dict)
 
 
-# `REMARK 99 PLATFORMA CDRH1 H27-H38` per spec R10 / upstream R26. Capture
+# `REMARK 99 PLATFORMA CDRH1 H27-H38`. Capture
 # both the role letter (group 1) and the chain letter at each end of the
-# range (groups 3, 5) so we can also extract spec R9's chain identity.
+# range (groups 3, 5) so we can also extract the chain identity.
 _PLATFORMA_CDR_RE = re.compile(
     r"^REMARK\s+99\s+PLATFORMA\s+CDR([HL])([123])\s+([A-Za-z])(\d+)-([A-Za-z])(\d+)\s*$"
 )
@@ -106,7 +105,7 @@ def parse_pdb(text: str) -> Parsed:
                 if end < start:
                     continue
                 out.platforma_cdrs.setdefault(role, {})[f"CDR{cdr_idx}"] = (start, end)
-                # Spec R9 , record the physical PDB chain letter for this role.
+                # Record the physical PDB chain letter for this role.
                 # Later records for the same role must agree; conflicts are
                 # silently dropped (downstream falls back to the user's mapping).
                 existing = out.chain_role_to_pdb_chain.get(role)
@@ -164,18 +163,18 @@ def parse_pdb(text: str) -> Parsed:
 
 
 # ---------------------------------------------------------------------------
-# Section 2: numbering-scheme constants + region tagging (R10 fallback, R14)
+# Section 2: numbering-scheme constants + region tagging
 # ---------------------------------------------------------------------------
 
 
-# R10: scheme-aware fixed CDR ranges per chain role. Ranges are inclusive on
+# Scheme-aware fixed CDR ranges per chain role. Ranges are inclusive on
 # both ends, given in the scheme's own numbering (so e.g. "Chothia H26-H32"
 # means res_seq 26..32 on the chain labelled as the heavy chain).
 #
 # Heavy chain entries cover Fv and VHH (VHH borrows the heavy ranges since
 # its single chain follows the heavy-chain numbering convention).
 #
-# IMGT ranges from spec line 64; Chothia ranges from spec line 65. Kabat is
+# IMGT ranges and Chothia ranges from the standard references. Kabat is
 # included as a third common option pinned at the standard Kabat boundaries
 # (Wu & Kabat 1991). FR ranges are derived as the residues between CDRs and
 # capped at the typical V-domain extent (1..128 for IMGT, 1..113 for Chothia
@@ -202,14 +201,14 @@ SCHEME_VDOMAIN_END = {
     "kabat": {"H": 113, "L": 107},
 }
 
-# R21 canonical disulfide positions per scheme. (cys1, cys2) on each chain.
+# Canonical disulfide positions per scheme. (cys1, cys2) on each chain.
 CANONICAL_CYS_POSITIONS = {
     "imgt": {"H": (23, 104), "L": (23, 104)},
     "chothia": {"H": (22, 92), "L": (23, 88)},
     "kabat": {"H": (22, 92), "L": (23, 88)},
 }
 
-# R33 VHH hallmark tetrad. Position pairs per scheme; spec line 114 calls out
+# VHH hallmark tetrad. Position pairs per scheme; the source paper calls out
 # the Kabat 37/44/45/47 ↔ IMGT 42/49/50/52 mapping.
 HALLMARK_TETRAD = {
     "imgt": (42, 49, 50, 52),
@@ -217,8 +216,8 @@ HALLMARK_TETRAD = {
     "kabat": (37, 44, 45, 47),
 }
 
-# R30 CDRH3 compactness anchors (IMGT 102, 103, 118, 119). Other schemes have
-# no canonical equivalent; compactness is an IMGT-anchored metric in the spec.
+# CDRH3 compactness anchors (IMGT 102, 103, 118, 119). Other schemes have
+# no canonical equivalent; compactness is defined as an IMGT-anchored metric.
 CDRH3_COMPACTNESS_ANCHORS_IMGT = (102, 103, 118, 119)
 
 
@@ -245,11 +244,11 @@ def region_for(
     chain_role: "H" or "L". Pass "H" for VHH (single-chain camelid) too;
     its numbering follows heavy-chain convention.
 
-    platforma_cdrs (spec R10 preferred path): when provided and contains
+    platforma_cdrs (preferred path): when provided and contains
     `chain_role`, the dict {"CDR1": (start, end), "CDR2": ..., "CDR3": ...}
     overrides the scheme-fixed CDR ranges. The Structure Prediction block
     writes these as `REMARK 99 PLATFORMA CDR*` records; downstream we treat
-    them as authoritative (per R9 / spec line 60).
+    them as authoritative.
     """
     s = _normalize_scheme(scheme)
     if s is None or chain_role not in ("H", "L"):
@@ -304,7 +303,7 @@ def role_of_chain(
 
 
 # ---------------------------------------------------------------------------
-# Section 3: R33 hallmark tetrad defensive check
+# Section 3: hallmark-tetrad defensive check
 # ---------------------------------------------------------------------------
 
 
@@ -350,7 +349,7 @@ def check_hallmark_tetrad(
 ) -> Optional[dict]:
     """Read the four hallmark-tetrad residues on the heavy chain and compare
     against the canonical IgG and VHH residue sets (Vincke 2009 / Gordon
-    2025). Spec R33.
+    2025).
 
     Returns None when scheme or heavy chain isn't set. Otherwise:
       {
@@ -408,7 +407,7 @@ def check_hallmark_tetrad(
             f"{p}={o or '?'}" for p, o in zip(positions, one_letters)
         )
         print(
-            f"WARN (spec R33): hallmark-tetrad residues at {observed} "
+            f"WARN: hallmark-tetrad residues at {observed} "
             f"imply {implied} but chain count says {chain_count_mode}. "
             f"Likely an engineered or chimeric construct; surface metrics "
             f"may be miscalibrated.",

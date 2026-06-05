@@ -3,7 +3,7 @@
 Per-clonotype structural developability analysis for antibody candidates.
 Consumes PDB structures from the **3D Structure Prediction** block upstream
 and emits per-clonotype liability calls, surface developability metrics, and
-composite developability scores that downstream blocks (Lead Selection)
+composite developability costs that downstream blocks (Lead Selection)
 can rank candidates on.
 
 ## What it does
@@ -14,17 +14,19 @@ For each predicted Fab / VHH, the block runs:
   (deamidation N-G, isomerization, N-glycosylation sequons, oxidation M / W,
   integrin RGD, etc.), filtered to surface-exposed residues only so buried
   false positives drop out.
-- **Cysteine state classification** — geometry-driven four-state per Cys:
-  `disulfide` (canonical bonded pair), `disulfide_broken`, `disulfide_missing`
-  (a canonical position with no Cys at all), or `cys_extra` for orphans
-  and interchain bonds. Spec R21–R23.
+- **Cysteine state classification** — one row per canonical disulfide pair
+  (`disulfide` when both Cys are present and bonded, `disulfide_broken` when
+  both present but not bonded, `disulfide_missing` when at least one
+  canonical position has no Cys) plus per-residue `cys_extra` rows for
+  non-canonical Cys.
 - **Surface developability metrics** — Raybould 2019 verbatim for paired Fv
-  (PSH / PPC / PNC / SFvCSP) and Gordon 2025 for VHH (same metrics with
-  type-restricted patches + CDRH3 compactness).
+  (surface hydrophobicity, positive-charge patches, negative-charge patches,
+  Fv charge symmetry) and Gordon 2025 for VHH (same metrics with
+  type-restricted charge patches plus CDRH3 compactness).
 - **Region-aware confidence gating** — uses the ImmuneBuilder-emitted B-factor
   as per-atom predicted error; low-confidence motifs stay in the table for
-  traceability but are excluded from the composite score.
-- **Composite score + categorical risks** — `structuralDevelopabilityScore`
+  traceability but are excluded from the composite cost.
+- **Composite cost + categorical risks** — `structuralDevelopabilityScore`
   (motif + metric-flag bumps + cysteine contributions),
   `structuralDevelopabilityRisk` (None / Low / Medium / High), and
   `structuralIntegrityRisk` (Present / None).
@@ -33,14 +35,14 @@ For each predicted Fab / VHH, the block runs:
 
 - **3D viewer** (Mol*) for the selected clonotype, side-by-side with a
   per-clonotype detail panel (motifs grouped by type, cysteine state, surface
-  metrics with green/amber/red flag badges, composite risk readout).
-- **Results table** with the spec-mandated default-visible columns + a
-  "Columns" toggle that reveals raw metric values + low-confidence fractions.
-- **Six distribution pages** — one per metric — that render Raybould / Gordon
-  amber+red dashed threshold lines so the user can read each candidate's
-  standing against the literature thresholds without leaving the chart.
-- **Run-summary alerts** when > 10 % of clonotypes carry any red flag or
-  > 25 % have confidence-gated motifs.
+  metrics with None/Medium/High flag badges, composite risk readout).
+- **Results table** with default-visible columns + a "Columns" toggle that
+  reveals raw metric values + low-confidence fractions.
+- **Five distribution pages** — one per metric — that render Raybould / Gordon
+  threshold lines so the user can read each candidate's standing against the
+  literature thresholds without leaving the chart.
+- **Run-summary alert** fires when more than 25% of clonotypes have at least
+  one confidence-gated motif.
 
 ## Input
 

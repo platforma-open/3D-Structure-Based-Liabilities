@@ -1,5 +1,5 @@
 """Tests for `structure.py` , parse_pdb, region_for, role_of_chain, and
-the R10 / R9 numbering plumbing they feed."""
+the numbering plumbing they feed."""
 
 from pdb_fixtures import make_chain, make_pdb
 
@@ -7,7 +7,7 @@ from structure import SCHEME_CDR_RANGES, parse_pdb, region_for, role_of_chain
 
 
 class TestParsePdb:
-    """Spec R7 chain dispatch hinges on `parse_pdb` reporting the right
+    """Chain dispatch hinges on `parse_pdb` reporting the right
     chain_order. These tests don't need FreeSASA , `parse_pdb` is pure
     string parsing."""
 
@@ -26,7 +26,7 @@ class TestParsePdb:
         assert parsed.chain_order == ["H", "L"]
 
     def test_three_chains_register_all(self):
-        """R7 inline check in main.analyze_pdb rejects on len(chain_order) >= 3.
+        """Chain-count check in main.analyze_pdb rejects on len(chain_order) >= 3.
         The parser itself records all of them; the rejection is downstream."""
         parsed = parse_pdb(make_pdb([
             ("A", 1, "ALA", 20.0),
@@ -36,13 +36,13 @@ class TestParsePdb:
         assert len(parsed.chain_order) == 3
 
     def test_non_canonical_chain_ids_preserved(self):
-        """R9: chain IDs `A`/`B` (rather than `H`/`L`) are accepted as-is.
+        """Chain IDs `A`/`B` (rather than `H`/`L`) are accepted as-is.
         Mapping to roles happens via REMARK 99 or --chain-h/--chain-l args."""
         parsed = parse_pdb(make_pdb([("A", 1, "ALA", 20.0), ("B", 1, "GLY", 20.0)]))
         assert parsed.chain_order == ["A", "B"]
 
     def test_remark_99_platforma_cdr_record_parsed(self):
-        """R10 preferred path: REMARK 99 PLATFORMA CDR records populate
+        """Preferred path: REMARK 99 PLATFORMA CDR records populate
         `platforma_cdrs` and `chain_role_to_pdb_chain`. Spec wire format
         is `CDR<H|L><1|2|3> <chain><start>-<chain><end>`."""
         text = (
@@ -53,7 +53,7 @@ class TestParsePdb:
         parsed = parse_pdb(text)
         assert parsed.platforma_cdrs["H"]["CDR1"] == (26, 32)
         assert parsed.platforma_cdrs["L"]["CDR1"] == (24, 34)
-        # R9: REMARK 99 chain field is authoritative , `B` is the heavy chain
+        # REMARK 99 chain field is authoritative , `B` is the heavy chain
         # even though it's not the canonical letter.
         assert parsed.chain_role_to_pdb_chain["H"] == "B"
         assert parsed.chain_role_to_pdb_chain["L"] == "A"
@@ -78,7 +78,7 @@ class TestParsePdb:
         assert parsed.residues_by_chain["H"][0].res_name == "ALA"
 
     def test_long_single_chain_supported(self):
-        """200 residues in one chain , parse_pdb just records them. The R7
+        """200 residues in one chain , parse_pdb just records them. The
         scFv rejection (>180 single-chain) is a downstream check in
         main.analyze_pdb."""
         parsed = parse_pdb(make_pdb(make_chain("H", 200)))
@@ -86,7 +86,7 @@ class TestParsePdb:
 
 
 class TestRegionFor:
-    """R10 fallback: scheme-aware fixed ranges when REMARK 99 records are
+    """Fallback: scheme-aware fixed ranges when REMARK 99 records are
     absent. Pure-function lookup, no PDB parsing required."""
 
     def test_imgt_cdr1_range(self):
@@ -107,7 +107,7 @@ class TestRegionFor:
 
     def test_remark_99_overrides_scheme_fallback(self):
         """When REMARK 99 CDR ranges are present for ALL three CDRs, they
-        override the scheme-fixed ranges (R10 preferred path). Partial
+        override the scheme-fixed ranges. Partial
         overrides (one or two CDRs) are ignored , see the next test."""
         platforma_cdrs = {"H": {"CDR1": (40, 50), "CDR2": (60, 70), "CDR3": (100, 115)}}
         # 40 lands in REMARK CDR1, NOT IMGT CDR1 (which starts at 27).
@@ -123,7 +123,7 @@ class TestRegionFor:
 
 
 class TestRoleOfChain:
-    """R9: physical PDB chain IDs (sometimes `A`/`B` rather than `H`/`L`)
+    """Physical PDB chain IDs (sometimes `A`/`B` rather than `H`/`L`)
     map to the canonical heavy/light role via REMARK 99 records or the
     `--chain-h`/`--chain-l` CLI overrides."""
 

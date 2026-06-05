@@ -1,13 +1,11 @@
-# Spec R21-R23: cysteine bonding state from coordinates + canonical-position
-# classification.
+# Cysteine bonding state from coordinates + canonical-position classification.
 #
 # Without numbering (scheme + chain role mapping unset) we fall back to the
 # bonding-state-only path: every Cys reports "bonded" or "unbonded" by
 # geometry, no four-state classification.
 #
-# With numbering wired we enumerate the spec's canonical-Cys PAIRS (IMGT
-# H23+H104 / L23+L104; Chothia H22+H92 / L23+L88) and emit one row per
-# pair (per R23):
+# With numbering wired we enumerate the canonical-Cys PAIRS (IMGT H23+H104
+# / L23+L104; Chothia H22+H92 / L23+L88) and emit one row per pair:
 #   - disulfide          : both canonical Cys present + bonded to each other
 #   - disulfide_broken   : both canonical Cys present, not bonded as a pair
 #   - disulfide_missing  : at least one of the two canonical positions has
@@ -18,8 +16,8 @@
 #   - cys_extra          : a Cys at a non-canonical position, regardless of
 #                          bonding state
 #
-# Per-cys drill-down is out of scope per the refreshed spec, so each hit
-# only carries the two fields actually consumed downstream: the class label
+# Per-cys drill-down is intentionally out of scope, so each hit only
+# carries the two fields actually consumed downstream: the class label
 # (for counts + the developability bump) and the side-chain rSASA (for the
 # "exposed extra" count + the buried-vs-exposed gate in the scoring bump).
 

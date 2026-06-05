@@ -1,6 +1,6 @@
 # Regex set + weights + risk taxonomy copied VERBATIM from
-# blocks/antibody-sequence-liabilities/liabilities-calc-script/src/definitions.py
-# (R16). Spec requires this block to be standalone , no import , to avoid
+# blocks/antibody-sequence-liabilities/liabilities-calc-script/src/definitions.py.
+# This block is kept standalone , no import , to avoid
 # silent half-coupling. A parity check vs the source is owed at M1.
 
 import math
@@ -33,8 +33,8 @@ FIXABILITY_WEIGHTS = {
     "disqualifying": 0.0,
 }
 
-# R19 region weights. Until per-residue region tagging is wired (needs
-# numbering from REMARK 99 / R10), region resolves to None and the neutral
+# Region weights. Until per-residue region tagging is wired (needs
+# numbering from REMARK 99), region resolves to None and the neutral
 # default is applied so scores stay comparable across calls.
 REGION_WEIGHTS = {
     "CDR3": 1.5,
@@ -47,7 +47,7 @@ REGION_WEIGHTS = {
 }
 REGION_WEIGHT_DEFAULT = 1.0
 
-# R17: index within each regex match of the chemically-relevant residue whose
+# Index within each regex match of the chemically-relevant residue whose
 # rSASA gates the call. N in N[GS] deamidation, D in D[DGHST] isomerization,
 # W in tryptophan oxidation -> position 0. [STK]N puts the relevant Asn at
 # position 1. Multi-residue motifs (integrin, fragmentation) use position 0;
@@ -83,7 +83,7 @@ class MotifHit:
     iCode: str
     resName: str
     region: str | None
-    # R18: absolute SASA (Å²) for the chemically-relevant residue, paired
+    # Absolute SASA (A^2) for the chemically-relevant residue, paired
     # with rSASA. Spec mandates both even though rSASA × Ala-X-Ala ref
     # recovers it , keeping the raw value makes downstream analytics
     # comparable to TAP-style reports without a back-conversion step.
@@ -91,12 +91,12 @@ class MotifHit:
     rsasa: float
     exposed: bool
     exposureFactor: float
-    # R34: residue's local positional uncertainty in Angstroms. For
+    # Residue local positional uncertainty in Angstroms. For
     # ImmuneBuilder PDBs this is per-atom predicted error stored in the
     # B-factor column; for crystal structures it's the literal B-factor.
     # We average atom B-factors per residue (mean across all heavy atoms).
     confidence: Optional[float]
-    # R35: True when confidence exceeds the region-aware threshold.
+    # True when confidence exceeds the region-aware threshold.
     # confidenceGated motifs are kept in the table but excluded from
     # motifStructuralRiskScore. String "yes"/"no" so it round-trips through
     # the PColumn String value type cleanly (bool isn't a PColumn type).
@@ -107,7 +107,7 @@ class MotifHit:
 
 
 def _exposure_factor(rsasa: float | None) -> float:
-    # R20: logistic centered at 0.30 , avoids a cliff at the buried/exposed
+    # Logistic centered at 0.30, avoids a cliff at the buried/exposed
     # cutoff so transitional residues taper smoothly into the score.
     if rsasa is None:
         return 0.0
@@ -130,7 +130,7 @@ def _mean_b_factor(
     chain_id: Optional[str] = None,
 ) -> Optional[float]:
     # Mean B-factor across heavy atoms of the residue. None when no atoms
-    # carry positive B-factor (e.g. coords parsed without it). R4: when the
+    # carry positive B-factor (e.g. coords parsed without it). When the
     # B-factor is missing AND an upstream per-residue confidence lookup is
     # supplied, fall back to its errorAngstroms value for this residue.
     if residue.atoms:
@@ -144,7 +144,7 @@ def _mean_b_factor(
 
 
 def _confidence_threshold(region: Optional[str], fr_threshold: float, cdr_threshold: float) -> float:
-    # R34: region-aware thresholds. CDRs get the looser cutoff because
+    # Region-aware thresholds. CDRs get the looser cutoff because
     # ImmuneBuilder's predicted error is structurally larger there. When
     # region is unknown ("-" / None) fall back to FR threshold (the stricter
     # one) so untagged regions don't slip ambiguous calls through.
@@ -168,20 +168,20 @@ def _score_motif_hit(
     cdr_confidence_threshold: float,
     confidence_fallback: Optional[dict] = None,
 ) -> MotifHit:
-    """Assemble a single MotifHit once we know the residue passes R17
+    """Assemble a single MotifHit once we know the residue passes the chemically-relevant-index
     surface exposure. Pulled out so the main loop reads as
     "find matches → score each match" rather than 15 lines of inline
     arithmetic per hit.
 
     Computes:
-      • exposureFactor  , R20 logistic on rSASA (smooths the buried/exposed
+      * exposureFactor: logistic on rSASA (smooths the buried/exposed
                           cliff at 0.30).
-      • confidence       , residue's mean heavy-atom B-factor (R34).
+      * confidence: residue mean heavy-atom B-factor.
       • confidenceGated  , true when B-factor exceeds the region-aware
-                          threshold (R35); gated hits stay in the table
+                          threshold; gated hits stay in the table
                           for traceability but skip motifStructuralRiskScore.
       • weightedScore    , fixability_weight × region_weight × exposureFactor.
-                          The R19 region weight rewards CDR-localized hits
+                          The region weight rewards CDR-localized hits
                           (most therapeutically relevant) over framework.
     """
     region_weight = REGION_WEIGHTS.get(region, REGION_WEIGHT_DEFAULT)
@@ -220,12 +220,12 @@ def detect_motifs(
     confidence_fallback: Optional[dict] = None,
 ):
     """Walk each chain, apply the regex set, and emit hits whose
-    chemically-relevant residue (R17) has rSASA >= cutoff. Buried matches
-    are suppressed entirely per the spec, not just down-weighted , a buried
+    chemically-relevant residue has rSASA >= cutoff. Buried matches
+    are suppressed entirely, not just down-weighted: a buried
     NG can't be deamidated, so flagging it would be a false positive.
 
     When numbering_scheme + heavy/light chain mapping are supplied, hits get
-    a real `region` (FR1/CDR1/.../FR4) and the R19 region weight is applied
+    a real `region` (FR1/CDR1/.../FR4) and the region weight is applied
     to weightedScore. Otherwise `region` stays None and the neutral default
     is used.
     """
@@ -237,7 +237,7 @@ def detect_motifs(
         chain_role = role_of_chain(chain_id, heavy_chain_id, light_chain_id)
 
         for motif_name, regex, risk, fixability in _COMPILED_LIABILITIES:
-            # R17: the "chemically-relevant" residue is the position within
+            # The "chemically-relevant" residue is the position within
             # the motif that actually undergoes the modification (e.g. the
             # N in an N-G deamidation pair). Index is per-motif because some
             # patterns are multi-character but the at-risk site isn't always

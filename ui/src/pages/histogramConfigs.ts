@@ -11,7 +11,7 @@ import type { GraphMakerState } from "@milaboratories/graph-maker";
  * `thresholds` is a small tier-keyed legend rendered above the chart so the
  * reader can interpret the dashed threshold lines graph-maker draws from
  * the column's `pl7.app/graph/thresholds` annotation. Optional; the
- * developability cost has no fixed band cuts (R41 composite is for ranking).
+ * developability cost has no fixed band cuts (composite score is for ranking).
  */
 export type ThresholdBands = {
   none?: string;

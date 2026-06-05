@@ -26,7 +26,7 @@ thresholdsFor := func(colName, values) {
 	}
 	// PColumn annotations are strings. `json.encode` in Tengo returns bytes;
 	// the validator rejects bytes for a `string`-typed annotation slot. Wrap
-	// in `string(...)` so the spec round-trips as plain JSON text.
+	// in `string(...)` so the annotation round-trips as plain JSON text.
 	return string(json.encode(entries))
 }
 
@@ -181,7 +181,7 @@ scoresColumnSpecs := {
 		name: "pl7.app/liabilities/structuralDevelopabilityScore",
 		annotations: {
 			"pl7.app/label": "Developability cost",
-			"pl7.app/description": "Composite cost (R41): motif risk + threshold-flag bumps + cysteine penalties. Lower is better.",
+			"pl7.app/description": "Composite cost: motif risk + threshold-flag bumps + cysteine penalties. Lower is better.",
 			"pl7.app/format": ".2f",
 			"pl7.app/isScore": "true",
 			"pl7.app/score/rankingOrder": "increasing",

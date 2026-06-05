@@ -1,4 +1,4 @@
-# Heavy-atom-only Ala-X-Ala reference SASAs (R11), Yang & Blundell 1996.
+# Heavy-atom-only Ala-X-Ala reference SASAs, Yang & Blundell 1996.
 # Computed with FreeSASA + Shrake-Rupley (1.4 A probe), matching the
 # runtime's algorithm so rSASA = SASA / ref stays consistent.
 # Re-derived via software/scripts/derive_ala_x_ala_refs.py.

@@ -1,15 +1,16 @@
-"""Spec R39 threshold flags + R41/R41a composite scoring and risk classifiers.
+"""Per-metric threshold flags + composite developability scoring and risk
+classifiers.
 
-Thresholds live in `data/thresholds.json` per spec line 142 (`R39`) so the
-calibration source + cohortSize travel with the values. Loaded once at
-import time; runtime threshold checks read from the parsed dict.
-Fv values come from Raybould 2019 Table 2 (cohortSize 242). VHH values
-come from the TNP source paper's `assign_flag()` function in
-oxpig/TNP `bin/TNP` (cohortSize 36). Composite scoring (R41) mirrors
-`compute_developability_score` in the sequence-liabilities block:
-fixability_weight × region_weight × exposure for motifs, plus per-mode
-flag bumps (High=8, Medium=3, None=0), plus the Cys contributions
-(8 × exposed_extra + 20 × broken_canonical + 20 × missing_canonical).
+Thresholds live in `data/thresholds.json` so the calibration source +
+cohortSize travel with the values. Loaded once at import time; runtime
+threshold checks read from the parsed dict. Fv values come from Raybould
+2019 Table 2 (cohortSize 242). VHH values come from the TNP source
+paper's `assign_flag()` function in oxpig/TNP `bin/TNP` (cohortSize 36).
+Composite scoring mirrors `compute_developability_score` in the
+sequence-liabilities block: fixability_weight x region_weight x exposure
+for motifs, plus per-mode flag bumps (High=8, Medium=3, None=0), plus
+the Cys contributions (8 x exposed_extra + 20 x broken_canonical
++ 20 x missing_canonical).
 """
 
 import json
@@ -93,7 +94,7 @@ def _flag_metric(value: float, spec: dict) -> str:
 
 
 def compute_flags(surface_metrics: dict) -> dict[str, str]:
-    """Per-metric flag string per R39 thresholds. Returns empty dict when
+    """Per-metric flag string per band thresholds. Returns empty dict when
     `surface_metrics` is empty or missing `mode`."""
     if not surface_metrics or "mode" not in surface_metrics:
         return {}
@@ -117,7 +118,7 @@ def compute_flags(surface_metrics: dict) -> dict[str, str]:
 
 
 def _flag_bump(flag: Optional[str]) -> float:
-    """R41 metric-flag contribution: High=8.0, Medium=3.0, None=0.0."""
+    """Metric-flag contribution: High=8.0, Medium=3.0, None=0.0."""
     if flag == "High":
         return 8.0
     if flag == "Medium":
@@ -126,7 +127,7 @@ def _flag_bump(flag: Optional[str]) -> float:
 
 
 def _cys_class_bump(cys_class: str, sidechain_rsasa: Optional[float], buried_cutoff: float) -> float:
-    """R41 Cys contribution.
+    """Cys contribution.
        exposed_extra_cys: 8.0 each (cys_extra AND surface-exposed)
        broken_canonical:  20.0 each
        missing_canonical: 20.0 each
@@ -141,7 +142,7 @@ def _cys_class_bump(cys_class: str, sidechain_rsasa: Optional[float], buried_cut
     return 0.0
 
 
-# R41a , engineering-grade fixability tiers + the four-step risk ladder.
+# Engineering-grade fixability tiers + the four-step risk ladder.
 # `_ENGINEERING_FIXABILITIES` is the same set the sequence-liabilities
 # block uses for `classify_developability_risk` (motifs we can credibly
 # fix without a sequence redesign).
@@ -151,17 +152,17 @@ _RISK_ORDER = {n: i for i, n in enumerate(_RISK_LEVELS)}
 
 
 def _seq_risk_to_level(rc: str) -> str:
-    """R41a sequence-side risk class → ladder level. Identity for the four
+    """Sequence-side risk class → ladder level. Identity for the four
     known values; anything else (None, unexpected labels) falls through to
     "None" so an upstream regression can't silently inflate a candidate."""
     return rc if rc in _RISK_LEVELS else "None"
 
 
 def _developability_risk(motif_hits, flags: dict[str, str]) -> str:
-    """R41a , over engineering-fixable, non-gated motifs only:
+    """Over engineering-fixable, non-gated motifs only:
        1. Take the highest sequenceRiskClass among them as the base level.
-       2. Promote to Medium if ANY metric flag is amber.
-       3. Promote to High if ANY metric flag is red.
+       2. Promote to Medium if ANY metric flag is Medium.
+       3. Promote to High if ANY metric flag is High.
     Mirror of `classify_developability_risk` in sequence-liabilities."""
     base_level = "None"
     for h in motif_hits:
@@ -184,7 +185,7 @@ def _developability_risk(motif_hits, flags: dict[str, str]) -> str:
 
 
 def _has_integrity_issue(motif_hits, cys_hits, rsasa_buried_cutoff: float) -> bool:
-    """R41a structuralIntegrityRisk , Present iff at least one of:
+    """structuralIntegrityRisk: Present iff at least one of:
        • a canonical disulfide is broken or missing entirely (cys side),
        • an extra Cys is surface-exposed (free thiol → covalent aggregation risk),
        • a non-gated motif lives in the {hard_to_fix, structural} tier.
@@ -212,18 +213,18 @@ def compute_developability(
     surface_metrics: dict,
     rsasa_buried_cutoff: float,
 ):
-    """R41 + R41a: composite developability score + two categorical risk
+    """Composite developability score + two categorical risk
     columns. Returns a dict for JSON emission."""
 
     flags = compute_flags(surface_metrics)
 
-    # R41 motif contribution: sum of non-gated weighted scores (== motifStructuralRiskScore).
+    # Motif contribution: sum of non-gated weighted scores (== motifStructuralRiskScore).
     motif_contrib = sum(h.weightedScore for h in motif_hits if h.confidenceGated != "yes")
 
-    # R41 metric flag contribution.
+    # Metric flag contribution.
     flag_contrib = sum(_flag_bump(v) for v in flags.values())
 
-    # R41 cysteine contribution.
+    # Cysteine contribution.
     cys_contrib = sum(
         _cys_class_bump(h.cysClass, h.sidechainRsasa, rsasa_buried_cutoff)
         for h in cys_hits

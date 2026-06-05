@@ -1,10 +1,10 @@
-"""Batched per-clonotype liability analysis per the spec Software Interface.
+"""Batched per-clonotype liability analysis.
 
 Reads a `pdb_index.tsv` (clonotypeKey \\t pdb_filename), loops over each PDB
-in `--pdb-dir`, and writes a single `--output-tsv` whose columns match
-spec R38 (scalar atomic PColumns) + R39 (threshold flags). One row per
-clonotype; mode (R7), numbering warnings, and hallmark mismatches are
-in the TSV alongside the metrics.
+in `--pdb-dir`, and writes a single `--output-tsv` carrying the scalar
+PColumns (raw metrics + threshold flags). One row per clonotype; mode,
+numbering warnings, and hallmark mismatches are in the TSV alongside
+the metrics.
 """
 
 import argparse
@@ -26,7 +26,7 @@ from scoring import compute_developability
 from structure import check_hallmark_tetrad, parse_pdb
 
 
-# Heavy-atom Ala-X-Ala SASA references (R11), loaded from
+# Heavy-atom Ala-X-Ala SASA references, loaded from
 # data/heavy_atom_max_sasa.tsv (residue, total, sidechain columns).
 _REFS_PATH = Path(__file__).parent / "data" / "heavy_atom_max_sasa.tsv"
 
@@ -121,10 +121,10 @@ def chown_to_host(path: Path) -> None:
 
 _FLAG_SENTINEL = "-"
 
-# Spec R38 / R39 - per-clonotype scalar columns. `clonotypeKey` is first
-# (matches the spec's Software Interface TSV header); the workflow's
+# Per-clonotype scalar columns. `clonotypeKey` is first
+# (matches the documented TSV header); the workflow's
 # `xsv.importFile` maps it to the upstream PDB column's scClonotypeKey
-# axis. R2's `sampleId` axis is not present in the deployed upstream
+# axis. The upstream `sampleId` axis is not present in the deployed pipeline
 # PDB column shape, so the output TSV stays single-keyed.
 _TSV_COLUMNS = [
     "clonotypeKey",
@@ -183,28 +183,28 @@ def analyze_pdb(
     confidence_fallback: dict | None = None,
 ) -> dict:
     """Run the full per-clonotype analysis on a single PDB. Returns a dict
-    matching the TSV column set. Raises ValueError on R7 / R10 failures.
+    matching the TSV column set. Raises ValueError on chain-count or numbering failures.
     """
     text = pdb_path.read_text()
     parsed = parse_pdb(text)
 
     n_chains = len(parsed.chain_order)
     if n_chains == 0:
-        raise ValueError("PDB contains no ATOM records (spec R7)")
+        raise ValueError("PDB contains no ATOM records")
     if n_chains == 1:
         chain_len = len(parsed.residues_by_chain[parsed.chain_order[0]])
         if chain_len > 180:
             raise ValueError(
                 f"Single-chain PDB has {chain_len} residues (>180); "
-                f"rejected as suspected scFv (spec R7)"
+                f"rejected as suspected scFv"
             )
     if n_chains >= 3:
         raise ValueError(
             f"PDB has {n_chains} chains; this block accepts 1 (VHH/TNP) "
-            f"or 2 (paired Fv/TAP) chains only (spec R7)"
+            f"or 2 (paired Fv/TAP) chains only"
         )
 
-    # R10 fail-fast: numbering source check must happen before FreeSASA so
+    # Fail-fast: numbering source check must happen before FreeSASA so
     # the run aborts cheaply when both REMARK 99 records and --numbering-scheme
     # are missing.
     has_remark_cdrs = bool(parsed.platforma_cdrs)
@@ -213,7 +213,7 @@ def analyze_pdb(
         raise ValueError(
             "No numbering source available: PDB has no REMARK 99 PLATFORMA "
             "CDR records and no --numbering-scheme was provided. Region "
-            "tagging requires one of the two (spec R10)."
+            "tagging requires one of the two."
         )
 
     sasa_lookup = compute_sasa(pdb_path)
@@ -261,7 +261,7 @@ def analyze_pdb(
     )
     mode = "TAP" if n_chains == 2 else "TNP"
 
-    # R33 hallmark tetrad re-check; mismatch surfaces as a TSV warning column.
+    # Hallmark tetrad re-check; mismatch surfaces as a TSV warning column.
     hallmark = check_hallmark_tetrad(
         parsed, numbering_scheme, heavy_chain_id, chain_count_mode=mode
     )
@@ -341,16 +341,16 @@ def main() -> None:
                          "uniform across the dataset (one chain-count regime "
                          "per upstream PDB set).")
     ap.add_argument("--rsasa-buried-cutoff", type=float, default=0.075,
-                    help="Spec R12 default 0.075 (Raybould 2019 canonical).")
+                    help="Default 0.075 (Raybould 2019 canonical).")
     ap.add_argument("--fr-confidence-gating-threshold", type=float, default=4.0,
                     dest="fr_conf_thresh",
-                    help="Spec R34 default 4.0 Å (framework region).")
+                    help="Default 4.0 A (framework region).")
     ap.add_argument("--cdr-confidence-gating-threshold", type=float, default=6.0,
                     dest="cdr_conf_thresh",
-                    help="Spec R34 default 6.0 Å (CDR region).")
+                    help="Default 6.0 A (CDR region).")
     ap.add_argument("--numbering-scheme", choices=["imgt", "chothia", "kabat"],
                     default=None,
-                    help="Numbering scheme for region tagging (R14). Fallback "
+                    help="Numbering scheme for region tagging. Fallback "
                          "when REMARK 99 PLATFORMA CDR records are absent.")
     ap.add_argument("--chain-h", default=None,
                     help="PDB chain ID treated as the heavy chain when REMARK "
@@ -363,12 +363,12 @@ def main() -> None:
                     help="Optional TSV exported from upstream's "
                          "`pl7.app/structure/cdrh3Length` PColumn. When "
                          "provided, the per-clonotype value overrides the "
-                         "in-block CDR3 Cα count as the R30 compactness "
-                         "numerator (R5 / R29).")
+                         "in-block CDR3 Calpha count as the compactness "
+                         "numerator.")
     ap.add_argument("--clonotype-filter", type=Path, default=None,
                     dest="clonotype_filter_tsv",
                     help="Optional TSV exported from a Boolean/Int PColumn "
-                         "(spec R1 `PrimaryRef.filter`). Clonotypes whose "
+                         "(`PrimaryRef.filter`). Clonotypes whose "
                          "value is falsy (0, false, empty) are skipped "
                          "before iteration.")
     ap.add_argument("--per-residue-confidence", type=Path, default=None,
@@ -376,7 +376,7 @@ def main() -> None:
                     help="Optional TSV exported from upstream's "
                          "`pl7.app/structure/confidence/perResidue` JSON "
                          "PColumn. Per-residue errorAngstroms values feed "
-                         "the R4 fallback for motif confidence gating when "
+                         "the fallback for motif confidence gating when "
                          "the PDB's B-factor column is empty.")
     args = ap.parse_args()
 

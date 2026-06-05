@@ -1,5 +1,5 @@
 {
-  "_comment": "Spec R39 amber/red threshold bands. Fv mode: Raybould 2019 Table 2 (cohortSize 242). VHH mode: Gordon 2025 TNP `assign_flag()` function in oxpig/TNP repo (cohortSize 36). cohortSize preserved so downstream users can weigh statistical confidence.",
+  "_comment": "Per-metric threshold bands. Fv mode: Raybould 2019 Table 2 (cohortSize 242). VHH mode: Gordon 2025 TNP `assign_flag()` function in oxpig/TNP repo (cohortSize 36). cohortSize preserved so downstream users can weigh statistical confidence.",
   "fv": {
     "cohortSize": 242,
     "citation": "Raybould et al., PNAS 2019, vol. 116 no. 10, 4025-4030 (Table 2)",

@@ -1,5 +1,5 @@
-"""Tests for `motifs._mean_b_factor` , covers spec R4 (B-factor JSON
-fallback) and the basic positive-B-factor path used by R34 confidence
+"""Tests for `motifs._mean_b_factor`: covers the B-factor JSON
+fallback and the basic positive-B-factor path used by the confidence
 gating."""
 
 from structure import Atom, Residue
@@ -17,8 +17,8 @@ def _residue(b_factors: list[float], res_seq: int = 100, i_code: str = "") -> Re
 
 
 class TestMeanBFactor:
-    """B-factor stays as the primary R34 confidence signal; the fallback
-    only fires when every atom's B-factor is zero (spec R4 calls this
+    """B-factor stays as the primary confidence signal; the fallback
+    only fires when every atoms B-factor is zero (this is the
     fallback path "fallback only")."""
 
     def test_uniform_b_factors(self):
@@ -41,10 +41,10 @@ class TestMeanBFactor:
 
 
 class TestR4BFactorFallback:
-    """Spec R4: when the PDB's B-factor column is empty AND the upstream
+    """When the PDB B-factor column is empty AND the upstream
     per-residue JSON column is supplied, fall back to its errorAngstroms
     value. ImmuneBuilder always populates B-factors, so this path is the
-    "edge case" for crystal PDBs or pipelines that don't follow R29."""
+    "edge case" for crystal PDBs or pipelines that do not carry per-atom error."""
 
     def test_fallback_used_when_b_factors_all_zero(self):
         fallback = {("H", "100"): 3.5}
