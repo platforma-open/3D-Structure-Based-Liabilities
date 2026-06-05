@@ -7,10 +7,9 @@ import { computed } from "vue";
 import type { ThresholdBands } from "../pages/histogramConfigs";
 
 const props = defineProps<{
-  // `title` is shown by PlBlockPage as the page heading. Each per-metric page
-  // sets the chart's own title to "" via makeGraphState so it doesn't show
-  // twice.
-  title: string;
+  // No page heading rendered. The chart title comes from graph-maker
+  // (set via makeGraphState in histogramConfigs.ts), so the heading sits
+  // next to the chart instead of stacked above it.
   notReadyTitle?: string;
   thresholds?: ThresholdBands;
   pFrame: OutputWithStatus<PFrameHandle>;
@@ -32,21 +31,21 @@ const defaultOptions = computed<PredefinedGraphOption<"histogram">[] | undefined
 
 const hasLegend = computed(() => {
   const t = props.thresholds;
-  return !!(t && (t.green || t.amber || t.red));
+  return !!(t && (t.none || t.medium || t.high));
 });
 </script>
 
 <template>
-  <PlBlockPage :title="title">
+  <PlBlockPage>
     <div v-if="hasLegend && thresholds" class="threshold-legend" aria-label="Threshold bands">
-      <span v-if="thresholds.green" class="threshold-pill threshold-pill--green">
-        Pass: {{ thresholds.green }}
+      <span v-if="thresholds.none" class="threshold-pill threshold-pill--none">
+        None: {{ thresholds.none }}
       </span>
-      <span v-if="thresholds.amber" class="threshold-pill threshold-pill--amber">
-        Borderline: {{ thresholds.amber }}
+      <span v-if="thresholds.medium" class="threshold-pill threshold-pill--medium">
+        Medium: {{ thresholds.medium }}
       </span>
-      <span v-if="thresholds.red" class="threshold-pill threshold-pill--red">
-        Fail: {{ thresholds.red }}
+      <span v-if="thresholds.high" class="threshold-pill threshold-pill--high">
+        High: {{ thresholds.high }}
       </span>
     </div>
 
@@ -81,19 +80,19 @@ const hasLegend = computed(() => {
   border: 1px solid transparent;
 }
 
-.threshold-pill--green {
+.threshold-pill--none {
   background: #ecfdf5;
   border-color: #a7f3d0;
   color: #065f46;
 }
 
-.threshold-pill--amber {
+.threshold-pill--medium {
   background: #fffbeb;
   border-color: #fcd34d;
   color: #92400e;
 }
 
-.threshold-pill--red {
+.threshold-pill--high {
   background: #fef2f2;
   border-color: #fca5a5;
   color: #991b1b;

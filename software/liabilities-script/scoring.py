@@ -8,7 +8,7 @@ come from the TNP source paper's `assign_flag()` function in
 oxpig/TNP `bin/TNP` (cohortSize 36). Composite scoring (R41) mirrors
 `compute_developability_score` in the sequence-liabilities block:
 fixability_weight × region_weight × exposure for motifs, plus per-mode
-flag bumps (red=8, amber=3, green=0), plus the Cys contributions
+flag bumps (High=8, Medium=3, None=0), plus the Cys contributions
 (8 × exposed_extra + 20 × broken_canonical + 20 × missing_canonical).
 """
 
@@ -53,37 +53,37 @@ _VHH_THRESHOLDS = _coerce_band_tuples(_VHH_THRESHOLDS_RAW)
 
 
 def _flag_one_sided(value: float, spec: dict) -> str:
-    """Three-band: amber within (amber_lo, amber_hi); red on the bad side
-    of the band, green on the good side. `direction` picks which side is
-    bad , "high_bad" (most metrics) treats values above amber as red,
-    "low_bad" (SFvCSP) treats values below amber as red."""
+    """Three-band: Medium within (amber_lo, amber_hi); High on the bad side
+    of the band, None on the good side. `direction` picks which side is
+    bad: "high_bad" (most metrics) treats values above amber as High,
+    "low_bad" (Fv charge symmetry) treats values below amber as High."""
     amber_lo, amber_hi = spec["amber"]
     direction = spec.get("direction", "high_bad")
     if direction == "high_bad":
         if value > amber_hi:
-            return "red"
+            return "High"
         if value >= amber_lo:
-            return "amber"
-        return "green"
+            return "Medium"
+        return "None"
     # low_bad
     if value < amber_lo:
-        return "red"
+        return "High"
     if value <= amber_hi:
-        return "amber"
-    return "green"
+        return "Medium"
+    return "None"
 
 
 def _flag_bidirectional(value: float, spec: dict) -> str:
     g_lo, g_hi = spec["green"]
     if g_lo <= value <= g_hi:
-        return "green"
+        return "None"
     al_lo, al_hi = spec["amber_lo"]
     if al_lo <= value < al_hi:
-        return "amber"
+        return "Medium"
     ah_lo, ah_hi = spec["amber_hi"]
     if ah_lo < value <= ah_hi:
-        return "amber"
-    return "red"
+        return "Medium"
+    return "High"
 
 
 def _flag_metric(value: float, spec: dict) -> str:
@@ -117,10 +117,10 @@ def compute_flags(surface_metrics: dict) -> dict[str, str]:
 
 
 def _flag_bump(flag: Optional[str]) -> float:
-    """R41 metric-flag contribution: red=8.0, amber=3.0, green=0.0."""
-    if flag == "red":
+    """R41 metric-flag contribution: High=8.0, Medium=3.0, None=0.0."""
+    if flag == "High":
         return 8.0
-    if flag == "amber":
+    if flag == "Medium":
         return 3.0
     return 0.0
 
@@ -173,10 +173,10 @@ def _developability_risk(motif_hits, flags: dict[str, str]) -> str:
         if _RISK_ORDER[candidate] > _RISK_ORDER[base_level]:
             base_level = candidate
 
-    if any(v == "red" for v in flags.values()) and _RISK_ORDER[base_level] < _RISK_ORDER["High"]:
+    if any(v == "High" for v in flags.values()) and _RISK_ORDER[base_level] < _RISK_ORDER["High"]:
         return "High"
     if (
-        any(v == "amber" for v in flags.values())
+        any(v == "Medium" for v in flags.values())
         and _RISK_ORDER[base_level] < _RISK_ORDER["Medium"]
     ):
         return "Medium"

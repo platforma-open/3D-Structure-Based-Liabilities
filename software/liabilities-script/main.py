@@ -48,9 +48,16 @@ def _load_axa_refs(path: Path) -> dict[str, dict[str, float]]:
 _AXA_REFS: dict[str, dict[str, float]] = _load_axa_refs(_REFS_PATH)
 
 
+_SHRAKE_RUPLEY_PARAMS = freesasa.Parameters({"algorithm": freesasa.ShrakeRupley})
+
+
 def compute_sasa(pdb_path: Path) -> dict[tuple[str, str], dict[str, float]]:
+    # Shrake-Rupley (point-sampling) is the canonical Raybould 2019 / Gordon
+    # 2025 SASA algorithm. freesasa's default is Lee-Richards (slice-based);
+    # the resulting rsasa values differ enough to drift the per-metric
+    # thresholds, so pin the algorithm explicitly.
     structure = freesasa.Structure(str(pdb_path))
-    result = freesasa.calc(structure)
+    result = freesasa.calc(structure, _SHRAKE_RUPLEY_PARAMS)
     residue_areas = result.residueAreas()
     sasa_lookup: dict[tuple[str, str], dict[str, float]] = {}
     for chain_id, by_res in residue_areas.items():

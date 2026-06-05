@@ -56,29 +56,29 @@ class TestComputeFlagsFv:
 
     def test_green_band(self):
         flags = compute_flags(self._fv_metrics())
-        assert flags["totalCdrLengthFlag"] == "green"
-        assert flags["pshFlag"] == "green"
-        assert flags["ppcFlag"] == "green"
-        assert flags["pncFlag"] == "green"
-        assert flags["sfvcspFlag"] == "green"
+        assert flags["totalCdrLengthFlag"] == "None"
+        assert flags["pshFlag"] == "None"
+        assert flags["ppcFlag"] == "None"
+        assert flags["pncFlag"] == "None"
+        assert flags["sfvcspFlag"] == "None"
 
     def test_totalCdrLength_one_sided_high_bad(self):
         # amber: 54-60, red: >60
-        assert compute_flags(self._fv_metrics(totalCdrLength=55))["totalCdrLengthFlag"] == "amber"
-        assert compute_flags(self._fv_metrics(totalCdrLength=61))["totalCdrLengthFlag"] == "red"
+        assert compute_flags(self._fv_metrics(totalCdrLength=55))["totalCdrLengthFlag"] == "Medium"
+        assert compute_flags(self._fv_metrics(totalCdrLength=61))["totalCdrLengthFlag"] == "High"
 
     def test_psh_bidirectional(self):
         # green: 100.71-156.20, amber bands: 83.84-100.71 OR 156.20-173.85,
         # red: <83.84 OR >173.85
-        assert compute_flags(self._fv_metrics(psh=90.0))["pshFlag"] == "amber"
-        assert compute_flags(self._fv_metrics(psh=160.0))["pshFlag"] == "amber"
-        assert compute_flags(self._fv_metrics(psh=80.0))["pshFlag"] == "red"
-        assert compute_flags(self._fv_metrics(psh=200.0))["pshFlag"] == "red"
+        assert compute_flags(self._fv_metrics(psh=90.0))["pshFlag"] == "Medium"
+        assert compute_flags(self._fv_metrics(psh=160.0))["pshFlag"] == "Medium"
+        assert compute_flags(self._fv_metrics(psh=80.0))["pshFlag"] == "High"
+        assert compute_flags(self._fv_metrics(psh=200.0))["pshFlag"] == "High"
 
     def test_sfvcsp_low_bad(self):
         # amber: -20.40 ≤ SFvCSP ≤ -6.30, red: <-20.40
-        assert compute_flags(self._fv_metrics(sfvcsp=-15.0))["sfvcspFlag"] == "amber"
-        assert compute_flags(self._fv_metrics(sfvcsp=-25.0))["sfvcspFlag"] == "red"
+        assert compute_flags(self._fv_metrics(sfvcsp=-15.0))["sfvcspFlag"] == "Medium"
+        assert compute_flags(self._fv_metrics(sfvcsp=-25.0))["sfvcspFlag"] == "High"
 
     def test_vhh_compactness_not_flagged_in_fv_mode(self):
         """TAP mode doesn't carry a `cdrh3CompactnessFlag` , only VHH does."""
@@ -104,38 +104,38 @@ class TestComputeFlagsVhh:
 
     def test_green_band(self):
         flags = compute_flags(self._vhh_metrics())
-        assert flags["totalCdrLengthFlag"] == "green"
-        assert flags["pshFlag"] == "green"
-        assert flags["ppcFlag"] == "green"
-        assert flags["pncFlag"] == "green"
-        assert flags["cdrh3CompactnessFlag"] == "green"
+        assert flags["totalCdrLengthFlag"] == "None"
+        assert flags["pshFlag"] == "None"
+        assert flags["ppcFlag"] == "None"
+        assert flags["pncFlag"] == "None"
+        assert flags["cdrh3CompactnessFlag"] == "None"
 
     def test_totalCdrLength_bidirectional(self):
         # green: 25-36, amber: 20-24 OR 37-39, red: <20 OR >39
-        assert compute_flags(self._vhh_metrics(totalCdrLength=22))["totalCdrLengthFlag"] == "amber"
-        assert compute_flags(self._vhh_metrics(totalCdrLength=38))["totalCdrLengthFlag"] == "amber"
-        assert compute_flags(self._vhh_metrics(totalCdrLength=18))["totalCdrLengthFlag"] == "red"
-        assert compute_flags(self._vhh_metrics(totalCdrLength=45))["totalCdrLengthFlag"] == "red"
+        assert compute_flags(self._vhh_metrics(totalCdrLength=22))["totalCdrLengthFlag"] == "Medium"
+        assert compute_flags(self._vhh_metrics(totalCdrLength=38))["totalCdrLengthFlag"] == "Medium"
+        assert compute_flags(self._vhh_metrics(totalCdrLength=18))["totalCdrLengthFlag"] == "High"
+        assert compute_flags(self._vhh_metrics(totalCdrLength=45))["totalCdrLengthFlag"] == "High"
 
     def test_psh_bidirectional(self):
         # green: 79.60-126.82, amber: 73.40-79.59 OR 126.83-155.47,
         # red: <73.40 OR >155.47
-        assert compute_flags(self._vhh_metrics(psh=76.0))["pshFlag"] == "amber"
-        assert compute_flags(self._vhh_metrics(psh=140.0))["pshFlag"] == "amber"
-        assert compute_flags(self._vhh_metrics(psh=70.0))["pshFlag"] == "red"
-        assert compute_flags(self._vhh_metrics(psh=160.0))["pshFlag"] == "red"
+        assert compute_flags(self._vhh_metrics(psh=76.0))["pshFlag"] == "Medium"
+        assert compute_flags(self._vhh_metrics(psh=140.0))["pshFlag"] == "Medium"
+        assert compute_flags(self._vhh_metrics(psh=70.0))["pshFlag"] == "High"
+        assert compute_flags(self._vhh_metrics(psh=160.0))["pshFlag"] == "High"
 
     def test_ppc_one_sided_high_bad(self):
         # amber: 0.39-1.18, red: >1.18
-        assert compute_flags(self._vhh_metrics(ppc=0.5))["ppcFlag"] == "amber"
-        assert compute_flags(self._vhh_metrics(ppc=1.5))["ppcFlag"] == "red"
+        assert compute_flags(self._vhh_metrics(ppc=0.5))["ppcFlag"] == "Medium"
+        assert compute_flags(self._vhh_metrics(ppc=1.5))["ppcFlag"] == "High"
 
     def test_compactness_bidirectional(self):
         # green: 0.82-1.56, amber: 0.56-0.81 OR 1.57-1.61, red: <0.56 OR >1.61
-        assert compute_flags(self._vhh_metrics(cdrh3Compactness=0.70))["cdrh3CompactnessFlag"] == "amber"
-        assert compute_flags(self._vhh_metrics(cdrh3Compactness=1.59))["cdrh3CompactnessFlag"] == "amber"
-        assert compute_flags(self._vhh_metrics(cdrh3Compactness=0.40))["cdrh3CompactnessFlag"] == "red"
-        assert compute_flags(self._vhh_metrics(cdrh3Compactness=1.80))["cdrh3CompactnessFlag"] == "red"
+        assert compute_flags(self._vhh_metrics(cdrh3Compactness=0.70))["cdrh3CompactnessFlag"] == "Medium"
+        assert compute_flags(self._vhh_metrics(cdrh3Compactness=1.59))["cdrh3CompactnessFlag"] == "Medium"
+        assert compute_flags(self._vhh_metrics(cdrh3Compactness=0.40))["cdrh3CompactnessFlag"] == "High"
+        assert compute_flags(self._vhh_metrics(cdrh3Compactness=1.80))["cdrh3CompactnessFlag"] == "High"
 
     def test_sfvcsp_not_flagged_in_vhh_mode(self):
         """SFvCSP is Fv-only; the VHH thresholds dict doesn't carry it."""

@@ -233,17 +233,17 @@ export const platforma = BlockModelV3.create(dataModel)
     const mode = resolveMode(ctx);
     const modeSpecificLabel =
       mode === "TNP"
-        ? "CDRH3 compactness (VHH)"
+        ? "CDRH3 compactness"
         : mode === "TAP"
-          ? "SFvCSP (Fv)"
-          : "Mode-specific distribution";
+          ? "Fv charge symmetry"
+          : "CDRH3 compactness / Fv charge symmetry";
     return [
       { type: "link", href: "/", label: "Main" },
-      { type: "link", href: "/histogram-psh", label: "PSH distribution" },
-      { type: "link", href: "/histogram-ppc", label: "PPC distribution" },
-      { type: "link", href: "/histogram-pnc", label: "PNC distribution" },
+      { type: "link", href: "/histogram-psh", label: "Hydrophobicity" },
+      { type: "link", href: "/histogram-ppc", label: "Positive charge patches" },
+      { type: "link", href: "/histogram-pnc", label: "Negative charge patches" },
       { type: "link", href: "/histogram-mode-specific", label: modeSpecificLabel },
-      { type: "link", href: "/histogram-developability", label: "Developability score" },
+      { type: "link", href: "/histogram-developability", label: "Developability cost" },
     ];
   })
   .title(() => "3D Structure-Based Liabilities")

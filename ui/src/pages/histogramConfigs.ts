@@ -8,15 +8,15 @@ import type { GraphMakerState } from "@milaboratories/graph-maker";
  * to read. `notReadyTitle` is set on the two mode-specific pages to explain
  * why the chart is empty when the dataset is in the other mode.
  *
- * `thresholds` is a small color-keyed legend rendered above the chart so the
+ * `thresholds` is a small tier-keyed legend rendered above the chart so the
  * reader can interpret the dashed threshold lines graph-maker draws from
- * the column's `pl7.app/graph/thresholds` annotation. Optional , the
- * developability score has no fixed band cuts (R41 composite is for ranking).
+ * the column's `pl7.app/graph/thresholds` annotation. Optional; the
+ * developability cost has no fixed band cuts (R41 composite is for ranking).
  */
 export type ThresholdBands = {
-  green?: string;
-  amber?: string;
-  red?: string;
+  none?: string;
+  medium?: string;
+  high?: string;
 };
 
 export type HistogramConfig = {
@@ -32,45 +32,45 @@ export type HistogramConfig = {
 
 export const histogramConfigs = {
   psh: {
-    title: "Patches of Surface Hydrophobicity",
+    title: "Hydrophobicity",
     columnName: "pl7.app/liabilities/psh",
     fillColor: "#7da3d1",
     thresholds: {
-      green: "100 to 156",
-      amber: "84 to 100 or 156 to 174",
-      red: "below 84 or above 174",
+      none: "100 to 156",
+      medium: "84 to 100 or 156 to 174",
+      high: "below 84 or above 174",
     },
   },
   ppc: {
-    title: "Patches of Positive Charge",
+    title: "Positive charge patches",
     columnName: "pl7.app/liabilities/ppc",
     fillColor: "#e5a06f",
     thresholds: {
-      green: "≤ 1.25",
-      amber: "1.25 to 3.16",
-      red: "above 3.16",
+      none: "≤ 1.25",
+      medium: "1.25 to 3.16",
+      high: "above 3.16",
     },
   },
   pnc: {
-    title: "Patches of Negative Charge",
+    title: "Negative charge patches",
     columnName: "pl7.app/liabilities/pnc",
     fillColor: "#82c79c",
     thresholds: {
-      green: "≤ 1.84",
-      amber: "1.84 to 3.50",
-      red: "above 3.50",
+      none: "≤ 1.84",
+      medium: "1.84 to 3.50",
+      high: "above 3.50",
     },
   },
   sfvcsp: {
-    title: "Symmetry of Fv Charges Product",
+    title: "Fv charge symmetry",
     notReadyTitle:
-      "SFvCSP is only computed in paired-Fv (TAP) mode. Run the block on a paired-Fv dataset to populate this distribution.",
+      "Fv charge symmetry is only computed in paired-Fv (TAP) mode. Run the block on a paired-Fv dataset to populate this distribution.",
     columnName: "pl7.app/liabilities/sfvcsp",
     fillColor: "#bb86d6",
     thresholds: {
-      green: "≥ -6.3",
-      amber: "-20.4 to -6.3",
-      red: "below -20.4",
+      none: "≥ -6.3",
+      medium: "-20.4 to -6.3",
+      high: "below -20.4",
     },
   },
   cdrh3Compactness: {
@@ -80,13 +80,13 @@ export const histogramConfigs = {
     columnName: "pl7.app/liabilities/cdrh3Compactness",
     fillColor: "#d6b06b",
     thresholds: {
-      green: "0.82 to 1.57",
-      amber: "0.56 to 0.82 or 1.57 to 1.61",
-      red: "below 0.56 or above 1.61",
+      none: "0.82 to 1.57",
+      medium: "0.56 to 0.82 or 1.57 to 1.61",
+      high: "below 0.56 or above 1.61",
     },
   },
   developability: {
-    title: "Developability score",
+    title: "Developability cost",
     columnName: "pl7.app/liabilities/structuralDevelopabilityScore",
     fillColor: "#cf6e83",
   },
@@ -94,12 +94,13 @@ export const histogramConfigs = {
 
 /** Seed a graph-maker `bins` template from a histogram config. The `bins`
  * layer needs an explicit fillColor; the template's default ('white') is
- * invisible against the chart background. Title is left blank because the
- * page heading is rendered by PlBlockPage in HistogramPage.vue. */
+ * invisible against the chart background. The chart title pulls from
+ * `cfg.title` so it shows in graph-maker's plot-title slot instead of a
+ * separate page heading. */
 export function makeGraphState(cfg: HistogramConfig): GraphMakerState {
   return {
     template: "bins",
-    title: "",
+    title: cfg.title,
     currentTab: null,
     layersSettings: { bins: { fillColor: cfg.fillColor } },
   };

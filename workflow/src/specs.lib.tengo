@@ -36,15 +36,20 @@ thresholdsFor := func(colName, values) {
 // column to label to threshold mapping reads as a table at the call
 // sites instead of buried in 10 lines of dict-per-column boilerplate.
 
+// Three-tier flag discrete values, shared by every `*Flag` column and the
+// legend in the histogram pages.
+FLAG_DISCRETE_VALUES := string(json.encode(["None", "Medium", "High"]))
+
 // Raw Double surface metric (PSH, PPC, PNC, SFvCSP, CDRH3 compactness).
 // Hidden by default ("show all" reveals); carries the Raybould 2019 /
 // Gordon 2025 amber/red threshold values as a graph annotation.
-metricColumnSpec := func(name, label, format, orderPriority, thresholdValues) {
+metricColumnSpec := func(name, label, description, format, orderPriority, thresholdValues) {
 	return {
 		valueType: "Double",
 		name: name,
 		annotations: {
 			"pl7.app/label": label,
+			"pl7.app/description": description,
 			"pl7.app/format": format,
 			"pl7.app/table/visibility": "optional",
 			"pl7.app/table/orderPriority": orderPriority,
@@ -56,12 +61,13 @@ metricColumnSpec := func(name, label, format, orderPriority, thresholdValues) {
 // Per-metric low-confidence-residue fraction. Always Double, always hidden
 // by default, never carries threshold annotations (fractions don't have
 // Raybould bands).
-lowConfFractionSpec := func(name, label, orderPriority) {
+lowConfFractionSpec := func(name, label, description, orderPriority) {
 	return {
 		valueType: "Double",
 		name: name,
 		annotations: {
 			"pl7.app/label": label,
+			"pl7.app/description": description,
 			"pl7.app/format": ".2f",
 			"pl7.app/table/visibility": "optional",
 			"pl7.app/table/orderPriority": orderPriority
@@ -69,12 +75,12 @@ lowConfFractionSpec := func(name, label, orderPriority) {
 	}
 }
 
-// Three-band flag column. Always String ("green" / "amber" / "red" / "-"
+// Three-band flag column. Always String ("None" / "Medium" / "High" / "-"
 // sentinel when inapplicable), carries the apo-vs-bound tooltip and isScore
 // so PlAgDataTable styles the cell. Visibility differs: PSH / PPC / PNC /
 // SFvCSP / CDRH3-compactness flags are default-visible, totalCdrLengthFlag
 // is optional (follows totalCdrLength itself).
-_FLAG_DESCRIPTION := "Flag reflects predicted apo conformation; bound conformation may differ."
+_FLAG_DESCRIPTION := "Three-band flag (None/Medium/High) on the predicted apo conformation; bound conformation may differ."
 flagColumnSpec := func(name, label, orderPriority, visibility) {
 	return {
 		valueType: "String",
@@ -83,6 +89,8 @@ flagColumnSpec := func(name, label, orderPriority, visibility) {
 			"pl7.app/label": label,
 			"pl7.app/isScore": "true",
 			"pl7.app/description": _FLAG_DESCRIPTION,
+			"pl7.app/isDiscreteFilter": "true",
+			"pl7.app/discreteValues": FLAG_DISCRETE_VALUES,
 			"pl7.app/table/visibility": visibility,
 			"pl7.app/table/orderPriority": orderPriority
 		}
@@ -93,12 +101,13 @@ flagColumnSpec := func(name, label, orderPriority, visibility) {
 // All share label / visibility / orderPriority shape; visibility flips
 // per column (exposedExtra, brokenCanonical, surfacedMotif are
 // default-visible; the rest sit behind "show all").
-countLongSpec := func(name, label, orderPriority, visibility) {
+countLongSpec := func(name, label, description, orderPriority, visibility) {
 	return {
 		valueType: "Long",
 		name: name,
 		annotations: {
 			"pl7.app/label": label,
+			"pl7.app/description": description,
 			"pl7.app/table/visibility": visibility,
 			"pl7.app/table/orderPriority": orderPriority
 		}
@@ -114,36 +123,54 @@ countLongSpec := func(name, label, orderPriority, visibility) {
 //     pshPatchCount, motifStructuralRiskScore, totalCdrLength, missing/extra
 //     cysteine counts (taxonomy weights are exposed via the composite score),
 //     low-conf residue fractions.
+RISK_DISCRETE_VALUES := string(json.encode(["None", "Low", "Medium", "High"]))
+RISK_DEFAULT_CUTOFF := string(json.encode(["None", "Low"]))
+INTEGRITY_DISCRETE_VALUES := string(json.encode(["None", "Present"]))
+
 scoresColumnSpecs := {
 	mode: {
 		valueType: "String",
 		name: "pl7.app/liabilities/mode",
 		annotations: {
 			"pl7.app/label": "Mode",
+			"pl7.app/description": "Per-clonotype scoring mode (TAP for paired Fv, TNP for VHH).",
 			"pl7.app/table/visibility": "optional",
 			"pl7.app/table/orderPriority": "1100"
 		}
 	},
 	extraCysCount: countLongSpec(
-		"pl7.app/liabilities/extraCysCount", "Extra cysteines", "720", "optional"),
+		"pl7.app/liabilities/extraCysCount", "Extra cysteines",
+		"Non-canonical cysteines outside the conserved disulfide positions.",
+		"720", "optional"),
 	exposedExtraCysCount: countLongSpec(
-		"pl7.app/liabilities/exposedExtraCysCount", "Exposed extra cysteines", "990", "default"),
+		"pl7.app/liabilities/exposedExtraCysCount", "Exposed extra cysteines",
+		"Non-canonical cysteines that are also surface-exposed (free thiol risk).",
+		"990", "default"),
 	brokenCanonicalDisulfideCount: countLongSpec(
 		"pl7.app/liabilities/brokenCanonicalDisulfideCount",
-		"Broken canonical disulfides", "980", "default"),
+		"Broken canonical disulfides",
+		"Canonical disulfide pairs where both Cys are present but not bonded.",
+		"980", "default"),
 	missingCanonicalCysCount: countLongSpec(
 		"pl7.app/liabilities/missingCanonicalCysCount",
-		"Missing canonical cysteines", "710", "optional"),
+		"Missing canonical cysteines",
+		"Canonical disulfide positions without a Cys residue.",
+		"710", "optional"),
 	surfacedMotifCount: countLongSpec(
-		"pl7.app/liabilities/surfacedMotifCount", "Surfaced motifs", "1000", "default"),
+		"pl7.app/liabilities/surfacedMotifCount", "Surfaced motifs",
+		"Sequence-liability motifs (deamidation, isomerization, etc.) on the surface.",
+		"1000", "default"),
 	confidenceGatedMotifCount: countLongSpec(
 		"pl7.app/liabilities/confidenceGatedMotifCount",
-		"Confidence-gated motifs", "900", "optional"),
+		"Confidence-gated motifs",
+		"Motifs ignored because the supporting residues fall below the per-residue confidence cutoff.",
+		"900", "optional"),
 	motifStructuralRiskScore: {
 		valueType: "Double",
 		name: "pl7.app/liabilities/motifStructuralRiskScore",
 		annotations: {
 			"pl7.app/label": "Motif structural risk score",
+			"pl7.app/description": "Weighted sum (fixability x region x exposure) over non-gated surface motifs.",
 			"pl7.app/format": ".2f",
 			"pl7.app/table/visibility": "optional",
 			"pl7.app/table/orderPriority": "890"
@@ -153,8 +180,11 @@ scoresColumnSpecs := {
 		valueType: "Double",
 		name: "pl7.app/liabilities/structuralDevelopabilityScore",
 		annotations: {
-			"pl7.app/label": "Developability score",
+			"pl7.app/label": "Developability cost",
+			"pl7.app/description": "Composite cost (R41): motif risk + threshold-flag bumps + cysteine penalties. Lower is better.",
 			"pl7.app/format": ".2f",
+			"pl7.app/isScore": "true",
+			"pl7.app/score/rankingOrder": "increasing",
 			"pl7.app/table/visibility": "default",
 			"pl7.app/table/orderPriority": "1030"
 		}
@@ -164,6 +194,12 @@ scoresColumnSpecs := {
 		name: "pl7.app/liabilities/structuralDevelopabilityRisk",
 		annotations: {
 			"pl7.app/label": "Developability risk",
+			"pl7.app/description": "Four-tier risk ladder (None/Low/Medium/High) derived from motif tier and metric flags.",
+			"pl7.app/isScore": "true",
+			"pl7.app/isDiscreteFilter": "true",
+			"pl7.app/discreteValues": RISK_DISCRETE_VALUES,
+			"pl7.app/score/rankingOrder": "decreasing",
+			"pl7.app/score/defaultCutoff": RISK_DEFAULT_CUTOFF,
 			"pl7.app/table/visibility": "default",
 			"pl7.app/table/orderPriority": "1050"
 		}
@@ -173,6 +209,9 @@ scoresColumnSpecs := {
 		name: "pl7.app/liabilities/structuralIntegrityRisk",
 		annotations: {
 			"pl7.app/label": "Integrity risk",
+			"pl7.app/description": "Binary flag (None/Present) for hard-to-fix structural issues: broken/missing disulfides, exposed extra Cys, structural motifs.",
+			"pl7.app/isDiscreteFilter": "true",
+			"pl7.app/discreteValues": INTEGRITY_DISCRETE_VALUES,
 			"pl7.app/table/visibility": "default",
 			"pl7.app/table/orderPriority": "1040"
 		}
@@ -184,6 +223,7 @@ scoresColumnSpecs := {
 		name: "pl7.app/liabilities/totalCdrLength",
 		annotations: {
 			"pl7.app/label": "Total CDR length",
+			"pl7.app/description": "Sum of CDR1+CDR2+CDR3 residue lengths.",
 			"pl7.app/table/visibility": "optional",
 			"pl7.app/table/orderPriority": "870",
 			"pl7.app/graph/thresholds": thresholdsFor("pl7.app/liabilities/totalCdrLength", [54, 60])
@@ -191,43 +231,65 @@ scoresColumnSpecs := {
 	},
 	// PSH: surface-hydrophobicity patch score; Raybould 2019 Table 2.
 	psh: metricColumnSpec(
-		"pl7.app/liabilities/psh", "PSH", ".2f", "860",
-		[83.84, 100.71, 156.20, 173.85]),
+		"pl7.app/liabilities/psh", "Surface hydrophobicity",
+		"Patches of surface-exposed hydrophobic residues in the CDR vicinity (Raybould 2019 PSH). Higher = more exposed hydrophobic surface.",
+		".2f", "860", [83.84, 100.71, 156.20, 173.85]),
 	// Diagnostic Long count of distinct patches discovered (not score).
 	pshPatchCount: countLongSpec(
-		"pl7.app/liabilities/pshPatchCount", "PSH patch count", "850", "optional"),
+		"pl7.app/liabilities/pshPatchCount", "Surface hydrophobicity patch count",
+		"Number of distinct hydrophobic patches contributing to the surface hydrophobicity score.",
+		"850", "optional"),
 	// PPC / PNC: positive / negative patch scores.
 	ppc: metricColumnSpec(
-		"pl7.app/liabilities/ppc", "PPC", ".2f", "840", [1.25, 3.16]),
+		"pl7.app/liabilities/ppc", "Positive-charge patches",
+		"Patches of surface-exposed positive-charge residues in the CDR vicinity. Higher = more positively charged surface.",
+		".2f", "840", [1.25, 3.16]),
 	pnc: metricColumnSpec(
-		"pl7.app/liabilities/pnc", "PNC", ".2f", "830", [1.84, 3.50]),
+		"pl7.app/liabilities/pnc", "Negative-charge patches",
+		"Patches of surface-exposed negative-charge residues in the CDR vicinity. Higher = more negatively charged surface.",
+		".2f", "830", [1.84, 3.50]),
 	// SFvCSP: paired-Fv only. Lower = worse (asymmetric charges to viscosity).
 	sfvcsp: metricColumnSpec(
-		"pl7.app/liabilities/sfvcsp", "SFvCSP", ".2f", "820", [-20.40, -6.30]),
+		"pl7.app/liabilities/sfvcsp", "Fv charge symmetry",
+		"Sum-of-cross-chain charge product (SFvCSP). Lower = more asymmetric Fv charge distribution, raising viscosity risk.",
+		".2f", "820", [-20.40, -6.30]),
 	// CDRH3 compactness: VHH only. Bidirectional risk.
 	cdrh3Compactness: metricColumnSpec(
-		"pl7.app/liabilities/cdrh3Compactness", "CDRH3 compactness", ".3f", "810",
-		[0.56, 0.82, 1.57, 1.61]),
+		"pl7.app/liabilities/cdrh3Compactness", "CDRH3 compactness",
+		"CDRH3 length normalised by anchor-centroid distance. Both unusually compact and unusually elongated CDRH3 loops can drive aggregation.",
+		".3f", "810", [0.56, 0.82, 1.57, 1.61]),
 
 	// Per-metric low-confidence residue fractions.
 	totalCdrLengthLowConfidenceResidueFraction: lowConfFractionSpec(
 		"pl7.app/liabilities/totalCdrLengthLowConfidenceResidueFraction",
-		"Total CDR length low-conf fraction", "790"),
+		"Total CDR length low-conf fraction",
+		"Fraction of CDR residues with per-residue confidence below the gating threshold.",
+		"790"),
 	pshLowConfidenceResidueFraction: lowConfFractionSpec(
 		"pl7.app/liabilities/pshLowConfidenceResidueFraction",
-		"PSH low-conf fraction", "780"),
+		"Surface hydrophobicity low-conf fraction",
+		"Fraction of residues contributing to surface hydrophobicity that fall below the per-residue confidence threshold.",
+		"780"),
 	ppcLowConfidenceResidueFraction: lowConfFractionSpec(
 		"pl7.app/liabilities/ppcLowConfidenceResidueFraction",
-		"PPC low-conf fraction", "770"),
+		"Positive-charge patches low-conf fraction",
+		"Fraction of residues contributing to positive-charge patches that fall below the per-residue confidence threshold.",
+		"770"),
 	pncLowConfidenceResidueFraction: lowConfFractionSpec(
 		"pl7.app/liabilities/pncLowConfidenceResidueFraction",
-		"PNC low-conf fraction", "760"),
+		"Negative-charge patches low-conf fraction",
+		"Fraction of residues contributing to negative-charge patches that fall below the per-residue confidence threshold.",
+		"760"),
 	sfvcspLowConfidenceResidueFraction: lowConfFractionSpec(
 		"pl7.app/liabilities/sfvcspLowConfidenceResidueFraction",
-		"SFvCSP low-conf fraction", "750"),
+		"Fv charge symmetry low-conf fraction",
+		"Fraction of residues contributing to the Fv charge symmetry score that fall below the per-residue confidence threshold.",
+		"750"),
 	cdrh3CompactnessLowConfidenceResidueFraction: lowConfFractionSpec(
 		"pl7.app/liabilities/cdrh3CompactnessLowConfidenceResidueFraction",
-		"CDRH3 compactness low-conf fraction", "740"),
+		"CDRH3 compactness low-conf fraction",
+		"Fraction of CDRH3 residues with per-residue confidence below the gating threshold.",
+		"740"),
 
 	// Three-band threshold flags. PSH / PPC / PNC / SFvCSP / CDRH3
 	// compactness are default-visible; totalCdrLengthFlag follows the raw
@@ -235,13 +297,13 @@ scoresColumnSpecs := {
 	totalCdrLengthFlag: flagColumnSpec(
 		"pl7.app/liabilities/totalCdrLengthFlag", "Total CDR length flag", "930", "optional"),
 	pshFlag: flagColumnSpec(
-		"pl7.app/liabilities/pshFlag", "PSH flag", "970", "default"),
+		"pl7.app/liabilities/pshFlag", "Surface hydrophobicity flag", "970", "default"),
 	ppcFlag: flagColumnSpec(
-		"pl7.app/liabilities/ppcFlag", "PPC flag", "960", "default"),
+		"pl7.app/liabilities/ppcFlag", "Positive-charge patches flag", "960", "default"),
 	pncFlag: flagColumnSpec(
-		"pl7.app/liabilities/pncFlag", "PNC flag", "950", "default"),
+		"pl7.app/liabilities/pncFlag", "Negative-charge patches flag", "950", "default"),
 	sfvcspFlag: flagColumnSpec(
-		"pl7.app/liabilities/sfvcspFlag", "SFvCSP flag", "940", "default"),
+		"pl7.app/liabilities/sfvcspFlag", "Fv charge symmetry flag", "940", "default"),
 	cdrh3CompactnessFlag: flagColumnSpec(
 		"pl7.app/liabilities/cdrh3CompactnessFlag", "CDRH3 compactness flag", "940", "default")
 }

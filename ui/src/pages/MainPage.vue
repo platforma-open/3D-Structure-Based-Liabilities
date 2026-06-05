@@ -57,7 +57,7 @@ const { selectedClusterAssignment } = useClusterAssignments(
   scoresTableOutput,
   selectedClonotypeKey,
 );
-const { runSummary, showRedAlert, showGatedAlert } = useRunSummaryAlerts(scoresTableOutput);
+const { runSummary, showGatedAlert } = useRunSummaryAlerts(scoresTableOutput);
 
 // Settings auto-opens on first load when no input is configured.
 const settingsOpen = ref(!app.model.data.dataset?.primary?.column);
@@ -186,18 +186,6 @@ const modalTitle = computed(() => {
     </PlSlideModal>
 
     <PlAlert
-      v-if="showRedAlert && runSummary"
-      class="run-alert"
-      type="warn"
-      label="More than 10% of clonotypes carry a red flag"
-      icon
-    >
-      {{ runSummary.redClonotypes }} of {{ runSummary.total }} clonotypes ({{
-        Math.round(runSummary.redFraction * 100)
-      }}%) carry at least one red Raybould threshold flag. Inspect the table below for which metrics
-      are driving this.
-    </PlAlert>
-    <PlAlert
       v-if="showGatedAlert && runSummary"
       class="run-alert"
       type="warn"
@@ -219,6 +207,7 @@ const modalTitle = computed(() => {
       :settings="scoresTableSettings"
       :show-cell-button-for-axis-id="clonotypeAxisId"
       :cell-button-invoke-rows-on-double-click="true"
+      :show-export-button="true"
       not-ready-text="Run on a 3D structures dataset to see per-clonotype scores"
       no-rows-text="No scored clonotypes"
       @cell-button-clicked="openViewerForRow"

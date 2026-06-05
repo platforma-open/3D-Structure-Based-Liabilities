@@ -508,10 +508,13 @@ def _compute_tnp(
     cdr_vic = _cdr_vicinity_residues(h_res, h_regions, h_rsasa, rsasa_buried_cutoff)
     h_weight, pos_charge_abs, neg_charge_abs = _weight_fns(h_bridge)
 
-    psh, psh_patches, psh_contrib = _residue_pair_sum(
-        cdr_vic, h_res, h_aa, h_weight,
-        same_type_pred=lambda a, b: _hydrophobic(a) and _hydrophobic(b),
-    )
+    # PSH mirrors TAP mode: every CDR-vicinity pair contributes its
+    # hydrophobicity product (Gordon 2025 TNP scale ~80-127). Restricting to
+    # hydrophobic-only pairs collapses the sum 5-10x and pulls every
+    # nanobody below the red floor (Ane review, 2026-06-05).
+    psh, psh_patches, psh_contrib = _residue_pair_sum(cdr_vic, h_res, h_aa, h_weight)
+    # PPC / PNC keep the same-type restriction: only matching-charge pairs
+    # form the charged patches the score is meant to detect.
     ppc, _, ppc_contrib = _residue_pair_sum(
         cdr_vic, h_res, h_aa, pos_charge_abs,
         same_type_pred=lambda a, b: _positive(a) and _positive(b),

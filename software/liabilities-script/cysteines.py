@@ -5,16 +5,18 @@
 # bonding-state-only path: every Cys reports "bonded" or "unbonded" by
 # geometry, no four-state classification.
 #
-# With numbering wired we anchor on the spec's canonical-Cys positions
-# (IMGT H23+H104 / L23+L104; Chothia H22+H92 / L23+L88) and emit four-state
-# classifications per R23:
-#   - disulfide          : both canonical Cys present + bonded
-#   - disulfide_broken   : both canonical Cys present + unbonded
-#   - disulfide_missing  : a canonical position has no Cys (a phantom hit
-#                          is emitted at that role with cysClass set to
-#                          disulfide_missing)
-#   - cys_extra          : a Cys at any non-canonical position, regardless
-#                          of bonding state
+# With numbering wired we enumerate the spec's canonical-Cys PAIRS (IMGT
+# H23+H104 / L23+L104; Chothia H22+H92 / L23+L88) and emit one row per
+# pair (per R23):
+#   - disulfide          : both canonical Cys present + bonded to each other
+#   - disulfide_broken   : both canonical Cys present, not bonded as a pair
+#   - disulfide_missing  : at least one of the two canonical positions has
+#                          no Cys (covers partial deletions; this hit
+#                          replaces what would otherwise be a `_broken`
+#                          row plus a missing phantom for the same pair)
+# Plus per-residue rows for any extra Cys:
+#   - cys_extra          : a Cys at a non-canonical position, regardless of
+#                          bonding state
 #
 # Per-cys drill-down is out of scope per the refreshed spec, so each hit
 # only carries the two fields actually consumed downstream: the class label
@@ -65,7 +67,7 @@ def _collect_cys_records(parsed):
 
 def _scan_disulfides(cys_records) -> dict[int, int]:
     """Pairwise scan over cys_records; returns idx → partner_idx for every
-    Cys engaged in a disulfide. First-match wins on ambiguous geometry ,
+    Cys engaged in a disulfide. First-match wins on ambiguous geometry:
     if one Cys could bond to two partners, we lock the first one we hit
     and treat the other as `unbonded` (consistent with REMARK SSBOND-style
     1:1 bond accounting; ambiguous cases are rare and biologically odd)."""
@@ -83,24 +85,6 @@ def _scan_disulfides(cys_records) -> dict[int, int]:
     return partner_of
 
 
-def _classify_cys(
-    res_seq: int,
-    role: Optional[str],
-    bonded: bool,
-    canonical_keys: set[tuple[str, int]],
-) -> str:
-    """R23 four-state classification. Falls back to raw bonding state
-    when numbering isn't wired (no role, or no canonical Cys positions
-    known for the scheme), so the hit is still classified usefully in
-    the auto-detect-only case (though the resulting "bonded"/"unbonded"
-    values are inert downstream)."""
-    if role is not None and (role, res_seq) in canonical_keys:
-        return "disulfide" if bonded else "disulfide_broken"
-    if role is not None and canonical_keys:
-        return "cys_extra"
-    return "bonded" if bonded else "unbonded"
-
-
 def detect_cysteines(
     parsed,
     sasa_lookup,
@@ -109,46 +93,78 @@ def detect_cysteines(
     light_chain_id: Optional[str] = None,
 ) -> list[CysteineHit]:
     """Walk every Cys residue, compute pairwise bonding state, and (when
-    numbering is wired) classify each Cys against the scheme's canonical
-    disulfide positions. Phantom entries are added for canonical positions
-    that should hold a Cys but don't (spec R23 `disulfide_missing`)."""
+    numbering is wired) classify each canonical disulfide PAIR against the
+    scheme's expected positions. Non-canonical Cys get `cys_extra`; the
+    fallback bonded/unbonded path is used when numbering is unavailable."""
     cys_records = _collect_cys_records(parsed)
     partner_of = _scan_disulfides(cys_records)
 
     canonical_positions: dict[str, tuple[int, int]] = (
         CANONICAL_CYS_POSITIONS.get(numbering_scheme, {}) if numbering_scheme else {}
     )
-    canonical_keys: set[tuple[str, int]] = {
-        (role, pos) for role, positions in canonical_positions.items() for pos in positions
-    }
-    # Tracks which canonical (role, res_seq) slots are actually filled, so
-    # missing-Cys phantom rows below don't duplicate a real hit.
-    filled_canonical: set[tuple[str, int]] = set()
-    for chain_id, r, _ca, _sg in cys_records:
+
+    # Numbering unwired path: emit raw bonded/unbonded per residue, no
+    # canonical classification possible.
+    if not canonical_positions or not (heavy_chain_id or light_chain_id):
+        hits: list[CysteineHit] = []
+        for idx, (chain_id, r, _ca, _sg) in enumerate(cys_records):
+            key = (chain_id, f"{r.res_seq}{r.i_code}".strip())
+            sasa_info = sasa_lookup.get(key, {})
+            bonded = partner_of.get(idx) is not None
+            hits.append(
+                CysteineHit(
+                    cysClass="bonded" if bonded else "unbonded",
+                    sidechainRsasa=sasa_info.get("sideChainRsasa"),
+                )
+            )
+        return hits
+
+    # Numbered path: index Cys by (role, res_seq) so we can look up the two
+    # halves of each canonical pair without re-walking the record list.
+    by_role_pos: dict[tuple[str, int], int] = {}
+    for idx, (chain_id, r, _ca, _sg) in enumerate(cys_records):
         role = role_of_chain(chain_id, heavy_chain_id, light_chain_id)
         if role is not None:
-            filled_canonical.add((role, r.res_seq))
+            by_role_pos.setdefault((role, r.res_seq), idx)
 
+    canonical_indices: set[int] = set()
     hits: list[CysteineHit] = []
-    for idx, (chain_id, r, _ca, _sg) in enumerate(cys_records):
-        key = (chain_id, f"{r.res_seq}{r.i_code}".strip())
-        sasa_info = sasa_lookup.get(key, {})
-        role = role_of_chain(chain_id, heavy_chain_id, light_chain_id)
-        bonded = partner_of.get(idx) is not None
+
+    for role, (p1, p2) in canonical_positions.items():
+        if role == "H" and not heavy_chain_id:
+            continue
+        if role == "L" and not light_chain_id:
+            continue
+        i1 = by_role_pos.get((role, p1))
+        i2 = by_role_pos.get((role, p2))
+        if i1 is None or i2 is None:
+            hits.append(CysteineHit(cysClass="disulfide_missing", sidechainRsasa=None))
+            if i1 is not None:
+                canonical_indices.add(i1)
+            if i2 is not None:
+                canonical_indices.add(i2)
+            continue
+        canonical_indices.add(i1)
+        canonical_indices.add(i2)
+        bonded_as_pair = partner_of.get(i1) == i2
         hits.append(
             CysteineHit(
-                cysClass=_classify_cys(r.res_seq, role, bonded, canonical_keys),
-                sidechainRsasa=sasa_info.get("sideChainRsasa"),
+                cysClass="disulfide" if bonded_as_pair else "disulfide_broken",
+                sidechainRsasa=None,
             )
         )
 
-    # Phantom rows for missing canonical Cys (R23).
-    for role, (p1, p2) in canonical_positions.items():
-        if not (heavy_chain_id if role == "H" else light_chain_id):
+    # Anything not consumed by a canonical pair is a non-canonical Cys.
+    for idx, (chain_id, r, _ca, _sg) in enumerate(cys_records):
+        if idx in canonical_indices:
             continue
-        for pos in (p1, p2):
-            if (role, pos) in filled_canonical:
-                continue
-            hits.append(CysteineHit(cysClass="disulfide_missing", sidechainRsasa=None))
+        key = (chain_id, f"{r.res_seq}{r.i_code}".strip())
+        sasa_info = sasa_lookup.get(key, {})
+        hits.append(
+            CysteineHit(
+                cysClass="cys_extra",
+                sidechainRsasa=sasa_info.get("sideChainRsasa"),
+            )
+        )
 
     return hits
