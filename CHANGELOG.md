@@ -1,8 +1,3 @@
 ## 1.0.0
 
-Initial release. Sequence-based liability detection for therapeutic antibody
-candidates: unpaired cysteines, deamidation hotspots (N-G, N-S), N-linked
-glycosylation sequons (`N-X-[S/T]`), and oxidation-prone residues (M, W).
-
-Detection is sequence-only — surface-accessibility filtering and
-antibody-specific (CDR-aware) analysis are out of scope for this release.
+Initial release. Per-clonotype structural developability analysis (Raybould 2019 TAP for paired Fv, Gordon 2025 TNP for VHH) consuming PDB structures from the 3D Structure Prediction block. See README.md for inputs / outputs / UI.

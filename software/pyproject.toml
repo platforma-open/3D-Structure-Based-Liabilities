@@ -1,0 +1,17 @@
+[project]
+name = "structure-based-liabilities"
+version = "0.1.0"
+description = "Structure-Based Liabilities (TAP/TNP) software: surface-accessibility-gated motifs, cysteine state, surface developability metrics, composite scoring."
+requires-python = ">=3.12"
+
+[dependency-groups]
+dev = [
+    "freesasa>=2.2.1",
+    "polars-lts-cpu>=1.33.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=6.0.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["liabilities-script", "tests"]

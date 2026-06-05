@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milabs.3d-structure-based-liabilities.ui",
+  "name": "@platforma-open/milaboratories.3d-structure-based-liabilities.ui",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -10,8 +10,12 @@
     "check": "ts-builder check --target browser"
   },
   "dependencies": {
-    "@platforma-open/milabs.3d-structure-based-liabilities.model": "workspace:*",
-    "@platforma-sdk/ui-vue": "catalog:"
+    "@milaboratories/graph-maker": "catalog:",
+    "@milaboratories/structure-viewer": "catalog:",
+    "@platforma-open/milaboratories.3d-structure-based-liabilities.model": "workspace:*",
+    "@platforma-sdk/model": "catalog:",
+    "@platforma-sdk/ui-vue": "catalog:",
+    "vue": "catalog:"
   },
   "devDependencies": {
     "@milaboratories/ts-builder": "catalog:",
@@ -20,7 +24,6 @@
   "peerDependencies": {
     "typescript": "*",
     "vite": "*",
-    "vitest": "*",
-    "vue": "*"
+    "vitest": "*"
   }
 }

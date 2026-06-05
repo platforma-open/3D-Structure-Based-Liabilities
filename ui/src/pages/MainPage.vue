@@ -1,322 +1,287 @@
 <script setup lang="ts">
-import type { LiabilitiesReport } from "@platforma-open/milabs.3d-structure-based-liabilities.model";
+import type { PlStructureViewerProps } from "@milaboratories/structure-viewer";
+import { PlStructureViewer } from "@milaboratories/structure-viewer";
+import type { PFrameHandle, PTableKey } from "@platforma-sdk/model";
+import { createPlDataTableStateV2 } from "@platforma-sdk/model";
+import { defaultBlockLabelFor } from "@platforma-open/milaboratories.3d-structure-based-liabilities.model";
 import {
-  computedResult,
+  PlAccordionSection,
   PlAgDataTableV2,
+  PlAlert,
   PlBlockPage,
+  PlBtnGhost,
+  PlDatasetSelector,
   PlDropdown,
-  PlFileInput,
+  PlMaskIcon24,
+  PlNumberField,
+  PlSlideModal,
+  PlTextField,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useApp } from "../app";
 
-import PdbLiabilityMap from "../components/pdb/PdbLiabilityMap.vue";
-
-// Spec R12 — Raybould 2019 canonical cutoff. rSASA below this is "buried".
-const BURIED_CUTOFF = 0.075;
+import { useClonotypeLabels } from "../composables/useClonotypeLabels";
+import { useClusterAssignments } from "../composables/useClusterAssignments";
+import { useRunSummaryAlerts } from "../composables/useRunSummaryAlerts";
+import { pfHandleFrom } from "../composables/ptableCell";
 
 const app = useApp();
-const liabilitiesJson = computedResult(() => app.model.outputs.liabilitiesJson);
 
-const report = computed<LiabilitiesReport | null>(() => {
-  const text = liabilitiesJson.value.value;
-  return text ? (JSON.parse(text) as LiabilitiesReport) : null;
+// `sourceId` is versioned so a shape change on the underlying PColumn
+// invalidates AG-Grid's column-order cache.
+const scoresTableSettings = usePlDataTableSettingsV2({
+  model: () => app.model.outputs.scoresTable,
+  sourceId: () => "scores-v2",
 });
+// v-model writes stay UI-local so AG-Grid state events don't re-fire the
+// model output handler.
+const scoresLocalState = ref(createPlDataTableStateV2());
 
-// sourceId discriminator scopes the AG-Grid stateCache to each table's shape.
-// Bump the version suffix whenever the PColumn axes/columns shape changes so
-// AG-Grid can't reuse a column-order/hidden-cols cache built against the old
-// shape (we lost ~a day to a residueData→motifsData migration where the
-// persisted cache pointed at columns that no longer existed).
-const motifsTableSettings = usePlDataTableSettingsV2({
-  model: () => app.model.outputs.motifsTable,
-  // bumped v1 → v2 when confidence + confidenceGated columns were added (R34-R36).
-  sourceId: () => "motifs-v2",
-});
-const cysTableSettings = usePlDataTableSettingsV2({
-  model: () => app.model.outputs.cysTable,
-  // bumped v1 → v2 when cysClass + chainRole columns were added (R21-R23).
-  sourceId: () => "cysteines-v2",
-});
+const pdbsMap = computed(() => app.model.outputs.clonotypePdbsMap);
+const clonotypeAxisId = computed(() => app.model.outputs.clonotypeAxisId);
 
-const mode = computed(() => report.value?.mode ?? "empty");
-const surfacedMotifCount = computed(() => report.value?.scores?.surfacedMotifCount ?? 0);
-const confidenceGatedMotifCount = computed(
-  () => report.value?.scores?.confidenceGatedMotifCount ?? 0,
+// Pretty clonotype labels resolved through the table's PFrame handle, which
+// already auto-joins upstream's `pl7.app/label` column.
+const clonotypeLabelsPf = computed(
+  () => pfHandleFrom(app.model.outputs.scoresTable) as PFrameHandle | undefined,
 );
-const motifStructuralRiskScore = computed(
-  () => report.value?.scores?.motifStructuralRiskScore ?? 0,
+const { resolveLabel } = useClonotypeLabels(clonotypeLabelsPf, clonotypeAxisId);
+
+const selectedClonotypeKey = ref<string | null>(null);
+const viewer = ref<PlStructureViewerProps>();
+
+const scoresTableOutput = computed(() => app.model.outputs.scoresTable);
+
+const { selectedClusterAssignment } = useClusterAssignments(
+  scoresTableOutput,
+  selectedClonotypeKey,
 );
-const surfaceMetrics = computed(() => {
-  const m = report.value?.surfaceMetrics;
-  if (!m || !("mode" in m)) return null;
-  return m;
-});
-const developabilityScore = computed(
-  () => report.value?.scores?.structuralDevelopabilityScore ?? 0,
-);
-const developabilityRisk = computed(
-  () => report.value?.scores?.structuralDevelopabilityRisk ?? "None",
-);
-const integrityRisk = computed(() => report.value?.scores?.structuralIntegrityRisk ?? "None");
-function fmtLowConf(value: number | null | undefined): string {
-  if (value == null) return "";
-  return ` (${Math.round(value * 100)}% low-conf)`;
+const { runSummary, showGatedAlert } = useRunSummaryAlerts(scoresTableOutput);
+
+// Settings auto-opens on first load when no input is configured.
+const settingsOpen = ref(!app.model.data.dataset?.primary?.column);
+
+// Look up the row's PDB handle and seed the viewer props.
+function openViewerForRow(rowKey?: PTableKey) {
+  const rawKey = rowKey?.at(0);
+  if (rawKey == null) return;
+  const key = String(rawKey);
+  const handle = pdbsMap.value?.find((entry) => String(entry.key.at(0)) === key)?.value?.handle;
+  if (!handle) return;
+  selectedClonotypeKey.value = key;
+  const label = resolveLabel(key) || key;
+  viewer.value = { handle, fileName: `${label}.pdb` };
 }
-const RISK_COLOR: Record<string, string> = {
-  None: "#65a30d",
-  Low: "#84cc16",
-  Medium: "#d97706",
-  High: "#dc2626",
-  Present: "#dc2626",
-};
+
+function handleViewerVisibility(open: boolean) {
+  if (!open) {
+    viewer.value = undefined;
+    selectedClonotypeKey.value = null;
+  }
+}
 
 const numberingSchemeOptions = [
-  { value: "", label: "— unknown (no region weighting) —" },
+  { value: "", label: "unknown (no region weighting)" },
   { value: "imgt", label: "IMGT" },
   { value: "chothia", label: "Chothia" },
   { value: "kabat", label: "Kabat" },
 ];
 
-// Heavy / light chain dropdowns offer the chain IDs from the loaded PDB plus
-// a "none" option (so antigen chains can be left untagged).
-const chainOptions = computed(() => {
-  const opts: { value: string; label: string }[] = [{ value: "", label: "— none —" }];
-  if (!report.value) return opts;
-  for (const c of report.value.chains) {
-    opts.push({ value: c.id, label: `${c.id} (${c.residues.length} residues)` });
-  }
-  return opts;
+const modalTitle = computed(() => {
+  const k = selectedClonotypeKey.value;
+  return k ? `${resolveLabel(k)} · liabilities detail` : "Clonotype detail";
 });
 </script>
 
 <template>
-  <PlBlockPage>
-    <PlFileInput
-      v-model="app.model.data.pdb"
-      label="PDB file"
-      :extensions="['.pdb']"
-      placeholder="Drop a .pdb file"
-      required
-      clearable
+  <PlBlockPage
+    v-model:subtitle="app.model.data.customBlockLabel"
+    :subtitle-placeholder="defaultBlockLabelFor(app.model.data, app.model.outputs.detectedMode)"
+    title="3D Structure-Based Liabilities"
+  >
+    <template #append>
+      <PlBtnGhost @click.stop="() => (settingsOpen = true)">
+        Settings
+        <template #append>
+          <PlMaskIcon24 name="settings" />
+        </template>
+      </PlBtnGhost>
+    </template>
+
+    <PlSlideModal v-model="settingsOpen" close-on-outside-click shadow>
+      <template #title>Settings</template>
+
+      <PlDatasetSelector
+        v-model="app.model.data.dataset"
+        :options="app.model.outputs.datasetOptions"
+        label="3D Structures"
+        clearable
+      />
+
+      <div class="field-grid field-grid--settings">
+        <PlDropdown
+          v-model="app.model.data.numberingScheme"
+          :options="numberingSchemeOptions"
+          label="Numbering scheme"
+        >
+          <template #tooltip>
+            Antibody region numbering used to weight motifs by region (framework vs CDR). Leave on
+            IMGT for structures from the 3D Structure Prediction block. "Unknown" disables region
+            weighting.
+          </template>
+        </PlDropdown>
+        <PlTextField
+          v-model="app.model.data.heavyChainId"
+          label="Heavy chain"
+          placeholder="auto-detect"
+        >
+          <template #tooltip>
+            Which chain in the structure is the heavy chain. Leave empty to detect it automatically;
+            set a single chain letter (e.g. A) only if a structure has no chain annotation and
+            detection fails.
+          </template>
+        </PlTextField>
+        <PlTextField
+          v-model="app.model.data.lightChainId"
+          label="Light chain"
+          placeholder="auto-detect"
+        >
+          <template #tooltip>
+            Which chain in the structure is the light chain. Leave empty to detect it automatically;
+            set a single chain letter only if detection fails.
+          </template>
+        </PlTextField>
+      </div>
+
+      <PlAccordionSection label="Advanced thresholds">
+        <div class="field-grid">
+          <PlNumberField
+            v-model="app.model.data.frConfThresh"
+            label="Framework confidence threshold (Å)"
+            :minValue="1"
+            :maxValue="10"
+            :step="0.5"
+          >
+            <template #tooltip>
+              Predicted-error cutoff above which framework-region motifs are treated as too
+              uncertain to flag. Raise it for experimental crystal structures whose B-factors are
+              temperature factors rather than predicted error.
+            </template>
+          </PlNumberField>
+          <PlNumberField
+            v-model="app.model.data.cdrConfThresh"
+            label="CDR confidence threshold (Å)"
+            :minValue="1"
+            :maxValue="12"
+            :step="0.5"
+          >
+            <template #tooltip>
+              Same as the framework threshold, applied to the more flexible CDR loops, where
+              predicted structures are typically less certain.
+            </template>
+          </PlNumberField>
+        </div>
+      </PlAccordionSection>
+    </PlSlideModal>
+
+    <PlAlert
+      v-if="showGatedAlert && runSummary"
+      class="run-alert"
+      type="warn"
+      label="More than 25% of motifs were confidence-gated"
+      icon
+    >
+      {{ runSummary.gatedClonotypes }} of {{ runSummary.total }} clonotypes ({{
+        Math.round(runSummary.gatedFraction * 100)
+      }}%) have at least one motif gated by the per-residue confidence cutoff. Either the predicted
+      structures are uncertain in these regions or the gating thresholds (FR
+      {{ app.model.data.frConfThresh }} Å / CDR {{ app.model.data.cdrConfThresh }} Å) are too tight
+      for this dataset.
+    </PlAlert>
+
+    <!-- One row per clonotype. The open button on the clonotype-key cell pops
+         the structure-viewer modal for that row. -->
+    <PlAgDataTableV2
+      v-model="scoresLocalState"
+      :settings="scoresTableSettings"
+      :show-cell-button-for-axis-id="clonotypeAxisId"
+      :cell-button-invoke-rows-on-double-click="true"
+      :show-export-button="true"
+      not-ready-text="Run on a 3D structures dataset to see per-clonotype scores"
+      no-rows-text="No scored clonotypes"
+      @cell-button-clicked="openViewerForRow"
+      @row-double-clicked="openViewerForRow"
     />
 
-    <div
-      :style="{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-        gap: '12px',
-        marginTop: '12px',
-        marginBottom: '4px',
-      }"
+    <PlSlideModal
+      :model-value="viewer !== undefined"
+      width="100%"
+      :close-on-outside-click="false"
+      @update:model-value="handleViewerVisibility"
     >
-      <PlDropdown
-        v-model="app.model.data.numberingScheme"
-        :options="numberingSchemeOptions"
-        label="Numbering scheme"
-      />
-      <PlDropdown
-        v-model="app.model.data.heavyChainId"
-        :options="chainOptions"
-        label="Heavy chain"
-      />
-      <PlDropdown
-        v-model="app.model.data.lightChainId"
-        :options="chainOptions"
-        label="Light chain"
-      />
-    </div>
-    <p :style="{ fontSize: '12px', color: '#6b7280', marginTop: '0', marginBottom: '12px' }">
-      Region weighting (R19) on motif scores is applied only when a scheme and at least one of
-      heavy/light is set. Antigen chains (and any chain not mapped to H or L) get
-      <code>region = "-"</code> and the neutral weight.
-    </p>
+      <template #title>{{ modalTitle }}</template>
 
-    <div v-if="report">
-      <table
-        :style="{
-          fontSize: '15px',
-          color: '#374151',
-          background: 'rgba(148, 163, 184, 0.08)',
-          border: '1px solid rgba(148, 163, 184, 0.25)',
-          borderRadius: '4px',
-          padding: '4px',
-          marginBottom: '16px',
-          borderCollapse: 'separate',
-          borderSpacing: '0',
-        }"
-      >
-        <tbody>
-          <tr :title="`Spec R7 — auto-detected from chain count`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              Mode (R7)
-            </td>
-            <td :style="{ padding: '8px 12px' }">{{ mode }}</td>
-          </tr>
-          <tr :title="`Spec R38 — surfacedMotifCount, confidenceGatedMotifCount`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              Surface-exposed motifs
-            </td>
-            <td :style="{ padding: '8px 12px' }">
-              {{ surfacedMotifCount }}
-              <span :style="{ color: '#6b7280' }">
-                ({{ confidenceGatedMotifCount }} confidence-gated)
-              </span>
-            </td>
-          </tr>
-          <tr :title="`Sum of non-gated motif weightedScore (spec R20)`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              motifStructuralRiskScore
-            </td>
-            <td :style="{ padding: '8px 12px' }">{{ motifStructuralRiskScore.toFixed(1) }}</td>
-          </tr>
-          <tr :title="`Spec R41 — motif + flag + Cys contributions`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              structuralDevelopabilityScore
-            </td>
-            <td :style="{ padding: '8px 12px' }">{{ developabilityScore.toFixed(1) }}</td>
-          </tr>
-          <tr :title="`Spec R41a — over fixable items`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              structuralDevelopabilityRisk
-            </td>
-            <td :style="{ padding: '8px 12px' }">
-              <b :style="{ color: RISK_COLOR[developabilityRisk] }">{{ developabilityRisk }}</b>
-            </td>
-          </tr>
-          <tr :title="`Spec R41a — Present if any hard-to-fix / structural item`">
-            <td :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }">
-              structuralIntegrityRisk
-            </td>
-            <td :style="{ padding: '8px 12px' }">
-              <b :style="{ color: RISK_COLOR[integrityRisk] }">{{ integrityRisk }}</b>
-            </td>
-          </tr>
-          <template v-if="surfaceMetrics">
-            <tr :title="`Spec R24 — sum of CDR loop lengths`">
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                Total CDR length
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.totalCdrLength }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.totalCdrLengthLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-            <tr :title="`Spec R25 — Patches of Surface Hydrophobicity`">
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                PSH
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.psh.toFixed(2) }}
-                <span :style="{ color: '#6b7280' }"
-                  >({{ surfaceMetrics.pshPatchCount }} pairs){{
-                    fmtLowConf(surfaceMetrics.pshLowConfidenceResidueFraction)
-                  }}</span
-                >
-              </td>
-            </tr>
-            <tr :title="`Spec R26 — Patches of Positive Charge`">
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                PPC
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.ppc.toFixed(2) }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.ppcLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-            <tr :title="`Spec R26 — Patches of Negative Charge`">
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                PNC
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.pnc.toFixed(2) }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.pncLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-            <tr
-              v-if="surfaceMetrics.mode === 'TAP' && surfaceMetrics.sfvcsp != null"
-              :title="`Spec R28 — Symmetry of Fv Charges Product`"
-            >
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                SFvCSP
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.sfvcsp.toFixed(2) }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.sfvcspLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-            <tr
-              v-if="surfaceMetrics.mode === 'TNP' && surfaceMetrics.cdrh3Compactness != null"
-              :title="`Spec R30 — CDRH3 compactness (length / ρ, IMGT anchors)`"
-            >
-              <td
-                :style="{ fontWeight: 'bold', padding: '8px 32px 8px 12px', whiteSpace: 'nowrap' }"
-              >
-                CDRH3 compactness
-              </td>
-              <td :style="{ padding: '8px 12px' }">
-                {{ surfaceMetrics.cdrh3Compactness.toFixed(3) }}
-                <span :style="{ color: '#6b7280' }">{{
-                  fmtLowConf(surfaceMetrics.cdrh3CompactnessLowConfidenceResidueFraction)
-                }}</span>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-
-      <h3 :style="{ margin: '12px 0 6px' }">Surface-exposed liability motifs</h3>
-      <p :style="{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }">
-        One row per surfaced motif hit. Rows are filterable / sortable; axis order is Chain,
-        Position, Insertion code, Motif. Buried matches (rSASA &lt;
-        {{ BURIED_CUTOFF }}) are dropped upstream and never appear here.
-      </p>
-      <div :style="{ height: '360px', marginBottom: '16px' }">
-        <PlAgDataTableV2
-          v-model="app.model.data.tableState"
-          :settings="motifsTableSettings"
-          not-ready-text="Run on a PDB to see surfaced motifs"
-          no-rows-text="No surface-exposed motifs detected"
-        />
+      <div v-if="viewer && selectedClusterAssignment" class="cluster-badge">
+        <span class="cluster-badge__name"> Cluster {{ selectedClusterAssignment.clusterId }} </span>
+        <span v-if="selectedClusterAssignment.isCentroid" class="cluster-badge__pill"
+          >CENTROID</span
+        >
+        <span
+          v-else-if="selectedClusterAssignment.tmScoreToCentroid !== null"
+          class="cluster-badge__tm"
+        >
+          TM-score to centroid {{ selectedClusterAssignment.tmScoreToCentroid.toFixed(3) }}
+        </span>
       </div>
 
-      <h3 :style="{ margin: '12px 0 6px' }">Cysteine state</h3>
-      <p :style="{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }">
-        Every Cys residue with its disulfide-bond partner (SG–SG ≤ 3.0 Å and Cα–Cα ≤ 7.0 Å). When a
-        numbering scheme + chain role are set, each Cys is classified per spec R21–R23:
-        <code>disulfide</code>, <code>disulfide_broken</code>,
-        <code>disulfide_missing</code> (phantom row at the expected position), or
-        <code>cys_extra</code>.
-      </p>
-      <div :style="{ height: '280px', marginBottom: '16px' }">
-        <PlAgDataTableV2
-          v-model="app.model.data.cysTableState"
-          :settings="cysTableSettings"
-          not-ready-text="Run on a PDB to see cysteine state"
-          no-rows-text="No cysteines found"
-        />
+      <div v-if="viewer" class="viewer-frame">
+        <PlStructureViewer v-bind="viewer" initial-color-scheme="uncertainty" />
       </div>
-
-      <PdbLiabilityMap :chains="report.chains" :motifs="report.motifs" />
-    </div>
+    </PlSlideModal>
   </PlBlockPage>
 </template>
+
+<style scoped>
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.field-grid--settings {
+  margin-top: 12px;
+}
+
+.run-alert {
+  margin-top: 12px;
+}
+
+.cluster-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--border-color-default, rgba(99, 102, 241, 0.25));
+  border-radius: 6px;
+}
+.cluster-badge__name {
+  font-weight: 600;
+}
+.cluster-badge__pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color-default, rgba(99, 102, 241, 0.25));
+}
+
+.viewer-frame {
+  height: 720px;
+  display: flex;
+  padding: 12px;
+  border: 1px solid var(--border-color-default, #e5e7eb);
+  border-radius: 6px;
+}
+</style>

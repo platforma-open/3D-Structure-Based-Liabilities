@@ -1,8 +1,9 @@
 {
-  "name": "@platforma-open/milabs.3d-structure-based-liabilities.software",
+  "name": "@platforma-open/milaboratories.3d-structure-based-liabilities.software",
   "version": "0.1.0",
   "scripts": {
     "build": "pl-pkg build",
+    "test": "python -m pytest -q",
     "prepublishOnly": "pl-pkg prepublish",
     "do-pack": "shx rm -f *.tgz && pl-pkg build && pnpm pack && shx mv platforma-open*.tgz package.tgz"
   },
@@ -11,24 +12,13 @@
   ],
   "dependencies": {},
   "devDependencies": {
-    "@platforma-sdk/package-builder": "catalog:",
     "@platforma-open/milaboratories.runenv-python-3": "catalog:",
+    "@platforma-sdk/package-builder": "catalog:",
     "shx": "catalog:"
   },
   "block-software": {
     "entrypoints": {
       "liabilities": {
-        "docker": {
-          "artifact": {
-            "type": "docker",
-            "context": "./src",
-            "dockerfile": "Dockerfile"
-          },
-          "cmd": [
-            "python",
-            "/app/main.py"
-          ]
-        },
         "binary": {
           "artifact": {
             "type": "python",
@@ -38,11 +28,22 @@
               "toolset": "pip",
               "requirements": "requirements.txt"
             },
-            "root": "./src"
+            "root": "./liabilities-script"
           },
           "cmd": [
             "python",
             "{pkg}/main.py"
+          ]
+        },
+        "docker": {
+          "artifact": {
+            "type": "docker",
+            "context": "./liabilities-script",
+            "dockerfile": "Dockerfile"
+          },
+          "cmd": [
+            "python",
+            "/app/main.py"
           ]
         }
       }

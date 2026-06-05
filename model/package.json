@@ -1,5 +1,5 @@
 {
-  "name": "@platforma-open/milabs.3d-structure-based-liabilities.model",
+  "name": "@platforma-open/milaboratories.3d-structure-based-liabilities.model",
   "version": "1.0.0",
   "description": "Block model",
   "type": "module",
@@ -20,6 +20,8 @@
     "check": "ts-builder check --target block-model"
   },
   "dependencies": {
+    "@milaboratories/graph-maker": "catalog:",
+    "@milaboratories/helpers": "catalog:",
     "@platforma-sdk/model": "catalog:"
   },
   "devDependencies": {

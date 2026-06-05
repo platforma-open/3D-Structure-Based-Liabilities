@@ -1,0 +1,63 @@
+{
+  "_comment": "Per-metric threshold bands. Fv mode: Raybould 2019 Table 2 (cohortSize 242). VHH mode: Gordon 2025 TNP `assign_flag()` function in oxpig/TNP repo (cohortSize 36). cohortSize preserved so downstream users can weigh statistical confidence.",
+  "fv": {
+    "cohortSize": 242,
+    "citation": "Raybould et al., PNAS 2019, vol. 116 no. 10, 4025-4030 (Table 2)",
+    "thresholds": {
+      "totalCdrLength": {
+        "direction": "high_bad",
+        "amber": [54, 60]
+      },
+      "psh": {
+        "bidirectional": true,
+        "green": [100.71, 156.20],
+        "amber_lo": [83.84, 100.71],
+        "amber_hi": [156.20, 173.85]
+      },
+      "ppc": {
+        "direction": "high_bad",
+        "amber": [1.25, 3.16]
+      },
+      "pnc": {
+        "direction": "high_bad",
+        "amber": [1.84, 3.50]
+      },
+      "sfvcsp": {
+        "direction": "low_bad",
+        "amber": [-20.40, -6.30]
+      }
+    }
+  },
+  "vhh": {
+    "cohortSize": 36,
+    "citation": "Gordon et al., bioRxiv 2025, doi:10.1101/2025.08.11.669635 (TNP); thresholds verbatim from oxpig/TNP `bin/TNP` assign_flag()",
+    "thresholds": {
+      "totalCdrLength": {
+        "bidirectional": true,
+        "green": [25, 36],
+        "amber_lo": [20, 24],
+        "amber_hi": [37, 39]
+      },
+      "psh": {
+        "bidirectional": true,
+        "green": [79.60, 126.82],
+        "amber_lo": [73.40, 79.59],
+        "amber_hi": [126.83, 155.47]
+      },
+      "ppc": {
+        "direction": "high_bad",
+        "amber": [0.39, 1.18]
+      },
+      "pnc": {
+        "direction": "high_bad",
+        "amber": [1.47, 1.88]
+      },
+      "cdrh3Compactness": {
+        "bidirectional": true,
+        "green": [0.82, 1.56],
+        "amber_lo": [0.56, 0.81],
+        "amber_hi": [1.57, 1.61]
+      }
+    }
+  }
+}
