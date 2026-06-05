@@ -72,6 +72,18 @@ const hasLegend = computed(() => {
   </PlBlockPage>
 </template>
 
+<style>
+/* Graph-maker's `.chart_titleLineSlot` defaults to `margin-left: auto`,
+   which pins the slot to the right edge of `.chart_header`. Flip it so
+   our threshold legend sits next to the chart title on the left. Global
+   (unscoped) is intentional: the rule has to land on the lib's slot
+   wrapper, which scoped styles can't reach from inside the slot. */
+.chart_titleLineSlot {
+  margin-left: 12px;
+  margin-right: auto;
+}
+</style>
+
 <style scoped>
 .threshold-legend {
   display: flex;
