@@ -51,14 +51,20 @@ const hasLegend = computed(() => {
     >
       <template #titleLineSlot>
         <div v-if="hasLegend && thresholds" class="threshold-legend" aria-label="Threshold bands">
-          <span v-if="thresholds.none" class="threshold-pill threshold-pill--none">
-            None: {{ thresholds.none }}
+          <span v-if="thresholds.none" class="threshold-item">
+            <span class="threshold-dot threshold-dot--none" />
+            <span class="threshold-label">None</span>
+            <span class="threshold-range">{{ thresholds.none }}</span>
           </span>
-          <span v-if="thresholds.medium" class="threshold-pill threshold-pill--medium">
-            Medium: {{ thresholds.medium }}
+          <span v-if="thresholds.medium" class="threshold-item">
+            <span class="threshold-dot threshold-dot--medium" />
+            <span class="threshold-label">Medium</span>
+            <span class="threshold-range">{{ thresholds.medium }}</span>
           </span>
-          <span v-if="thresholds.high" class="threshold-pill threshold-pill--high">
-            High: {{ thresholds.high }}
+          <span v-if="thresholds.high" class="threshold-item">
+            <span class="threshold-dot threshold-dot--high" />
+            <span class="threshold-label">High</span>
+            <span class="threshold-range">{{ thresholds.high }}</span>
           </span>
         </div>
       </template>
@@ -70,32 +76,44 @@ const hasLegend = computed(() => {
 .threshold-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  align-items: center;
+  gap: 16px;
   font-size: 12px;
+  color: var(--txt-02, #4a5560);
 }
 
-.threshold-pill {
-  padding: 2px 10px;
-  border-radius: 12px;
+.threshold-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.threshold-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 8px;
+}
+
+.threshold-dot--none {
+  background: #16a34a;
+}
+
+.threshold-dot--medium {
+  background: #d97706;
+}
+
+.threshold-dot--high {
+  background: #dc2626;
+}
+
+.threshold-label {
   font-weight: 500;
-  border: 1px solid transparent;
+  color: var(--txt-01, #0f172a);
 }
 
-.threshold-pill--none {
-  background: #ecfdf5;
-  border-color: #a7f3d0;
-  color: #065f46;
-}
-
-.threshold-pill--medium {
-  background: #fffbeb;
-  border-color: #fcd34d;
-  color: #92400e;
-}
-
-.threshold-pill--high {
-  background: #fef2f2;
-  border-color: #fca5a5;
-  color: #991b1b;
+.threshold-range {
+  color: var(--txt-03, #6b7280);
+  font-variant-numeric: tabular-nums;
 }
 </style>
