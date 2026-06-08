@@ -123,7 +123,11 @@ wf.body(func(args) {
 		}
 		return c.arg(flag).arg(value)
 	}
-	cmd = withOptArg(cmd, "--numbering-scheme", args.numberingScheme)
+	// Numbering scheme is hardcoded to IMGT: every supported upstream
+	// (3D Structure Prediction block, ImmuneBuilder predictions) emits
+	// IMGT-numbered structures, and our compactness anchors + canonical
+	// disulfide positions assume IMGT.
+	cmd = cmd.arg("--numbering-scheme").arg("imgt")
 	cmd = withOptArg(cmd, "--chain-h", args.heavyChainId)
 	cmd = withOptArg(cmd, "--chain-l", args.lightChainId)
 

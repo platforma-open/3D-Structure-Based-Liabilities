@@ -26,9 +26,6 @@ export type { NumberingScheme, DetectedMode, BlockData, BlockArgs } from "./type
 
 const dataModel = new DataModelBuilder().from<BlockData>("v1").init(() => ({
   dataset: undefined,
-  // Upstream 3D Structure Prediction always emits IMGT-numbered PDBs, so
-  // default to imgt and save the first-run user a dropdown click.
-  numberingScheme: "imgt",
   heavyChainId: "",
   lightChainId: "",
   frConfThresh: 4.0,
@@ -108,7 +105,6 @@ export const platforma = BlockModelV3.create(dataModel)
     }
     return {
       primaryRef: data.dataset.primary,
-      numberingScheme: data.numberingScheme,
       heavyChainId: data.heavyChainId,
       lightChainId: data.lightChainId,
       frConfThresh: data.frConfThresh,

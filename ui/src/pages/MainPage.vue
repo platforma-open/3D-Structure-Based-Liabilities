@@ -11,7 +11,6 @@ import {
   PlBlockPage,
   PlBtnGhost,
   PlDatasetSelector,
-  PlDropdown,
   PlMaskIcon24,
   PlNumberField,
   PlSlideModal,
@@ -81,13 +80,6 @@ function handleViewerVisibility(open: boolean) {
   }
 }
 
-const numberingSchemeOptions = [
-  { value: "", label: "unknown (no region weighting)" },
-  { value: "imgt", label: "IMGT" },
-  { value: "chothia", label: "Chothia" },
-  { value: "kabat", label: "Kabat" },
-];
-
 const modalTitle = computed(() => {
   const k = selectedClonotypeKey.value;
   return k ? `${resolveLabel(k)} · liabilities detail` : "Clonotype detail";
@@ -120,17 +112,6 @@ const modalTitle = computed(() => {
       />
 
       <div class="field-grid field-grid--settings">
-        <PlDropdown
-          v-model="app.model.data.numberingScheme"
-          :options="numberingSchemeOptions"
-          label="Numbering scheme"
-        >
-          <template #tooltip>
-            Antibody region numbering used to weight motifs by region (framework vs CDR). Leave on
-            IMGT for structures from the 3D Structure Prediction block. "Unknown" disables region
-            weighting.
-          </template>
-        </PlDropdown>
         <PlTextField
           v-model="app.model.data.heavyChainId"
           label="Heavy chain"
