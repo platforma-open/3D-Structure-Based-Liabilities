@@ -161,7 +161,7 @@ scoresColumnSpecs := {
 		name: "pl7.app/liabilities/surfacedMotifs",
 		annotations: {
 			"pl7.app/label": "Surfaced motifs",
-			"pl7.app/description": "Per-chain region summary of surface-exposed sequence-liability motifs (deamidation, isomerization, etc.). Confidence-gated hits are excluded.",
+			"pl7.app/description": "Per-chain CDR summary of surface-exposed sequence-liability motifs (deamidation, isomerization, oxidation, etc.). Framework hits and confidence-gated hits are excluded; motifs are deduplicated within each CDR.",
 			"pl7.app/isSummary": "true",
 			"pl7.app/table/visibility": "default",
 			"pl7.app/table/orderPriority": "1000"

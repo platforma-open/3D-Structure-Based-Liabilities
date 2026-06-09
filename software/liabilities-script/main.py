@@ -122,34 +122,55 @@ def chown_to_host(path: Path) -> None:
 _FLAG_SENTINEL = "-"
 
 # Region ordering used to sort the surfacedMotifs summary string within
-# each chain, so the output reads N-to-C through the antibody.
-_REGION_ORDER = {"FR1": 1, "CDR1": 2, "FR2": 3, "CDR2": 4, "FR3": 5, "CDR3": 6, "FR4": 7}
+# each chain, so the output reads N-to-C through the antibody. Only CDRs
+# are surfaced; framework hits are dropped from the summary (the score
+# down-weights FR motifs heavily, so they're noise in a one-line cell).
+_SUMMARY_REGIONS = {"CDR1": 1, "CDR2": 2, "CDR3": 3}
+
+
+def _motif_base_name(motif_type: str) -> str:
+    """Strip the regex pattern in parens at the end of a motif name, e.g.
+    "Deamidation (N[GS])" -> "Deamidation", "Integrin binding" -> "Integrin binding".
+    Keeps the summary compact at the cost of collapsing motif variants that
+    target the same chemistry but different sequence contexts."""
+    paren = motif_type.rfind(" (")
+    return motif_type[:paren] if paren > 0 and motif_type.endswith(")") else motif_type
 
 
 def _build_motif_summary(motif_hits, mode, heavy_chain_id, light_chain_id) -> str:
     """Mirror antibody-sequence-liabilities' summary format. Per-row text
-    listing the actual surfaced motifs grouped by chain role and region, e.g.
-        Heavy chain: CDR1: Deamidation (N[GS]), CDR3: Tryptophan Oxidation (W) | Light chain: CDR2: Methionine Oxidation (M)
-    For VHH (single chain) the chain prefix is dropped. Confidence-gated
-    motifs are excluded; they're noise, already counted separately in
+    listing the actual surfaced motifs grouped by chain role and CDR region:
+        Heavy chain: CDR1: Isomerization; CDR3: Tryptophan Oxidation | Light chain: CDR2: Methionine Oxidation
+    Format choices:
+      * CDR only (FR1-FR4 dropped to keep the cell scannable)
+      * Motif base name only (regex pattern stripped: 'Deamidation' instead
+        of 'Deamidation (N[GS])')
+      * Per-region dedupe (each base name appears at most once per region)
+      * "; " separates regions within a chain; ", " separates motifs within
+        a region; " | " separates chains.
+    VHH (single chain) drops the chain prefix. Confidence-gated motifs are
+    excluded; they're already counted separately in
     confidenceGatedMotifCount. Returns "None" when there's nothing to list."""
-    heavy_by_region: dict[str, list[str]] = {}
-    light_by_region: dict[str, list[str]] = {}
-    other_by_region: dict[str, list[str]] = {}
+    heavy_by_region: dict[str, dict[str, None]] = {}
+    light_by_region: dict[str, dict[str, None]] = {}
+    other_by_region: dict[str, dict[str, None]] = {}
     for h in motif_hits:
         if h.confidenceGated == "yes":
             continue
-        region = h.region or "FR1"
+        region = h.region
+        if region not in _SUMMARY_REGIONS:
+            continue
         target = (
             heavy_by_region if heavy_chain_id and h.chainId == heavy_chain_id
             else light_by_region if light_chain_id and h.chainId == light_chain_id
             else other_by_region
         )
-        target.setdefault(region, []).append(h.type)
+        # Insertion-ordered dict-as-set: stable order, automatic dedupe.
+        target.setdefault(region, {})[_motif_base_name(h.type)] = None
 
-    def _format_chain(region_map: dict[str, list[str]]) -> str:
-        sorted_regions = sorted(region_map.items(), key=lambda kv: _REGION_ORDER.get(kv[0], 99))
-        return ", ".join(f"{region}: {', '.join(motifs)}" for region, motifs in sorted_regions)
+    def _format_chain(region_map: dict[str, dict[str, None]]) -> str:
+        sorted_regions = sorted(region_map.items(), key=lambda kv: _SUMMARY_REGIONS[kv[0]])
+        return "; ".join(f"{region}: {', '.join(motifs)}" for region, motifs in sorted_regions)
 
     parts: list[str] = []
     if mode == "TAP":
@@ -161,10 +182,10 @@ def _build_motif_summary(motif_hits, mode, heavy_chain_id, light_chain_id) -> st
             parts.append(("Other: " if parts else "") + _format_chain(other_by_region))
     else:
         # VHH (TNP) or unknown mode: skip the chain prefix.
-        combined: dict[str, list[str]] = {}
+        combined: dict[str, dict[str, None]] = {}
         for src in (heavy_by_region, light_by_region, other_by_region):
             for region, motifs in src.items():
-                combined.setdefault(region, []).extend(motifs)
+                combined.setdefault(region, {}).update(motifs)
         if combined:
             parts.append(_format_chain(combined))
 
