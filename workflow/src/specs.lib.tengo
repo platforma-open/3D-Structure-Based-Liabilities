@@ -117,7 +117,7 @@ countLongSpec := func(name, label, description, orderPriority, visibility) {
 // ──────────────── Scores PFrame ────────────────
 // Default visibility + orderPriority:
 //   Default visible: mode, structuralDevelopabilityRisk, structuralIntegrityRisk,
-//     structuralDevelopabilityScore, surfacedMotifCount, exposedExtraCysCount,
+//     structuralDevelopabilityScore, surfacedMotifs, exposedExtraCysCount,
 //     brokenCanonicalDisulfideCount, PSH/PPC/PNC flags, mode-specific flag.
 //   Hidden behind "show all": raw metric values, confidenceGatedMotifCount,
 //     pshPatchCount, motifStructuralRiskScore, totalCdrLength, missing/extra
@@ -156,10 +156,17 @@ scoresColumnSpecs := {
 		"Missing canonical cysteines",
 		"Canonical disulfide positions without a Cys residue.",
 		"710", "optional"),
-	surfacedMotifCount: countLongSpec(
-		"pl7.app/liabilities/surfacedMotifCount", "Surfaced motifs",
-		"Sequence-liability motifs (deamidation, isomerization, etc.) on the surface.",
-		"1000", "default"),
+	surfacedMotifs: {
+		valueType: "String",
+		name: "pl7.app/liabilities/surfacedMotifs",
+		annotations: {
+			"pl7.app/label": "Surfaced motifs",
+			"pl7.app/description": "Per-chain region summary of surface-exposed sequence-liability motifs (deamidation, isomerization, etc.). Confidence-gated hits are excluded.",
+			"pl7.app/isSummary": "true",
+			"pl7.app/table/visibility": "default",
+			"pl7.app/table/orderPriority": "1000"
+		}
+	},
 	confidenceGatedMotifCount: countLongSpec(
 		"pl7.app/liabilities/confidenceGatedMotifCount",
 		"Confidence-gated motifs",
@@ -314,7 +321,7 @@ scoresColumnIds := [
 	"mode",
 	"extraCysCount", "exposedExtraCysCount",
 	"brokenCanonicalDisulfideCount", "missingCanonicalCysCount",
-	"surfacedMotifCount", "confidenceGatedMotifCount",
+	"surfacedMotifs", "confidenceGatedMotifCount",
 	"motifStructuralRiskScore", "structuralDevelopabilityScore",
 	"structuralDevelopabilityRisk", "structuralIntegrityRisk",
 	"totalCdrLength", "psh", "pshPatchCount", "ppc", "pnc",
