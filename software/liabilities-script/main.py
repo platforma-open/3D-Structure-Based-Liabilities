@@ -137,7 +137,12 @@ def _motif_base_name(motif_type: str) -> str:
     return motif_type[:paren] if paren > 0 and motif_type.endswith(")") else motif_type
 
 
-def _build_motif_summary(motif_hits, mode, heavy_chain_id, light_chain_id) -> str:
+def _build_motif_summary(
+    motif_hits: list,
+    mode: str | None,
+    heavy_chain_id: str | None,
+    light_chain_id: str | None,
+) -> str:
     """Mirror antibody-sequence-liabilities' summary format. Per-row text
     listing the actual surfaced motifs grouped by chain role and CDR region:
         Heavy chain: CDR1: Isomerization; CDR3: Tryptophan Oxidation | Light chain: CDR2: Methionine Oxidation
@@ -170,7 +175,7 @@ def _build_motif_summary(motif_hits, mode, heavy_chain_id, light_chain_id) -> st
 
     def _format_chain(region_map: dict[str, dict[str, None]]) -> str:
         sorted_regions = sorted(region_map.items(), key=lambda kv: _SUMMARY_REGIONS[kv[0]])
-        return "; ".join(f"{region}: {', '.join(motifs)}" for region, motifs in sorted_regions)
+        return "; ".join(f"{region}: {', '.join(motifs.keys())}" for region, motifs in sorted_regions)
 
     parts: list[str] = []
     if mode == "TAP":
@@ -179,7 +184,10 @@ def _build_motif_summary(motif_hits, mode, heavy_chain_id, light_chain_id) -> st
         if light_by_region:
             parts.append("Light chain: " + _format_chain(light_by_region))
         if other_by_region:
-            parts.append(("Other: " if parts else "") + _format_chain(other_by_region))
+            # Always emit the "Other: " prefix in TAP mode so the cell stays
+            # visually distinguishable from VHH (TNP, no chain prefix) when
+            # both chain IDs are unresolved and every hit falls into other.
+            parts.append("Other: " + _format_chain(other_by_region))
     else:
         # VHH (TNP) or unknown mode: skip the chain prefix.
         combined: dict[str, dict[str, None]] = {}
