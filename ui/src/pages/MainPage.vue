@@ -265,4 +265,23 @@ const modalTitle = computed(() => {
   border: 1px solid var(--border-color-default, #e5e7eb);
   border-radius: 6px;
 }
+
+/* Surfaced motifs is a long summary string; allow it to wrap by giving
+   the table rows breathing room + letting cell content soft-wrap. PlAgDataTableV2
+   doesn't expose row-height or per-column wrapText, so we drive both with
+   AG Grid's own CSS variables / cell classes via :deep(). */
+:deep(.ag-row) {
+  height: 64px !important;
+}
+:deep(.ag-cell) {
+  display: flex;
+  align-items: center;
+  line-height: 1.35;
+}
+:deep(.ag-cell-value),
+:deep(.ag-cell-wrapper) {
+  white-space: normal;
+  word-break: break-word;
+  overflow: hidden;
+}
 </style>
