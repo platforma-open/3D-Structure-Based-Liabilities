@@ -121,6 +121,84 @@ def chown_to_host(path: Path) -> None:
 
 _FLAG_SENTINEL = "-"
 
+# Region ordering used to sort the surfacedMotifs summary string within
+# each chain, so the output reads N-to-C through the antibody. Only CDRs
+# are surfaced; framework hits are dropped from the summary (the score
+# down-weights FR motifs heavily, so they're noise in a one-line cell).
+_SUMMARY_REGIONS = {"CDR1": 1, "CDR2": 2, "CDR3": 3}
+
+
+def _motif_base_name(motif_type: str) -> str:
+    """Strip the regex pattern in parens at the end of a motif name, e.g.
+    "Deamidation (N[GS])" -> "Deamidation", "Integrin binding" -> "Integrin binding".
+    Keeps the summary compact at the cost of collapsing motif variants that
+    target the same chemistry but different sequence contexts."""
+    paren = motif_type.rfind(" (")
+    return motif_type[:paren] if paren > 0 and motif_type.endswith(")") else motif_type
+
+
+def _build_motif_summary(
+    motif_hits: list,
+    mode: str | None,
+    heavy_chain_id: str | None,
+    light_chain_id: str | None,
+) -> str:
+    """Mirror antibody-sequence-liabilities' summary format. Per-row text
+    listing the actual surfaced motifs grouped by chain role and CDR region:
+        Heavy chain: CDR1: Isomerization; CDR3: Tryptophan Oxidation | Light chain: CDR2: Methionine Oxidation
+    Format choices:
+      * CDR only (FR1-FR4 dropped to keep the cell scannable)
+      * Motif base name only (regex pattern stripped: 'Deamidation' instead
+        of 'Deamidation (N[GS])')
+      * Per-region dedupe (each base name appears at most once per region)
+      * "; " separates regions within a chain; ", " separates motifs within
+        a region; " | " separates chains.
+    VHH (single chain) drops the chain prefix. Confidence-gated motifs are
+    excluded; they're already counted separately in
+    confidenceGatedMotifCount. Returns "None" when there's nothing to list."""
+    heavy_by_region: dict[str, dict[str, None]] = {}
+    light_by_region: dict[str, dict[str, None]] = {}
+    other_by_region: dict[str, dict[str, None]] = {}
+    for h in motif_hits:
+        if h.confidenceGated == "yes":
+            continue
+        region = h.region
+        if region not in _SUMMARY_REGIONS:
+            continue
+        target = (
+            heavy_by_region if heavy_chain_id and h.chainId == heavy_chain_id
+            else light_by_region if light_chain_id and h.chainId == light_chain_id
+            else other_by_region
+        )
+        # Insertion-ordered dict-as-set: stable order, automatic dedupe.
+        target.setdefault(region, {})[_motif_base_name(h.type)] = None
+
+    def _format_chain(region_map: dict[str, dict[str, None]]) -> str:
+        sorted_regions = sorted(region_map.items(), key=lambda kv: _SUMMARY_REGIONS[kv[0]])
+        return "; ".join(f"{region}: {', '.join(motifs.keys())}" for region, motifs in sorted_regions)
+
+    parts: list[str] = []
+    if mode == "TAP":
+        if heavy_by_region:
+            parts.append("Heavy chain: " + _format_chain(heavy_by_region))
+        if light_by_region:
+            parts.append("Light chain: " + _format_chain(light_by_region))
+        if other_by_region:
+            # Always emit the "Other: " prefix in TAP mode so the cell stays
+            # visually distinguishable from VHH (TNP, no chain prefix) when
+            # both chain IDs are unresolved and every hit falls into other.
+            parts.append("Other: " + _format_chain(other_by_region))
+    else:
+        # VHH (TNP) or unknown mode: skip the chain prefix.
+        combined: dict[str, dict[str, None]] = {}
+        for src in (heavy_by_region, light_by_region, other_by_region):
+            for region, motifs in src.items():
+                combined.setdefault(region, {}).update(motifs)
+        if combined:
+            parts.append(_format_chain(combined))
+
+    return " | ".join(parts) if parts else "None"
+
 # Per-clonotype scalar columns. `clonotypeKey` is first
 # (matches the documented TSV header); the workflow's
 # `xsv.importFile` maps it to the upstream PDB column's scClonotypeKey
@@ -134,7 +212,7 @@ _TSV_COLUMNS = [
     "structuralIntegrityRisk",
     "structuralDevelopabilityScore",
     "motifStructuralRiskScore",
-    "surfacedMotifCount",
+    "surfacedMotifs",
     "confidenceGatedMotifCount",
     "extraCysCount",
     "exposedExtraCysCount",
@@ -297,7 +375,7 @@ def analyze_pdb(
         "structuralIntegrityRisk": developability["structuralIntegrityRisk"],
         "structuralDevelopabilityScore": developability["structuralDevelopabilityScore"],
         "motifStructuralRiskScore": motif_structural_risk_score,
-        "surfacedMotifCount": len(motif_hits),
+        "surfacedMotifs": _build_motif_summary(motif_hits, mode, heavy_chain_id, light_chain_id),
         "confidenceGatedMotifCount": sum(1 for h in motif_hits if h.confidenceGated == "yes"),
         "extraCysCount": extra_cys,
         "exposedExtraCysCount": exposed_extra_cys,
