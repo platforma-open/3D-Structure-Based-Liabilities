@@ -27,7 +27,7 @@
       "logo": "file:../logos/block-logo.png",
       "url": "https://github.com/platforma-open/3D-Structure-Based-Liabilities",
       "support": "mailto:support@milaboratories.com",
-      "description": "Identifying potential liabilities in therapeutic antibody candidates using 3D structure analysis. Takes a protein structure in PDB format through preprocessing and liability detection to flag developability risks.",
+      "description": "Per-clonotype structural developability analysis for antibody candidates.",
       "longDescription": "file:../docs/description.md",
       "changelog": "file:../CHANGELOG.md",
       "tags": [

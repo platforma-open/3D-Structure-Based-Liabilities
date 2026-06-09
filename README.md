@@ -1,22 +1,46 @@
 # 3D Structure-Based Liabilities
 
-Per-clonotype structural developability analysis for therapeutic antibody candidates. Consumes PDB structures from the [3D Structure Prediction block](https://github.com/platforma-open/3d-structure-prediction) and reproduces [Raybould 2019 TAP](https://doi.org/10.1073/pnas.1810576116) (paired Fv: surface hydrophobicity / positive-charge patches / negative-charge patches / Fv charge symmetry) and [Gordon 2025 TNP](https://github.com/oxpig/TNP) (VHH: same metrics with type-restricted charge patches plus CDRH3 compactness), with **region-aware per-residue confidence gating** using ImmuneBuilder B-factor as predicted error.
+Per-clonotype structural developability analysis for antibody candidates.
+Consumes per-clonotype PDB files from the [3D Structure
+Prediction](https://github.com/platforma-open/3d-structure-prediction) block
+upstream and emits per-clonotype liability calls, surface developability
+metrics, and a composite developability cost that downstream blocks (Lead
+Selection) can rank candidates on.
 
-Sequence-only liability scanners (see our sister [antibody-sequence-liabilities](https://github.com/platforma-open/antibody-sequence-liabilities) block) flag every regex match without knowing whether the chemically reactive atom is solvent-exposed. This block adds 3D context: filters motif hits by rSASA, weights each hit by region (CDR3 > CDR1/2 > FR), gates low-confidence regions, and adds structural-only signals (surface charge / hydrophobicity patches, free-Cys state, CDR3 compactness).
+Sequence-only liability scanners (see our sister [Antibody Sequence
+Liabilities](https://github.com/platforma-open/antibody-sequence-liabilities)
+block) flag every regex match without knowing whether the chemically reactive
+atom is solvent-exposed. This block adds 3D context: filters motif hits by
+relative solvent-accessible surface area (rSASA), weights each hit by region
+(CDR3 > CDR1/2 > FR), gates low-confidence residues using the per-residue
+predicted error emitted by ImmuneBuilder, and adds structural-only signals
+(surface hydrophobicity / charge patches, free-Cys state, CDR-H3 compactness).
 
-## Inputs
+Surface metrics follow [Raybould 2019
+TAP](https://doi.org/10.1073/pnas.1810576116) verbatim for paired Fv (surface
+hydrophobicity, positive-charge patches, negative-charge patches, Fv charge
+symmetry) and [Gordon 2025 TNP](https://github.com/oxpig/TNP) for VHH (same
+metrics with type-restricted charge patches plus CDR-H3 compactness). SASA is
+computed with [FreeSASA](https://freesasa.github.io/) under the Shrake-Rupley
+algorithm at a 1.4 Å probe radius, the configuration both calibration cohorts
+use. Threshold bands are pinned to the literature cohorts: cohortSize 242 for
+Fv (Raybould 2019 Table 2), cohortSize 36 for VHH (Gordon 2025
+`assign_flag()`).
 
-`PlDatasetSelector` over `pl7.app/structure/pdb` anchor PColumns. Optional clonotype filter (Boolean/Int subset PColumn, e.g. `predictionSuccessful`, `confident`). Settings: numbering scheme (IMGT default), heavy / light chain overrides (auto-detected from REMARK 99), FR / CDR confidence thresholds (defaults 4.0 / 6.0 Å for ImmuneBuilder).
+> Raybould MIJ, Marks C, Krawczyk K, Taddese B, Nowak J, Lewis AP, Bujotzek A,
+> Shi J, Deane CM. _Five computational developability guidelines for
+> therapeutic antibody profiling._ PNAS 116(10), 4025–4030 (2019).
+> [https://doi.org/10.1073/pnas.1810576116](https://doi.org/10.1073/pnas.1810576116)
 
-## Outputs
+> Gordon GL, Raybould MIJ, Deane CM. _TAP 2.0: a refined platform for assessing
+> the developability of nanobodies (in silico)._ bioRxiv (2025).
+> [https://doi.org/10.1101/2025.08.11.669635](https://doi.org/10.1101/2025.08.11.669635)
 
-Per-clonotype scalar PColumns keyed on `pl7.app/vdj/scClonotypeKey`, bundled in the `scoresData` PFrame with `pl7.app/blockId` domain. Composite cost (`structuralDevelopabilityScore`) plus categorical risks (`structuralDevelopabilityRisk`, `structuralIntegrityRisk`); per-metric raw values + threshold flags (None / Medium / High); cysteine and motif counts; per-metric low-confidence-residue fractions. Mode-specific columns (`sfvcsp` for Fv, `cdrh3Compactness` for VHH). Full list with annotations in `workflow/src/specs.lib.tengo`.
+SASA computation uses [FreeSASA](https://freesasa.github.io/). Please cite:
 
-## UI
-
-- **Main**: `PlAgDataTableV2` with default-visible columns; row double-click opens a `PlSlideModal` with `PlStructureViewer` (Mol\*, `initialColorScheme="uncertainty"`). Cluster badge surfaces when the 3D Structure Clustering block is upstream.
-- **Five distribution pages**: hydrophobicity, positive charge patches, negative charge patches, mode-specific (Fv charge symmetry or CDRH3 compactness), developability cost, via graph-maker with Raybould / Gordon threshold lines.
-- **Run-summary alert** fires when more than 25% of clonotypes have at least one confidence-gated motif.
+> Mitternacht S. _FreeSASA: An open source C library for solvent accessible
+> surface area calculations._ F1000Research, 5:189 (2016).
+> [https://doi.org/10.12688/f1000research.7931.1](https://doi.org/10.12688/f1000research.7931.1)
 
 ## See Also
 
