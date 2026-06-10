@@ -129,10 +129,11 @@ export const platforma = BlockModelV3.create(dataModel)
         isPColumnSpec(spec) &&
         spec.name === "pl7.app/structure/pdb" &&
         spec.annotations?.["pl7.app/isAnchor"] === "true",
-      filter: (spec: PObjectSpec): boolean =>
-        isPColumnSpec(spec) &&
-        (spec.name === "pl7.app/structure/predictionSuccessful" ||
-          spec.name === "pl7.app/structure/confident"),
+      // No subset filter: the PDB map is already confident-only, so the dataset
+      // is picked directly. `() => false` is required — omitting `filter`
+      // defaults to accept-all, which would attach unrelated `isSubset` columns
+      // on the clonotype axis (e.g. Lead Selection's subsets).
+      filter: () => false,
     }),
   )
   // Dataset-level mode, consumed by the mode-specific histogram page and the

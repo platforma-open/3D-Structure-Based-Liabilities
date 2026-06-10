@@ -27,8 +27,8 @@ wf.prepare(func(args) {
 	// Anchor on the PDB column so upstream enrichments sharing the
 	// scClonotypeKey axis auto-discover. cdrh3Length feeds the compactness
 	// numerator; perResidueConfidence is a fallback when the PDB B-factor
-	// column carries no predicted error. The optional filter, when picked,
-	// is resolved as a Single so the body can export it to a TSV sidecar.
+	// column carries no predicted error. The PDB map is already confident-only
+	// upstream, so there is no subset filter to resolve.
 	bb := wf.createPBundleBuilder()
 	bb.ignoreMissingDomains()
 	bb.addAnchor("pdb", args.primaryRef.column)
@@ -44,9 +44,6 @@ wf.prepare(func(args) {
 			name: "pl7.app/structure/confidence/perResidue"
 		},
 		"perResidueConfidence")
-	if !is_undefined(args.primaryRef.filter) {
-		bb.addSingle(args.primaryRef.filter, "filter")
-	}
 
 	return {
 		resolvedPdb: wf.resolve(args.primaryRef.column, { errIfMissing: true }),
@@ -105,16 +102,6 @@ wf.body(func(args) {
 	}
 	cmd = withSidecar(cmd, "cdrh3Length", "cdrh3_lengths.tsv", "--cdrh3-lengths")
 	cmd = withSidecar(cmd, "perResidueConfidence", "per_residue_confidence.tsv", "--per-residue-confidence")
-
-	// Optional clonotype subset filter (single column, picked via the
-	// dataset selector). getColumn panics if the key is absent, so gate on
-	// the same undefined check prepare used to addSingle it.
-	if !is_undefined(args.primaryRef.filter) {
-		filterTsv := xsv.exportFrame([args.columns.getColumn("filter")], "tsv", { mem: "1GiB", cpu: 1 })
-		cmd = cmd.
-			addFile("clonotype_filter.tsv", filterTsv).
-			arg("--clonotype-filter").arg("clonotype_filter.tsv")
-	}
 
 	// Numbering scheme is hardcoded to IMGT: every supported upstream
 	// (3D Structure Prediction block, ImmuneBuilder predictions) emits
