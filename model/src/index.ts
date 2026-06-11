@@ -218,7 +218,8 @@ export const platforma = BlockModelV3.create(dataModel)
     if (!parsed.isComplete) return undefined;
     return parsed.data;
   })
-  // Axis id of the scClonotypeKey axis, used to attach the viewer-trigger
+  // Axis id of the clonotype-key axis (scClonotypeKey for single-cell,
+  // clonotypeKey for bulk), used to attach the viewer-trigger
   // button to that column in the table. Derive from the actual scoresData
   // column (which is what populates the table), so the AxisId matches the
   // table column's id byte-for-byte. Deriving from the PDB col's spec
@@ -232,7 +233,12 @@ export const platforma = BlockModelV3.create(dataModel)
       return undefined;
     }
     const first = cols?.[0];
-    const found = first?.spec.axesSpec.find((a) => a.name === "pl7.app/vdj/scClonotypeKey");
+    // The clonotype-key axis is named `scClonotypeKey` for single-cell data
+    // and `clonotypeKey` for bulk; match either so the viewer-trigger button
+    // attaches in both regimes (the scores column is single-keyed on it).
+    const found = first?.spec.axesSpec.find(
+      (a) => a.name === "pl7.app/vdj/scClonotypeKey" || a.name === "pl7.app/vdj/clonotypeKey",
+    );
     if (!found) return undefined;
     return getAxisId(found);
   })
