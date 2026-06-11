@@ -94,13 +94,13 @@ export const histogramConfigs = {
 
 /** Seed a graph-maker `bins` template from a histogram config. The `bins`
  * layer needs an explicit fillColor; the template's default ('white') is
- * invisible against the chart background. The chart title is left blank
- * because the section nav already labels the page; rendering `cfg.title`
- * here too duplicates it inside the chart frame. */
+ * invisible against the chart background. `title` is graph-maker's own chart
+ * title (part of its v-model state, editable in the chart), which carries the
+ * page label since the page renders no PlBlockPage heading of its own. */
 export function makeGraphState(cfg: HistogramConfig): GraphMakerState {
   return {
     template: "bins",
-    title: "",
+    title: cfg.title,
     currentTab: null,
     layersSettings: { bins: { fillColor: cfg.fillColor } },
   };
