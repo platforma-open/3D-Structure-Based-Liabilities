@@ -14,24 +14,35 @@ import {
   ArrayColumnProvider,
   BlockModelV3,
   buildDatasetOptions,
+  createPlDataTableStateV2,
   createPlDataTableV3,
   DataModelBuilder,
   getAxisId,
   isPColumnSpec,
   parseResourceMap,
 } from "@platforma-sdk/model";
-import type { BlockArgs, BlockData, DetectedMode } from "./types";
+import type { BlockArgs, BlockData, BlockDataV1, DetectedMode } from "./types";
 
 export type { NumberingScheme, DetectedMode, BlockData, BlockArgs } from "./types";
 
-const dataModel = new DataModelBuilder().from<BlockData>("v1").init(() => ({
-  dataset: undefined,
-  heavyChainId: "",
-  lightChainId: "",
-  frConfThresh: 4.0,
-  cdrConfThresh: 6.0,
-  customBlockLabel: "",
-}));
+const dataModel = new DataModelBuilder()
+  .from<BlockDataV1>("v1")
+  // v1 -> v2: drop the removed manual chain fields and seed the persisted
+  // results-table state so existing block instances gain sortable tables.
+  .migrate<BlockData>("v2", (v1) => ({
+    dataset: v1.dataset,
+    frConfThresh: v1.frConfThresh,
+    cdrConfThresh: v1.cdrConfThresh,
+    customBlockLabel: v1.customBlockLabel,
+    tableState: createPlDataTableStateV2(),
+  }))
+  .init(() => ({
+    dataset: undefined,
+    frConfThresh: 4.0,
+    cdrConfThresh: 6.0,
+    customBlockLabel: "",
+    tableState: createPlDataTableStateV2(),
+  }));
 
 type ScoresCtx = BlockRenderCtx<unknown, unknown>;
 type ScoresPColumn = PColumn<PColumnDataUniversal | undefined>;
@@ -105,8 +116,6 @@ export const platforma = BlockModelV3.create(dataModel)
     }
     return {
       primaryRef: data.dataset.primary,
-      heavyChainId: data.heavyChainId,
-      lightChainId: data.lightChainId,
       frConfThresh: data.frConfThresh,
       cdrConfThresh: data.cdrConfThresh,
     };
@@ -158,6 +167,7 @@ export const platforma = BlockModelV3.create(dataModel)
     const mode = resolveMode(ctx);
     return createPlDataTableV3(ctx, {
       columns: variants,
+      tableState: ctx.data.tableState,
       displayOptions: mode
         ? {
             visibility: [

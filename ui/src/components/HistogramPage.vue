@@ -6,10 +6,18 @@ import { PlBlockPage } from "@platforma-sdk/ui-vue";
 import { computed } from "vue";
 import type { ThresholdBands } from "../pages/histogramConfigs";
 
+// The page wrappers spread the whole config; keys that aren't declared props
+// (title / columnName / fillColor) feed makeGraphState, not this component.
+// Drop them rather than let `title` fall through to PlBlockPage as a second
+// page heading: graph-maker's own title (from its v-model state) is the only
+// title we want.
+defineOptions({ inheritAttrs: false });
+
 const props = defineProps<{
-  // No page heading rendered. The section nav already labels the page;
-  // the threshold legend lives inside graph-maker's titleLineSlot so it
-  // sits next to the chart title bar instead of pushing the chart down.
+  // No PlBlockPage title: the chart's own title (graph-maker v-model state)
+  // carries the page label. Threshold lines are drawn by graph-maker from the
+  // value column's `pl7.app/graph/thresholds` annotation; the legend below
+  // maps the bands those lines delimit.
   notReadyTitle?: string;
   thresholds?: ThresholdBands;
   pFrame: OutputWithStatus<PFrameHandle>;
@@ -36,7 +44,7 @@ const hasLegend = computed(() => {
 </script>
 
 <template>
-  <PlBlockPage>
+  <PlBlockPage no-body-gutters>
     <GraphMaker
       v-model="graphStateModel"
       chart-type="histogram"

@@ -2,7 +2,6 @@
 import type { PlStructureViewerProps } from "@milaboratories/structure-viewer";
 import { PlStructureViewer } from "@milaboratories/structure-viewer";
 import type { PFrameHandle, PTableKey } from "@platforma-sdk/model";
-import { createPlDataTableStateV2 } from "@platforma-sdk/model";
 import { defaultBlockLabelFor } from "@platforma-open/milaboratories.3d-structure-based-liabilities.model";
 import {
   PlAccordionSection,
@@ -14,7 +13,6 @@ import {
   PlMaskIcon24,
   PlNumberField,
   PlSlideModal,
-  PlTextField,
   usePlDataTableSettingsV2,
 } from "@platforma-sdk/ui-vue";
 import { computed, ref } from "vue";
@@ -33,9 +31,6 @@ const scoresTableSettings = usePlDataTableSettingsV2({
   model: () => app.model.outputs.scoresTable,
   sourceId: () => "scores-v2",
 });
-// v-model writes stay UI-local so AG-Grid state events don't re-fire the
-// model output handler.
-const scoresLocalState = ref(createPlDataTableStateV2());
 
 const pdbsMap = computed(() => app.model.outputs.clonotypePdbsMap);
 const clonotypeAxisId = computed(() => app.model.outputs.clonotypeAxisId);
@@ -111,30 +106,6 @@ const modalTitle = computed(() => {
         clearable
       />
 
-      <div class="field-grid field-grid--settings">
-        <PlTextField
-          v-model="app.model.data.heavyChainId"
-          label="Heavy chain"
-          placeholder="auto-detect"
-        >
-          <template #tooltip>
-            Which chain in the structure is the heavy chain. Leave empty to detect it automatically;
-            set a single chain letter (e.g. A) only if a structure has no chain annotation and
-            detection fails.
-          </template>
-        </PlTextField>
-        <PlTextField
-          v-model="app.model.data.lightChainId"
-          label="Light chain"
-          placeholder="auto-detect"
-        >
-          <template #tooltip>
-            Which chain in the structure is the light chain. Leave empty to detect it automatically;
-            set a single chain letter only if detection fails.
-          </template>
-        </PlTextField>
-      </div>
-
       <PlAccordionSection label="Advanced thresholds">
         <div class="field-grid">
           <PlNumberField
@@ -145,9 +116,11 @@ const modalTitle = computed(() => {
             :step="0.5"
           >
             <template #tooltip>
-              Predicted-error cutoff above which framework-region motifs are treated as too
-              uncertain to flag. Raise it for experimental crystal structures whose B-factors are
-              temperature factors rather than predicted error.
+              Framework-region residues whose predicted error exceeds this cutoff (Å) are dropped
+              before scoring, so their motifs are not flagged. Higher keeps and flags more residues,
+              including uncertain ones; lower trusts only high-confidence framework. Default 4 Å.
+              Raise it for experimental crystal structures, whose B-factors are temperature factors
+              rather than predicted error.
             </template>
           </PlNumberField>
           <PlNumberField
@@ -158,8 +131,10 @@ const modalTitle = computed(() => {
             :step="0.5"
           >
             <template #tooltip>
-              Same as the framework threshold, applied to the more flexible CDR loops, where
-              predicted structures are typically less certain.
+              Same gating as the framework threshold, applied to the CDR loops. CDRs are more
+              flexible and usually predicted with lower confidence, so this cutoff is looser by
+              default (6 Å). Higher flags motifs in more CDR residues; lower keeps only
+              high-confidence CDR positions.
             </template>
           </PlNumberField>
         </div>
@@ -184,7 +159,7 @@ const modalTitle = computed(() => {
     <!-- One row per clonotype. The open button on the clonotype-key cell pops
          the structure-viewer modal for that row. -->
     <PlAgDataTableV2
-      v-model="scoresLocalState"
+      v-model="app.model.data.tableState"
       :settings="scoresTableSettings"
       :show-cell-button-for-axis-id="clonotypeAxisId"
       :cell-button-invoke-rows-on-double-click="true"
@@ -230,10 +205,6 @@ const modalTitle = computed(() => {
   gap: 12px;
   margin-bottom: 8px;
 }
-.field-grid--settings {
-  margin-top: 12px;
-}
-
 .run-alert {
   margin-top: 12px;
 }

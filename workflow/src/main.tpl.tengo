@@ -116,20 +116,12 @@ wf.body(func(args) {
 			arg("--clonotype-filter").arg("clonotype_filter.tsv")
 	}
 
-	// Empty strings fall through to the Python defaults.
-	withOptArg := func(c, flag, value) {
-		if is_undefined(value) || value == "" {
-			return c
-		}
-		return c.arg(flag).arg(value)
-	}
 	// Numbering scheme is hardcoded to IMGT: every supported upstream
 	// (3D Structure Prediction block, ImmuneBuilder predictions) emits
 	// IMGT-numbered structures, and our compactness anchors + canonical
-	// disulfide positions assume IMGT.
+	// disulfide positions assume IMGT. Heavy/light chains are auto-detected
+	// from the structure's REMARK records, so no chain flags are passed.
 	cmd = cmd.arg("--numbering-scheme").arg("imgt")
-	cmd = withOptArg(cmd, "--chain-h", args.heavyChainId)
-	cmd = withOptArg(cmd, "--chain-l", args.lightChainId)
 
 	result := cmd.
 		saveFile("per_clonotype.tsv").

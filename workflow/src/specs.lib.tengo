@@ -211,14 +211,20 @@ scoresColumnSpecs := {
 			"pl7.app/table/orderPriority": "1050"
 		}
 	},
+	// Renamed from "Integrity risk" to match the "Structural liabilities"
+	// column in the Antibody Sequence Liabilities block: same None/Present
+	// semantics, styled and ranked as a score. The spec `name` is unchanged
+	// so downstream joins (Lead Selection) keep resolving it.
 	structuralIntegrityRisk: {
 		valueType: "String",
 		name: "pl7.app/liabilities/structuralIntegrityRisk",
 		annotations: {
-			"pl7.app/label": "Integrity risk",
-			"pl7.app/description": "Binary flag (None/Present) for hard-to-fix structural issues: broken/missing disulfides, exposed extra Cys, structural motifs.",
+			"pl7.app/label": "Structural liabilities",
+			"pl7.app/description": "Binary flag (None/Present) for hard-to-fix structural issues: broken/missing disulfides, exposed extra Cys, structural motifs. These require scaffold redesign rather than point substitutions.",
+			"pl7.app/isScore": "true",
 			"pl7.app/isDiscreteFilter": "true",
 			"pl7.app/discreteValues": INTEGRITY_DISCRETE_VALUES,
+			"pl7.app/score/rankingOrder": "decreasing",
 			"pl7.app/table/visibility": "default",
 			"pl7.app/table/orderPriority": "1040"
 		}
