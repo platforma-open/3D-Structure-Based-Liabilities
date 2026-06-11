@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.3d-structure-based-liabilities.model
 
+## 1.2.4
+
+### Patch Changes
+
+- c9d3061: Fix Open button for bulk dataset
+
 ## 1.2.3
 
 ### Patch Changes
