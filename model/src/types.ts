@@ -1,4 +1,4 @@
-import type { DatasetSelection } from "@platforma-sdk/model";
+import type { DatasetSelection, PlDataTableStateV2 } from "@platforma-sdk/model";
 
 /** Numbering schemes the runtime can interpret. The block is now hardcoded
  *  to IMGT at the workflow layer because every supported upstream emits
@@ -13,22 +13,32 @@ export type DetectedMode = "TAP" | "TNP";
 export type BlockData = {
   /** Predicted-structures dataset picked via `PlDatasetSelector`. */
   dataset?: DatasetSelection;
-  /** Manual heavy/light chain mapping, used only when a PDB carries no
-   *  REMARK 99 PLATFORMA CDR records to auto-detect them. */
-  heavyChainId: string;
-  lightChainId: string;
   /** Confidence-gating thresholds (Å) for framework and CDR regions. */
   frConfThresh: number;
   cdrConfThresh: number;
   /** User-set block label; empty falls back to the derived default. */
+  customBlockLabel: string;
+  /** Results-table sort / filter / column state. Persisted in the model and
+   *  fed into `createPlDataTableV3` so sorting re-derives rows server-side
+   *  instead of leaving AG-Grid with unsortable placeholder cells. */
+  tableState: PlDataTableStateV2;
+};
+
+/** Pre-v2 shape: carried manual `heavyChainId`/`lightChainId` (now
+ *  auto-detected, removed) and no persisted `tableState`. Kept so the v1 -> v2
+ *  migration can map existing block instances onto the current shape. */
+export type BlockDataV1 = {
+  dataset?: DatasetSelection;
+  heavyChainId: string;
+  lightChainId: string;
+  frConfThresh: number;
+  cdrConfThresh: number;
   customBlockLabel: string;
 };
 
 /** Projection consumed by the workflow. */
 export type BlockArgs = {
   primaryRef: NonNullable<DatasetSelection["primary"]>;
-  heavyChainId: string;
-  lightChainId: string;
   frConfThresh: number;
   cdrConfThresh: number;
 };
