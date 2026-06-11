@@ -1,6 +1,6 @@
 {
   "name": "@platforma-open/milaboratories.3d-structure-based-liabilities.workflow",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Block Workflow",
   "type": "module",
   "scripts": {
