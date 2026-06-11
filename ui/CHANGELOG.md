@@ -1,5 +1,13 @@
 # @platforma-open/milaboratories.3d-structure-based-liabilities.ui
 
+## 1.2.2
+
+### Patch Changes
+
+- 4606fe5: Fix results-table sorting, remove the manual heavy/light chain inputs (now auto-detected), clarify the advanced threshold tooltips, rename the "Integrity risk" column to "Structural liabilities", and restore the histogram page titles.
+- Updated dependencies [4606fe5]
+  - @platforma-open/milaboratories.3d-structure-based-liabilities.model@1.2.2
+
 ## 1.2.1
 
 ### Patch Changes
