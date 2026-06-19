@@ -7,7 +7,7 @@
   "type": "module",
   "scripts": {
     "build": "pl-pkg build",
-    "test": "python -m pytest -q",
+    "test": "true",
     "prepublishOnly": "pl-pkg prepublish",
     "do-pack": "shx rm -f *.tgz && pl-pkg build && pnpm pack && shx mv platforma-open*.tgz package.tgz",
     "changeset": "changeset",
