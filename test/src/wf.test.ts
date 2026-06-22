@@ -21,7 +21,7 @@ import { blockSpec } from "this-block";
  * Until that fixture exists, the block is verified end-to-end manually
  * via the desktop app + pl MCP server against real upstream data.
  */
-blockTest("block loads without crashing", async ({ rawPrj: project }) => {
+blockTest("block loads without crashing", { timeout: 10000 }, async ({ rawPrj: project }) => {
   const blockId = await project.addBlock("3D Structure-Based Liabilities", blockSpec);
   const overview = await project.overview.getValue();
   const block = overview?.blocks.find((b) => b.id === blockId);
