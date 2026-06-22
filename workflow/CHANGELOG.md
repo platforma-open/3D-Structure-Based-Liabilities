@@ -1,5 +1,13 @@
 # @platforma-open/milaboratories.3d-structure-based-liabilities.workflow
 
+## 1.2.5
+
+### Patch Changes
+
+- f5bfd0e: Migrate block onto the structurer (block-tools `structure refresh`) and upgrade the SDK toolchain. Tool-managed layout now owns tsconfig, oxlint/oxfmt, turbo, the block index, and per-package deps. Catalog bumped to block-tools 2.11.0, workflow-tengo 6.6.3, model/ui-vue/test 1.79.14, tengo-builder 4.0.8.
+- Updated dependencies [f5bfd0e]
+  - @platforma-open/milaboratories.3d-structure-based-liabilities.software@0.3.3
+
 ## 1.2.4
 
 ### Patch Changes
