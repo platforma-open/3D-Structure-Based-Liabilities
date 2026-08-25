@@ -57,7 +57,7 @@ wf.body(func(args) {
 	pdbCol := args.resolvedPdb
 	pdbAxes := pdbCol.spec.axesSpec
 	if len(pdbAxes) != 1 {
-		ll.panic("unsupported PDB column axes count: expected 1 (scClonotypeKey), got %d", len(pdbAxes))
+		ll.panic("unsupported PDB column axes count: expected 1 (the record-key axis), got %d", len(pdbAxes))
 	}
 	scClonotypeAxis := pdbAxes[0]
 

@@ -24,7 +24,7 @@ jobs:
     with:
       app-name: 'Block: 3d Structure-Based Liabilities'
       app-name-slug: 'block-3d-structure-based-liabilities'
-      node-version: '20.x'
+      node-version: '22.x'
       build-script-name: 'build'
       pnpm-recursive-build: false
 

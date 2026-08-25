@@ -98,14 +98,42 @@ function specFromScores(ctx: ScoresCtx, name: string): PColumnIdAndSpec | undefi
   return col ? { columnId: col.id, spec: col.spec } : undefined;
 }
 
-const SC_CLONOTYPE_AXIS = { type: "String", name: "pl7.app/vdj/scClonotypeKey" } as const;
+/**
+ * Name of the record-key axis this run is keyed on, read off the scores columns.
+ *
+ * It is inherited all the way from the dataset 3D Structure Prediction was pointed at, so it
+ * is `pl7.app/vdj/scClonotypeKey` for legacy MiXCR single-cell, `pl7.app/vdj/clonotypeKey` for
+ * bulk, and `pl7.app/variantKey` for import-vdj-data's bare antibody sets. Reading it rather
+ * than naming it is what lets the enrichment join below work in all three regimes.
+ *
+ * Derived from `scoresData` for the same reason `clonotypeAxisId` is: those are the columns
+ * the table is built from, so their axis is the one the enrichment has to meet.
+ */
+function recordAxisName(ctx: ScoresCtx): string | undefined {
+  let cols: ScoresPColumn[] | undefined;
+  try {
+    cols = ctx.outputs?.resolve("scoresData")?.getPColumns() as ScoresPColumn[] | undefined;
+  } catch {
+    return undefined;
+  }
+  return cols?.[0]?.spec.axesSpec[0]?.name;
+}
 
-function findOnScClonotype(ctx: ScoresCtx, name: string, valueType: ValueType) {
+/**
+ * Upstream columns to join onto the scores table, matched on the record-key axis.
+ *
+ * Queried by axis NAME only, with no domain — the query this replaced hardcoded
+ * `pl7.app/vdj/scClonotypeKey`, so single-cell behaviour is unchanged and bulk and imported
+ * sets stop silently coming back empty.
+ */
+function findOnRecordAxis(ctx: ScoresCtx, name: string, valueType: ValueType) {
+  const axisName = recordAxisName(ctx);
+  if (axisName === undefined) return [] as ScoresPColumn[];
   return ctx.resultPool.findDataWithCompatibleSpec({
     kind: "PColumn",
     name,
     valueType,
-    axesSpec: [SC_CLONOTYPE_AXIS],
+    axesSpec: [{ type: "String", name: axisName }],
   }) as ScoresPColumn[];
 }
 
@@ -139,9 +167,10 @@ export const platforma = BlockModelV3.create(dataModel)
   // Dataset-level mode, consumed by the mode-specific histogram page and the
   // default block label.
   .output("detectedMode", (ctx): DetectedMode | undefined => resolveMode(ctx))
-  // Per-clonotype scalar metrics table. Score columns are primary; upstream
-  // label / cdrh3Length / cluster columns join on the shared scClonotypeKey
-  // axis. Mode-specific flag columns default-visible only in their mode.
+  // Per-record scalar metrics table. Score columns are primary; upstream
+  // label / cdrh3Length / cluster columns join on the shared record-key axis
+  // (see `recordAxisName`). Mode-specific flag columns default-visible only in
+  // their mode.
   .outputWithStatus("scoresTable", (ctx) => {
     const scoreCols = ctx.outputs?.resolve("scoresData")?.getPColumns() as
       | ScoresPColumn[]
@@ -149,12 +178,12 @@ export const platforma = BlockModelV3.create(dataModel)
     if (scoreCols === undefined) return undefined;
 
     const enrich = [
-      findOnScClonotype(ctx, "pl7.app/structure/cdrh3Length", "Long"),
-      findOnScClonotype(ctx, "pl7.app/label", "String"),
-      findOnScClonotype(ctx, "pl7.app/clusterId", "String"),
-      findOnScClonotype(ctx, "pl7.app/structure/clustering/isCentroid", "Int"),
-      findOnScClonotype(ctx, "pl7.app/structure/clustering/tmDistanceToCentroid", "Double"),
-      findOnScClonotype(ctx, "pl7.app/structure/clustering/tmScoreToCentroid", "Double"),
+      findOnRecordAxis(ctx, "pl7.app/structure/cdrh3Length", "Long"),
+      findOnRecordAxis(ctx, "pl7.app/label", "String"),
+      findOnRecordAxis(ctx, "pl7.app/clusterId", "String"),
+      findOnRecordAxis(ctx, "pl7.app/structure/clustering/isCentroid", "Int"),
+      findOnRecordAxis(ctx, "pl7.app/structure/clustering/tmDistanceToCentroid", "Double"),
+      findOnRecordAxis(ctx, "pl7.app/structure/clustering/tmScoreToCentroid", "Double"),
     ].flat();
 
     const variants = [
@@ -218,8 +247,8 @@ export const platforma = BlockModelV3.create(dataModel)
     if (!parsed.isComplete) return undefined;
     return parsed.data;
   })
-  // Axis id of the clonotype-key axis (scClonotypeKey for single-cell,
-  // clonotypeKey for bulk), used to attach the viewer-trigger
+  // Axis id of the record-key axis (scClonotypeKey for single-cell,
+  // clonotypeKey for bulk, variantKey for imported sets), used to attach the viewer-trigger
   // button to that column in the table. Derive from the actual scoresData
   // column (which is what populates the table), so the AxisId matches the
   // table column's id byte-for-byte. Deriving from the PDB col's spec
@@ -233,11 +262,15 @@ export const platforma = BlockModelV3.create(dataModel)
       return undefined;
     }
     const first = cols?.[0];
-    // The clonotype-key axis is named `scClonotypeKey` for single-cell data
-    // and `clonotypeKey` for bulk; match either so the viewer-trigger button
-    // attaches in both regimes (the scores column is single-keyed on it).
+    // The record-key axis is named `scClonotypeKey` for single-cell data,
+    // `clonotypeKey` for bulk and `variantKey` for imported antibody sets; match
+    // any of them so the viewer-trigger button attaches in every regime (the
+    // scores column is single-keyed on it).
     const found = first?.spec.axesSpec.find(
-      (a) => a.name === "pl7.app/vdj/scClonotypeKey" || a.name === "pl7.app/vdj/clonotypeKey",
+      (a) =>
+        a.name === "pl7.app/vdj/scClonotypeKey" ||
+        a.name === "pl7.app/vdj/clonotypeKey" ||
+        a.name === "pl7.app/variantKey",
     );
     if (!found) return undefined;
     return getAxisId(found);
