@@ -1,5 +1,12 @@
 # @platforma-open/milaboratories.3d-structure-based-liabilities.ui
 
+## 1.2.6
+
+### Patch Changes
+
+- Updated dependencies [b490a3f]
+  - @platforma-open/milaboratories.3d-structure-based-liabilities.model@1.3.0
+
 ## 1.2.5
 
 ### Patch Changes
