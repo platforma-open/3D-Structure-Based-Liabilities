@@ -1,5 +1,5 @@
 import { blockTest } from "@platforma-sdk/test";
-import { blockSpec } from "this-block";
+import { _3dStructureBasedLiabilitiesBlockPointer } from "this-block";
 
 /**
  * Block-load sanity test. Adds the block to a fresh project and verifies
@@ -22,7 +22,10 @@ import { blockSpec } from "this-block";
  * via the desktop app + pl MCP server against real upstream data.
  */
 blockTest("block loads without crashing", { timeout: 10000 }, async ({ rawPrj: project }) => {
-  const blockId = await project.addBlock("3D Structure-Based Liabilities", blockSpec);
+  const blockId = await project.addBlock(
+    "3D Structure-Based Liabilities",
+    _3dStructureBasedLiabilitiesBlockPointer,
+  );
   const overview = await project.overview.getValue();
   const block = overview?.blocks.find((b) => b.id === blockId);
   if (!block) throw new Error("block not in project overview");
