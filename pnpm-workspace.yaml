@@ -1,5 +1,6 @@
 packages:
   - block
+  - kind
   - model
   - software
   - test
@@ -29,3 +30,4 @@ catalog:
   "shx": 0.4.0
   "@changesets/cli": 2.31.0
   vitest: ~4.0.18
+  "@platforma-sdk/block-kind": 1.1.0
