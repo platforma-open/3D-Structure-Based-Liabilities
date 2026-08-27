@@ -1,6 +1,7 @@
 {
   "name": "@platforma-open/milaboratories.3d-structure-based-liabilities.model",
   "version": "1.3.0",
+  "private": true,
   "description": "Block model",
   "type": "module",
   "main": "dist/index.cjs",
@@ -23,6 +24,7 @@
   "dependencies": {
     "@milaboratories/graph-maker": "catalog:",
     "@milaboratories/helpers": "catalog:",
+    "@platforma-open/milaboratories.3d-structure-based-liabilities.kind": "workspace:*",
     "@platforma-sdk/model": "catalog:"
   },
   "devDependencies": {
