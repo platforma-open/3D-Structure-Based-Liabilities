@@ -11,7 +11,7 @@ import type {
   ValueType,
 } from "@platforma-sdk/model";
 import {
-  ArrayColumnProvider,
+  DataColumn,
   BlockModelV3,
   buildDatasetOptions,
   createPlDataTableStateV2,
@@ -21,11 +21,12 @@ import {
   isPColumnSpec,
   parseResourceMap,
 } from "@platforma-sdk/model";
+import { kind } from "@platforma-open/milaboratories.3d-structure-based-liabilities.kind";
 import type { BlockArgs, BlockData, BlockDataV1, DetectedMode } from "./types";
 
 export type { NumberingScheme, DetectedMode, BlockData, BlockArgs } from "./types";
 
-const dataModel = new DataModelBuilder()
+const dataModel = new DataModelBuilder({ kind })
   .from<BlockDataV1>("v1")
   // v1 -> v2: drop the removed manual chain fields and seed the persisted
   // results-table state so existing block instances gain sortable tables.
@@ -36,10 +37,14 @@ const dataModel = new DataModelBuilder()
     customBlockLabel: v1.customBlockLabel,
     tableState: createPlDataTableStateV2(),
   }))
-  .init(() => ({
+  // `params` carries the kind's init-params contract, and is undefined whenever a
+  // block is created outside a template. So each field it can seed keeps its
+  // default behind a `??`. The seedable set is exactly what `.templateParams`
+  // projects back below — the two are inverses.
+  .init(({ params }) => ({
     dataset: undefined,
-    frConfThresh: 4.0,
-    cdrConfThresh: 6.0,
+    frConfThresh: params?.frConfThresh ?? 4.0,
+    cdrConfThresh: params?.cdrConfThresh ?? 6.0,
     customBlockLabel: "",
     tableState: createPlDataTableStateV2(),
   }));
@@ -137,7 +142,15 @@ function findOnRecordAxis(ctx: ScoresCtx, name: string, valueType: ValueType) {
   }) as ScoresPColumn[];
 }
 
-export const platforma = BlockModelV3.create(dataModel)
+export const platforma = BlockModelV3.create({ dataModel, kind })
+  // Project back exactly the fields the kind's `BlockParams` declares, so
+  // exporting a block to a template and initializing one from it are inverses.
+  // `dataset` is an anchor-bound reference and `tableState` / `customBlockLabel`
+  // are not configuration, so none of them travel.
+  .templateParams((data) => ({
+    frConfThresh: data.frConfThresh,
+    cdrConfThresh: data.cdrConfThresh,
+  }))
   .args<BlockArgs>((data) => {
     if (!data.dataset?.primary?.column) {
       throw new Error("Pick a 3D structures dataset");
@@ -186,27 +199,20 @@ export const platforma = BlockModelV3.create(dataModel)
       findOnRecordAxis(ctx, "pl7.app/structure/clustering/tmScoreToCentroid", "Double"),
     ].flat();
 
-    const variants = [
-      ...new ArrayColumnProvider(scoreCols).getAllColumns().map((column) => ({
-        column,
-        isPrimary: true,
-      })),
-      ...new ArrayColumnProvider(enrich).getAllColumns().map((column) => ({ column })),
-    ];
-
     const mode = resolveMode(ctx);
     return createPlDataTableV3(ctx, {
-      columns: variants,
+      primaryColumns: scoreCols.map((c) => DataColumn.fromColumn(c)),
+      columns: enrich.map((c) => DataColumn.fromColumn(c)),
       tableState: ctx.data.tableState,
       displayOptions: mode
         ? {
             visibility: [
               {
-                match: (s) => s.name === "pl7.app/liabilities/sfvcspFlag",
+                match: { name: "pl7.app/liabilities/sfvcspFlag" },
                 visibility: mode === "TAP" ? "default" : "optional",
               },
               {
-                match: (s) => s.name === "pl7.app/liabilities/cdrh3CompactnessFlag",
+                match: { name: "pl7.app/liabilities/cdrh3CompactnessFlag" },
                 visibility: mode === "TNP" ? "default" : "optional",
               },
             ],
