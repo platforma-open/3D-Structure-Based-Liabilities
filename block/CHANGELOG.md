@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.3d-structure-based-liabilities
 
+## 1.3.2
+
+### Patch Changes
+
+- d7c3ca9: Update SDK: PlAgDataTableV2 no longer recreates its grid in an endless loop
+
 ## 1.3.1
 
 ### Patch Changes
