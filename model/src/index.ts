@@ -295,7 +295,7 @@ export const platforma = BlockModelV3.create({ dataModel, kind })
       { type: "link", href: "/histogram-ppc", label: "Positive charge patches" },
       { type: "link", href: "/histogram-pnc", label: "Negative charge patches" },
       { type: "link", href: "/histogram-mode-specific", label: modeSpecificLabel },
-      { type: "link", href: "/histogram-developability", label: "Developability cost" },
+      { type: "link", href: "/histogram-developability", label: "Structural developability cost" },
     ];
   })
   .title(() => "3D Structure-Based Liabilities")

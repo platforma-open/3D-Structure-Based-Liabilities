@@ -187,7 +187,7 @@ scoresColumnSpecs := {
 		valueType: "Double",
 		name: "pl7.app/liabilities/structuralDevelopabilityScore",
 		annotations: {
-			"pl7.app/label": "Developability cost",
+			"pl7.app/label": "Structural developability cost",
 			"pl7.app/description": "Composite cost: motif risk + threshold-flag bumps + cysteine penalties. Lower is better.",
 			"pl7.app/format": ".2f",
 			"pl7.app/isScore": "true",
@@ -200,7 +200,7 @@ scoresColumnSpecs := {
 		valueType: "String",
 		name: "pl7.app/liabilities/structuralDevelopabilityRisk",
 		annotations: {
-			"pl7.app/label": "Developability risk",
+			"pl7.app/label": "Structural developability risk",
 			"pl7.app/description": "Four-tier risk ladder (None/Low/Medium/High) derived from motif tier and metric flags.",
 			"pl7.app/isScore": "true",
 			"pl7.app/isDiscreteFilter": "true",
@@ -211,15 +211,13 @@ scoresColumnSpecs := {
 			"pl7.app/table/orderPriority": "1050"
 		}
 	},
-	// Renamed from "Integrity risk" to match the "Structural liabilities"
-	// column in the Antibody Sequence Liabilities block: same None/Present
-	// semantics, styled and ranked as a score. The spec `name` is unchanged
-	// so downstream joins (Lead Selection) keep resolving it.
+	// Same None/Present semantics as the "Structural liabilities" column in
+	// the Antibody Sequence Liabilities block, styled and ranked as a score.
 	structuralIntegrityRisk: {
 		valueType: "String",
 		name: "pl7.app/liabilities/structuralIntegrityRisk",
 		annotations: {
-			"pl7.app/label": "Structural liabilities",
+			"pl7.app/label": "Structural integrity risk",
 			"pl7.app/description": "Binary flag (None/Present) for hard-to-fix structural issues: broken/missing disulfides, exposed extra Cys, structural motifs. These require scaffold redesign rather than point substitutions.",
 			"pl7.app/isScore": "true",
 			"pl7.app/isDiscreteFilter": "true",

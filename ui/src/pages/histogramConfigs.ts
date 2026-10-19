@@ -86,7 +86,7 @@ export const histogramConfigs = {
     },
   },
   developability: {
-    title: "Developability cost",
+    title: "Structural developability cost",
     columnName: "pl7.app/liabilities/structuralDevelopabilityScore",
     fillColor: "#cf6e83",
   },
