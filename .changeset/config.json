@@ -2,7 +2,14 @@
   "$schema": "https://unpkg.com/@changesets/config@3.1.2/schema.json",
   "changelog": "@changesets/cli/changelog",
   "commit": false,
-  "fixed": [],
+  "fixed": [
+    [
+      "@platforma-open/milaboratories.3d-structure-based-liabilities",
+      "@platforma-open/milaboratories.3d-structure-based-liabilities.model",
+      "@platforma-open/milaboratories.3d-structure-based-liabilities.ui",
+      "@platforma-open/milaboratories.3d-structure-based-liabilities.workflow"
+    ]
+  ],
   "linked": [],
   "access": "restricted",
   "baseBranch": "main",
