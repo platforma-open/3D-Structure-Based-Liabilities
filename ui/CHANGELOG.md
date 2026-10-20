@@ -1,5 +1,13 @@
 # @platforma-open/milaboratories.3d-structure-based-liabilities.ui
 
+## 1.2.8
+
+### Patch Changes
+
+- 44047cb: Release every package through npm trusted publishing (OIDC) so each package's trusted publisher is used before it expires.
+- Updated dependencies [44047cb]
+  - @platforma-open/milaboratories.3d-structure-based-liabilities.model@1.3.2
+
 ## 1.2.7
 
 ### Patch Changes

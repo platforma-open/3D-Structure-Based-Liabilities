@@ -1,5 +1,11 @@
 # @platforma-open/milaboratories.3d-structure-based-liabilities.software
 
+## 0.3.5
+
+### Patch Changes
+
+- 44047cb: Release every package through npm trusted publishing (OIDC) so each package's trusted publisher is used before it expires.
+
 ## 0.3.4
 
 ### Patch Changes
