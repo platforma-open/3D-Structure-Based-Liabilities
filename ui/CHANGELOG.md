@@ -1,5 +1,13 @@
 # @platforma-open/milaboratories.3d-structure-based-liabilities.ui
 
+## 1.3.4
+
+### Patch Changes
+
+- 40b92dc: Rename score column labels so they differ from the Antibody Sequence Liabilities block in Lead Selection: "Structural developability cost", "Structural developability risk", "Structural integrity risk". Column names are unchanged.
+- Updated dependencies [40b92dc]
+  - @platforma-open/milaboratories.3d-structure-based-liabilities.model@1.3.4
+
 ## 1.2.8
 
 ### Patch Changes
