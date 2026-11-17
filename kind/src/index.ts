@@ -1,22 +1,31 @@
 import { assertParamsObject, defineBlockKind } from "@platforma-sdk/block-kind";
+import type { DatasetSelection } from "@platforma-sdk/model";
+import { isDatasetSelection } from "@platforma-sdk/model";
 import { name, version } from "../package.json" with { type: "json" };
 
 /**
  * This block's init-params contract — what a project template supplies to seed a
  * new instance.
  *
- * The two confidence gates are the only settings that change what the block
- * computes: they decide which residues are trusted enough to score, so they are
- * real configuration. Everything else in `BlockData` is deliberately absent.
- * `dataset` is a `DatasetSelection`, an anchor-bound reference whose meaning
- * depends on the anchor map of the project that made it, so it cannot travel in
- * a template. `tableState` is view state, and `customBlockLabel` is a label the
- * user types over a derived default — neither is configuration.
+ * The dataset the block scores, and the two confidence gates: they decide which
+ * residues are trusted enough to score, so they are real configuration.
  *
- * Both fields are optional so a template can seed either one alone; the model's
- * `init` keeps a default behind each.
+ * `dataset` is the selection the dataset picker made: a reference to the
+ * predicted structures of an upstream block. A project template names its
+ * blocks, and a block created from one receives the reference pointing at the
+ * block made from the same entry, so a project made from a template scores the
+ * structures the original one did. A template may leave it out and have the
+ * dataset picked afterwards.
+ *
+ * `tableState` is view state, and `customBlockLabel` is a label the user types
+ * over a derived default — neither is configuration, and both are absent.
+ *
+ * Every field is optional so a template can seed any of them alone; the model's
+ * `init` keeps a default behind each gate.
  */
 export type BlockParams = {
+  /** The predicted structures to score, as the dataset picker emits them. */
+  dataset?: DatasetSelection;
   /** Framework-region confidence gate, in ångström. */
   frConfThresh?: number;
   /** CDR confidence gate, in ångström. */
@@ -44,7 +53,7 @@ function finiteNumber(key: string, value: unknown): number {
  * than from typed code — the only point that can catch a hand-written entry
  * being wrong.
  *
- * Each field is checked only when present, because both are optional. Keys the
+ * Each field is checked only when present, because all are optional. Keys the
  * contract does not name are dropped by not being read; refusing them would mean
  * holding a list of field names as strings that nothing keeps in step with the
  * type.
@@ -53,6 +62,13 @@ function parseInitializationParams(value: unknown): BlockParams {
   assertParamsObject(value);
 
   const params: BlockParams = {};
+
+  if (value.dataset !== undefined) {
+    if (!isDatasetSelection(value.dataset)) {
+      throw new Error("'dataset' must be a dataset selection, as the dataset picker emits it.");
+    }
+    params.dataset = value.dataset;
+  }
 
   if (value.frConfThresh !== undefined) {
     params.frConfThresh = finiteNumber("frConfThresh", value.frConfThresh);
