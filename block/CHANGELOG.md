@@ -1,5 +1,7 @@
 # @platforma-open/milaboratories.3d-structure-based-liabilities
 
+## 1.3.5
+
 ## 1.3.4
 
 ### Patch Changes
