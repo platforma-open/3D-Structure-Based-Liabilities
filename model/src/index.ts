@@ -42,7 +42,7 @@ const dataModel = new DataModelBuilder({ kind })
   // default behind a `??`. The seedable set is exactly what `.templateParams`
   // projects back below — the two are inverses.
   .init(({ params }) => ({
-    dataset: undefined,
+    dataset: params?.dataset,
     frConfThresh: params?.frConfThresh ?? 4.0,
     cdrConfThresh: params?.cdrConfThresh ?? 6.0,
     customBlockLabel: "",
@@ -145,9 +145,11 @@ function findOnRecordAxis(ctx: ScoresCtx, name: string, valueType: ValueType) {
 export const platforma = BlockModelV3.create({ dataModel, kind })
   // Project back exactly the fields the kind's `BlockParams` declares, so
   // exporting a block to a template and initializing one from it are inverses.
-  // `dataset` is an anchor-bound reference and `tableState` / `customBlockLabel`
-  // are not configuration, so none of them travel.
+  // `dataset` goes with the gates, so a project made from the template scores the
+  // structures of the block the original one read. `tableState` and
+  // `customBlockLabel` are not configuration, so they do not travel.
   .templateParams((data) => ({
+    dataset: data.dataset,
     frConfThresh: data.frConfThresh,
     cdrConfThresh: data.cdrConfThresh,
   }))
